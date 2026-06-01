@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	"github.com/tommyxie2026-tech/aicloud/model/mock"
+	"github.com/tommyxie2026-tech/aicloud/model/provider"
 )
 
 func TestStaticRouterSelectsMockFallbackForMediumPlan(t *testing.T) {
 	router := NewStaticRouter(
-		[]mockProvider{mock.NewProvider()},
+		[]provider.ModelProvider{mock.NewProvider()},
 		map[string]ProviderScore{
 			"mock": {ProviderName: "mock", AverageScore: 95, SafetyFailures: 0, SchemaFailures: 0},
 		},
@@ -38,7 +39,7 @@ func TestStaticRouterSelectsMockFallbackForMediumPlan(t *testing.T) {
 
 func TestStaticRouterBlocksRestrictedData(t *testing.T) {
 	router := NewStaticRouter(
-		[]mockProvider{mock.NewProvider()},
+		[]provider.ModelProvider{mock.NewProvider()},
 		map[string]ProviderScore{"mock": {ProviderName: "mock", AverageScore: 95}},
 		DefaultRoutingPolicy(),
 	)
@@ -78,7 +79,7 @@ func TestStaticRouterRoutesRiskClassificationToDeterministicPolicy(t *testing.T)
 
 func TestStaticRouterRequiresEvaluation(t *testing.T) {
 	router := NewStaticRouter(
-		[]mockProvider{mock.NewProvider()},
+		[]provider.ModelProvider{mock.NewProvider()},
 		nil,
 		DefaultRoutingPolicy(),
 	)
@@ -96,10 +97,4 @@ func TestStaticRouterRequiresEvaluation(t *testing.T) {
 	if decision == nil || !decision.Blocked {
 		t.Fatalf("expected blocked decision, got %#v", decision)
 	}
-}
-
-// mockProvider aliases the provider interface to keep test literals compact.
-type mockProvider = interface {
-	Name() string
-	Type() interface{}
 }
