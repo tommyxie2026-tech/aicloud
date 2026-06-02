@@ -3,6 +3,7 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/tommyxie2026-tech/aicloud/model/provider"
@@ -82,8 +83,13 @@ func decodeStrictJSON(raw string, target any) error {
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
-	if decoder.More() {
-		return fmt.Errorf("unexpected trailing JSON content")
+
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("unexpected trailing JSON content")
+		}
+		return err
 	}
 	return nil
 }
