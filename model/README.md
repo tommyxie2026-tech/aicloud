@@ -35,9 +35,17 @@ It must not directly perform infrastructure execution, credential access, approv
 model/provider
 model/schema
 model/mock
+model/safety
+model/gateway
+model/eval
+model/routing
+model/openai
+model/registry
 ```
 
-## 4. provider
+## 4. Package Responsibilities
+
+### provider
 
 Path:
 
@@ -75,20 +83,7 @@ Mock
 CustomDomain
 ```
 
-Supported safe task types:
-
-```text
-GeneratePlan
-GeneratePatch
-ExplainRisk
-GenerateRollback
-GenerateValidationReport
-SummarizeState
-RepairYAML
-ExplainPolicyFailure
-```
-
-## 5. schema
+### schema
 
 Path:
 
@@ -121,22 +116,7 @@ Validator:
 BasicValidator
 ```
 
-The validator checks required schema fields such as:
-
-```text
-schemaVersion
-kind
-requestId
-taskType
-createdBy
-target.kind
-target.name
-changes
-rollback.summary
-evidence
-```
-
-## 6. mock
+### mock
 
 Path:
 
@@ -169,37 +149,246 @@ ChangePlan
 - rollback: set replicas back to 3
 ```
 
-## 7. First Working Flow
+### safety
 
-The first model-layer flow is:
+Path:
 
 ```text
-MockProvider.GeneratePlan
-  ↓
-schema.ChangePlan
-  ↓
-schema.BasicValidator.ValidateChangePlan
-  ↓
-go test ./...
+model/safety/safety.go
+model/safety/safety_test.go
 ```
 
-This flow proves that `aicloud` can produce and validate a structured model output without relying on any external model provider.
+Purpose:
 
-## 8. Tests
+```text
+Validate model requests and responses before they enter workflow or policy layers.
+```
 
-Current tests:
+Current checks:
+
+```text
+- restricted instruction detection
+- sensitive context detection
+- forbidden patch field detection
+- editable field allowlist
+- evidence requirement for validation reports
+```
+
+### gateway
+
+Path:
+
+```text
+model/gateway/gateway.go
+model/gateway/gateway_test.go
+```
+
+Purpose:
+
+```text
+Expose task-level model APIs to agent workflows.
+```
+
+Current API:
+
+```text
+GeneratePlan
+```
+
+Current flow:
+
+```text
+Gateway.GeneratePlan
+  ↓
+SafetyGuard.ValidateRequest
+  ↓
+Provider.Generate
+  ↓
+SafetyGuard.ValidateResponse
+  ↓
+BasicValidator.ValidateChangePlan
+  ↓
+AuditRecord
+  ↓
+ChangePlan
+```
+
+### eval
+
+Path:
+
+```text
+model/eval/eval.go
+model/eval/eval_test.go
+```
+
+Purpose:
+
+```text
+Evaluate provider quality before routing real tasks to a provider.
+```
+
+Current evaluation case:
+
+```text
+DefaultDevScaleOutCase
+```
+
+Evaluation dimensions:
+
+```text
+SchemaCompliance
+TaskCorrectness
+SafetyCompliance
+PolicyAlignment
+RollbackQuality
+EvidenceGrounding
+LanguageHandling
+```
+
+### routing
+
+Path:
+
+```text
+model/routing/router.go
+model/routing/router_test.go
+```
+
+Purpose:
+
+```text
+Route tasks to providers based on task type, risk, environment, data sensitivity and provider evaluation score.
+```
+
+Current routing outputs:
+
+```text
+RouteDecision
+```
+
+Current behavior:
+
+```text
+- restricted data fails closed
+- risk classification routes to deterministic-policy
+- provider must support task type
+- provider must meet evaluation threshold
+```
+
+### openai
+
+Path:
+
+```text
+model/openai/provider.go
+model/openai/provider_test.go
+```
+
+Purpose:
+
+```text
+Provide an OpenAI-compatible adapter for public, private, and self-hosted model endpoints.
+```
+
+Current status:
+
+```text
+Skeleton implemented.
+Structured parser intentionally fails closed until implemented.
+No raw API key is stored in code.
+Config uses Endpoint / EndpointRef / SecretRef.
+```
+
+### registry
+
+Path:
+
+```text
+model/registry/registry.go
+model/registry/registry_test.go
+```
+
+Purpose:
+
+```text
+Register, list, query and health-check model providers.
+```
+
+Current implementation:
+
+```text
+MemoryRegistry
+```
+
+## 5. Current Working Flows
+
+### GeneratePlan flow
+
+```text
+MockProvider
+  ↓
+Gateway.GeneratePlan
+  ↓
+SafetyGuard
+  ↓
+BasicValidator
+  ↓
+AuditRecord
+  ↓
+ChangePlan
+```
+
+### Evaluation flow
+
+```text
+DefaultDevScaleOutCase
+  ↓
+MockProvider.Generate
+  ↓
+BasicValidator
+  ↓
+ScoreBreakdown
+  ↓
+EvalReport
+  ↓
+EvalRecommendation
+```
+
+### Routing flow
+
+```text
+RouteRequest
+  ↓
+StaticRouter
+  ↓
+ProviderScore / Risk / Environment / DataSensitivity
+  ↓
+RouteDecision
+```
+
+### Registry flow
+
+```text
+Provider
+  ↓
+MemoryRegistry.Register
+  ↓
+List / Get / Health
+```
+
+## 6. Tests
+
+Current package tests:
 
 ```text
 model/mock/provider_test.go
-```
-
-Test coverage:
-
-```text
-- MockProvider.GeneratePlan returns ChangePlan
-- ChangePlan passes BasicValidator
-- MockProvider blocks restricted instruction
-- MockProvider.Health is available
+model/safety/safety_test.go
+model/gateway/gateway_test.go
+model/eval/eval_test.go
+model/routing/router_test.go
+model/openai/provider_test.go
+model/registry/registry_test.go
 ```
 
 Run locally:
@@ -214,42 +403,63 @@ CI:
 .github/workflows/go-test.yml
 ```
 
-## 9. Next Packages
+## 7. Current Model-layer MVP Status
 
-Recommended next packages:
-
-```text
-model/safety
-model/gateway
-model/eval
-model/routing
-model/openai
-```
-
-Recommended implementation order:
+Current status:
 
 ```text
-1. model/safety   - request/response safety validation
-2. model/gateway  - task-level model API
-3. model/eval     - provider evaluation harness
-4. model/routing  - provider selection policy
-5. model/openai   - OpenAI-compatible public/private provider adapter
+Model-layer MVP skeleton is implemented.
 ```
 
-## 10. Next Milestone
-
-Next milestone:
+Done:
 
 ```text
-MockProvider
-  ↓
-SafetyGuard
-  ↓
-ModelGateway.GeneratePlan
-  ↓
-BasicValidator
-  ↓
-EvalRunner
+- Provider abstraction
+- Structured output schemas
+- Basic schema validator
+- Deterministic MockProvider
+- SafetyGuard
+- Gateway.GeneratePlan
+- EvalRunner
+- StaticRouter
+- OpenAI-compatible provider skeleton
+- MemoryRegistry
+- Unit tests
+- GitHub Actions go test workflow
 ```
 
-The model layer should stay dependency-light until this path is stable.
+Not done yet:
+
+```text
+- strict structured parser for OpenAI-compatible provider
+- provider config loading
+- persistent registry
+- persistent audit store
+- cost / latency metrics
+- agent ChangeProposal
+- deterministic PolicyChecker
+- PR draft generator
+- infrastructure scenario implementation
+```
+
+## 8. Next Engineering Steps
+
+Recommended next implementation sequence:
+
+```text
+1. Fix any CI failures from current packages.
+2. Implement strict JSON/YAML structured parser for OpenAI-compatible provider.
+3. Add provider config loading.
+4. Add agent ChangeProposal model.
+5. Add deterministic PolicyChecker MVP.
+6. Add PR draft generator.
+7. Start infra scenario design for ManagedCluster workers 3 -> 6.
+```
+
+## 9. Related Docs
+
+```text
+docs/aicloud-positioning.md
+docs/aicloud-product-architecture.md
+docs/aicloud-implementation-plan.md
+```
