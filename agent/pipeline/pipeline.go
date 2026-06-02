@@ -5,53 +5,34 @@ import (
 
 	"github.com/tommyxie2026-tech/aicloud/agent/prdraft"
 	"github.com/tommyxie2026-tech/aicloud/agent/proposal"
-	"github.com/tommyxie2026-tech/aicloud/agent/workflow"
 	"github.com/tommyxie2026-tech/aicloud/model/gateway"
+	"github.com/tommyxie2026-tech/aicloud/model/schema"
 )
 
-// ModelGateway is the minimum gateway capability required by Pipeline.
-type ModelGateway interface {
-	GeneratePlan(ctx context.Context, req gateway.GeneratePlanRequest) (*schemaChangePlan, *gateway.AuditRecord, error)
-}
-
-// schemaChangePlan aliases the concrete schema type through assignment in constructor wrappers.
-// This keeps the pipeline package focused on orchestration boundaries.
-type schemaChangePlan = interface{}
-
-// PlanGateway is the concrete gateway adapter used by the default pipeline.
+// PlanGateway is the minimum gateway capability required by Pipeline.
 type PlanGateway interface {
-	GeneratePlan(ctx context.Context, req gateway.GeneratePlanRequest) (*gatewayCompatibleChangePlan, *gateway.AuditRecord, error)
+	GeneratePlan(ctx context.Context, req gateway.GeneratePlanRequest) (*schema.ChangePlan, *gateway.AuditRecord, error)
 }
 
-type gatewayCompatibleChangePlan = interface{}
-
-// GatewayGeneratePlanFunc is a testable adapter for gateway.GeneratePlan.
-type GatewayGeneratePlanFunc func(ctx context.Context, req gateway.GeneratePlanRequest) (*proposalInput, *gateway.AuditRecord, error)
-
-type proposalInput = interface{}
-
-// DraftPipeline runs the first end-to-end planning flow.
-type DraftPipeline struct {
-	planGenerator PlanGenerator
-	planner       EvaluatedProposalBuilder
-	draftGenerator DraftGenerator
-}
-
-type PlanGenerator interface {
-	GeneratePlan(ctx context.Context, req gateway.GeneratePlanRequest) (*PlanOutput, error)
-}
-
+// EvaluatedProposalBuilder converts a validated ChangePlan into a policy-evaluated proposal.
 type EvaluatedProposalBuilder interface {
-	BuildEvaluatedProposalFromPlan(plan *PlanOutput, createdBy string) (*proposal.ChangeProposal, error)
+	BuildEvaluatedProposal(plan schema.ChangePlan, createdBy string) (*proposal.ChangeProposal, error)
 }
 
+// DraftGenerator converts an evaluated proposal into a reviewable PR draft.
 type DraftGenerator interface {
 	Generate(p *proposal.ChangeProposal) (*prdraft.Draft, error)
 }
 
-type PlanOutput struct {
-	Plan  any
-	Audit *gateway.AuditRecord
+// DraftPipeline runs the first end-to-end planning flow.
+type DraftPipeline struct {
+	gateway        PlanGateway
+	planner        EvaluatedProposalBuilder
+	draftGenerator DraftGenerator
+}
+
+func NewDraftPipeline(gateway PlanGateway, planner EvaluatedProposalBuilder, draftGenerator DraftGenerator) *DraftPipeline {
+	return &DraftPipeline{gateway: gateway, planner: planner, draftGenerator: draftGenerator}
 }
 
 type Request struct {
@@ -63,19 +44,15 @@ type Request struct {
 }
 
 type Result struct {
-	Plan          any
-	Audit         *gateway.AuditRecord
-	Proposal      *proposal.ChangeProposal
-	Draft         *prdraft.Draft
-}
-
-func NewDraftPipeline(planGenerator PlanGenerator, planner EvaluatedProposalBuilder, draftGenerator DraftGenerator) *DraftPipeline {
-	return &DraftPipeline{planGenerator: planGenerator, planner: planner, draftGenerator: draftGenerator}
+	Plan     *schema.ChangePlan
+	Audit    *gateway.AuditRecord
+	Proposal *proposal.ChangeProposal
+	Draft    *prdraft.Draft
 }
 
 func (p *DraftPipeline) Run(ctx context.Context, req Request) (*Result, error) {
-	if p.planGenerator == nil {
-		return nil, NewPipelineError("MissingPlanGenerator", "plan generator is required")
+	if p.gateway == nil {
+		return nil, NewPipelineError("MissingGateway", "plan gateway is required")
 	}
 	if p.planner == nil {
 		return nil, NewPipelineError("MissingPlanner", "evaluated proposal planner is required")
@@ -84,12 +61,15 @@ func (p *DraftPipeline) Run(ctx context.Context, req Request) (*Result, error) {
 		return nil, NewPipelineError("MissingDraftGenerator", "draft generator is required")
 	}
 
-	planOutput, err := p.planGenerator.GeneratePlan(ctx, gateway.GeneratePlanRequest{RequestID: req.RequestID, UserID: req.UserID, UserIntent: req.UserIntent, RiskHint: req.RiskHint})
+	plan, audit, err := p.gateway.GeneratePlan(ctx, gateway.GeneratePlanRequest{RequestID: req.RequestID, UserID: req.UserID, UserIntent: req.UserIntent, RiskHint: req.RiskHint})
 	if err != nil {
 		return nil, err
 	}
+	if plan == nil {
+		return nil, NewPipelineError("MissingPlan", "gateway returned nil plan")
+	}
 
-	evaluatedProposal, err := p.planner.BuildEvaluatedProposalFromPlan(planOutput, req.CreatedBy)
+	evaluatedProposal, err := p.planner.BuildEvaluatedProposal(*plan, req.CreatedBy)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +79,7 @@ func (p *DraftPipeline) Run(ctx context.Context, req Request) (*Result, error) {
 		return nil, err
 	}
 
-	return &Result{Plan: planOutput.Plan, Audit: planOutput.Audit, Proposal: evaluatedProposal, Draft: draft}, nil
+	return &Result{Plan: plan, Audit: audit, Proposal: evaluatedProposal, Draft: draft}, nil
 }
 
 type PipelineError struct {
@@ -114,6 +94,3 @@ func NewPipelineError(code string, message string) *PipelineError {
 func (e *PipelineError) Error() string {
 	return e.Code + ": " + e.Message
 }
-
-// TODO: replace this file with a typed pipeline after schema package boundaries are finalized.
-var _ = workflow.NewPlanner
