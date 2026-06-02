@@ -124,6 +124,15 @@ func TestJSONStructuredParserRejectsUnknownField(t *testing.T) {
 	}
 }
 
+func TestJSONStructuredParserRejectsTrailingJSON(t *testing.T) {
+	parser := NewJSONStructuredParser()
+
+	_, err := parser.Parse(provider.OutputSchemaRef{Name: schema.KindChangePlan, Version: schema.SchemaVersionV1Alpha1}, validChangePlanJSON()+` {"another":"object"}`)
+	if err == nil {
+		t.Fatalf("expected trailing JSON to be rejected")
+	}
+}
+
 func TestJSONStructuredParserRejectsEmptyOutput(t *testing.T) {
 	parser := NewJSONStructuredParser()
 
