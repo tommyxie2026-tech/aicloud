@@ -2,7 +2,6 @@ package openai
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/tommyxie2026-tech/aicloud/model/provider"
@@ -18,10 +17,15 @@ import (
 type Provider struct {
 	config Config
 	client Client
+	parser StructuredParser
 }
 
 func NewProvider(config Config, client Client) *Provider {
 	return &Provider{config: config, client: client}
+}
+
+func NewProviderWithParser(config Config, client Client, parser StructuredParser) *Provider {
+	return &Provider{config: config, client: client, parser: parser}
 }
 
 func (p *Provider) Name() string {
@@ -98,15 +102,15 @@ func (p *Provider) Generate(ctx context.Context, req provider.ProviderRequest) (
 	structured, err := p.parseStructuredOutput(req.OutputSchema, apiResp.OutputText)
 	if err != nil {
 		return &provider.ProviderResponse{
-			RequestID:        req.RequestID,
-			ProviderName:     p.config.Name,
-			ModelName:        apiReq.Model,
-			TaskType:         req.TaskType,
-			RawText:          apiResp.OutputText,
-			FinishReason:     apiResp.FinishReason,
-			LatencyMs:        time.Since(startedAt).Milliseconds(),
-			TokenUsage:       tokenUsage(apiResp),
-			ValidationHints:  []string{"structured output parse failed"},
+			RequestID:       req.RequestID,
+			ProviderName:    p.config.Name,
+			ModelName:       apiReq.Model,
+			TaskType:        req.TaskType,
+			RawText:         apiResp.OutputText,
+			FinishReason:    apiResp.FinishReason,
+			LatencyMs:       time.Since(startedAt).Milliseconds(),
+			TokenUsage:      tokenUsage(apiResp),
+			ValidationHints: []string{"structured output parse failed"},
 		}, &provider.ProviderError{Code: provider.ErrInvalidOutput, Message: err.Error(), Retryable: true}
 	}
 
@@ -138,16 +142,16 @@ func (p *Provider) mapProviderRequest(req provider.ProviderRequest) CompatibleRe
 
 // Config uses SecretRef rather than raw API keys.
 type Config struct {
-	Name             string
-	Endpoint         string
-	EndpointRef      string
-	SecretRef        string
-	DefaultModel     string
-	TimeoutSeconds   int
-	MaxRetries       int
-	MaxInputTokens   int
-	MaxOutputTokens  int
-	Private          bool
+	Name            string
+	Endpoint        string
+	EndpointRef     string
+	SecretRef       string
+	DefaultModel    string
+	TimeoutSeconds  int
+	MaxRetries      int
+	MaxInputTokens  int
+	MaxOutputTokens int
+	Private         bool
 }
 
 // Client is a narrow interface for an OpenAI-compatible endpoint.
@@ -174,7 +178,7 @@ type CompatibleResponse struct {
 	OutputTokens int
 }
 
-// StructuredParser allows callers to plug in JSON/YAML schema parsing later.
+// StructuredParser parses raw JSON/YAML text into one of model/schema structured output types.
 type StructuredParser interface {
 	Parse(schemaRef provider.OutputSchemaRef, raw string) (any, error)
 }
@@ -204,9 +208,10 @@ func renderContext(ctx provider.ModelContext) string {
 }
 
 func (p *Provider) parseStructuredOutput(schemaRef provider.OutputSchemaRef, raw string) (any, error) {
-	// MVP placeholder: real implementation will decode strict JSON/YAML into model/schema types.
-	// Until that parser exists, this provider is safe to register but should not be used in CI as a trusted planner.
-	return nil, fmt.Errorf("structured parser not implemented for schema %s", schemaRef.Name)
+	if p.parser == nil {
+		return nil, &provider.ProviderError{Code: provider.ErrInvalidOutput, Message: "structured parser is not configured", Retryable: true}
+	}
+	return p.parser.Parse(schemaRef, raw)
 }
 
 func normalizeClientError(err error) error {
