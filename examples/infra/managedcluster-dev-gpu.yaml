@@ -1,0 +1,30 @@
+apiVersion: infra.aicloud.dev/v1alpha1
+kind: ManagedCluster
+metadata:
+  name: dev-gpu-cluster
+  namespace: default
+  labels:
+    aicloud.dev/environment: dev
+    aicloud.dev/workload: gpu
+spec:
+  environment: dev
+  providerRef:
+    kind: ClusterProvider
+    name: capi-dev
+  workers:
+    - name: gpu-workers
+      replicas: 3
+      machineClassRef:
+        name: gpu-large
+      labels:
+        workload: gpu
+status:
+  observedGeneration: 1
+  phase: Running
+  workerReadyReplicas: 3
+  conditions:
+    - type: Ready
+      status: "True"
+      observedGeneration: 1
+      reason: WorkersReady
+      message: all worker groups are ready
