@@ -1,0 +1,16 @@
+apiVersion: infra.aicloud.dev/v1alpha1
+kind: MachineClass
+metadata:
+  name: gpu-large
+  labels:
+    aicloud.dev/workload: gpu
+spec:
+  provider: internal-cloud
+  cpu: "32"
+  memory: 128Gi
+  gpu:
+    count: 4
+    type: A100
+  labels:
+    workload: gpu
+    accelerator: nvidia-a100
