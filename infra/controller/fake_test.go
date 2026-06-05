@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	infraadapter "github.com/tommyxie2026-tech/aicloud/infra/adapter"
 	infraapi "github.com/tommyxie2026-tech/aicloud/infra/api"
 )
 
@@ -104,6 +105,21 @@ func TestFakeControllerRejectsInvalidCluster(t *testing.T) {
 	}
 }
 
+func TestFakeControllerMarksDegradedOnAdapterApplyError(t *testing.T) {
+	controller := NewFakeControllerWithAdapter(NewFakeStateStore(), &failingAdapter{})
+	cluster := validCluster(3)
+
+	updated, err := controller.Reconcile(context.Background(), cluster)
+	if err == nil {
+		t.Fatalf("expected adapter error")
+	}
+	if updated.Status.Phase != infraapi.PhaseDegraded {
+		t.Fatalf("expected Degraded, got %s", updated.Status.Phase)
+	}
+	assertCondition(t, updated, infraapi.ConditionReady, "False")
+	assertCondition(t, updated, infraapi.ConditionDegraded, "True")
+}
+
 func TestFakeStateStore(t *testing.T) {
 	store := NewFakeStateStore()
 	cluster := validCluster(3)
@@ -138,4 +154,14 @@ func assertCondition(t *testing.T, cluster infraapi.ManagedCluster, conditionTyp
 		}
 	}
 	t.Fatalf("condition %s not found", conditionType)
+}
+
+type failingAdapter struct{}
+
+func (a *failingAdapter) Observe(ctx context.Context, cluster infraapi.ManagedCluster) (infraadapter.ObservedClusterState, error) {
+	return infraadapter.ObservedClusterState{}, infraadapter.BackendUnavailable("test backend unavailable")
+}
+
+func (a *failingAdapter) ApplyDesiredState(ctx context.Context, cluster infraapi.ManagedCluster) error {
+	return infraadapter.BackendUnavailable("test backend unavailable")
 }
