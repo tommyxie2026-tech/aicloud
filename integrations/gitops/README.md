@@ -52,12 +52,13 @@ Model or agent
 kubectl apply / helm upgrade / terraform apply / machine power operation
 ```
 
-## 3. Current Packages and Files
+## 3. Current Files
 
 ```text
 integrations/gitops/patch_plan.go
 integrations/gitops/managedcluster_patch.go
-integrations/gitops/*_test.go
+integrations/gitops/patch_plan_test.go
+integrations/gitops/managedcluster_patch_test.go
 ```
 
 ## 4. ManifestPatchPlan
