@@ -83,17 +83,7 @@ It is created from a policy-evaluated `ChangeProposal`.
 
 ## 5. PatchPlanner
 
-`PatchPlanner` converts:
-
-```text
-proposal.ChangeProposal
-```
-
-into:
-
-```text
-ManifestPatchPlan
-```
+`PatchPlanner` converts `proposal.ChangeProposal` into `ManifestPatchPlan`.
 
 Current allowlist:
 
