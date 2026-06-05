@@ -26,6 +26,8 @@ Governed hybrid model access + policy-aware agent workflows
 5. Integrate first, customize later.
 6. Private/open-source model support must be first-class.
 7. Infrastructure control is the first scenario, not the only product direction.
+8. Kubernetes-style infrastructure APIs should be designed before real controllers.
+9. Fake controllers and adapters should prove semantics before real backend integration.
 ```
 
 ## 3. Milestones
@@ -46,7 +48,7 @@ M7 Custom Model Experiments
 Status:
 
 ```text
-Partially complete
+Mostly complete
 ```
 
 Implemented:
@@ -167,7 +169,7 @@ Acceptance criteria:
 Status:
 
 ```text
-Skeleton started
+In progress
 ```
 
 Implemented package:
@@ -183,17 +185,23 @@ Current capability:
 - public/private provider type support
 - Config with Endpoint / EndpointRef / SecretRef
 - fake client tests
-- fail-closed behavior while structured parser is not implemented
+- strict JSON structured parser
+- parser rejects markdown fenced output
+- parser rejects unknown fields
+- parser rejects empty output
+- parser rejects unsupported schemas
+- parser rejects trailing JSON content
+- parser can parse ChangePlan / RollbackPlan / ValidationReport / RiskExplanation and other schema kinds
 ```
 
-Next tasks:
+Remaining tasks:
 
 ```text
-- implement strict JSON/YAML structured parser
-- add OpenAI-compatible request body implementation
+- add OpenAI-compatible HTTP request body implementation
 - add provider config loading
 - add retry and timeout policy
 - add optional integration tests guarded by env vars
+- add private/self-hosted runtime adapters or configs
 ```
 
 ## 8. M4 Agent Workflow MVP
@@ -201,43 +209,58 @@ Next tasks:
 Status:
 
 ```text
-Not started
+MVP skeleton complete
 ```
 
-Goal:
-
-```text
-Turn validated model output into controlled workflow objects.
-```
-
-Planned packages:
+Implemented packages:
 
 ```text
 agent/proposal
-agent/planner
+agent/workflow
 agent/prdraft
+agent/pipeline
+policy/checker
 ```
 
-Planned objects:
+Implemented objects:
 
 ```text
 ChangeProposal
-PRDraft
-WorkflowState
-RollbackPlanRef
+ProposalChange
+PolicyResult
+RollbackProposal
 ValidationPlan
+Draft
+DraftPipeline
 ```
 
-First flow:
+Implemented flow:
 
 ```text
+Gateway.GeneratePlan
+  ↓
 ChangePlan
   ↓
-PolicyChecker
+proposal.FromChangePlan
   ↓
-ChangeProposal
+PolicyChecker.Evaluate
   ↓
-PRDraft
+ChangeProposal.ApplyPolicyResult
+  ↓
+PRDraftGenerator.Generate
+  ↓
+PR Draft
+```
+
+Implemented capabilities:
+
+```text
+- ChangePlan can convert to ChangeProposal
+- model riskHint is preserved only as a hint
+- deterministic PolicyChecker decides risk and approval
+- PR draft requires policy evaluation
+- PR draft contains intent, target, changes, risk, approval, rollback and validation checklist
+- pipeline composes gateway + workflow planner + PR draft generator
 ```
 
 Acceptance criteria:
@@ -254,13 +277,13 @@ Acceptance criteria:
 Status:
 
 ```text
-Not started
+Design and fake implementation in progress
 ```
 
 Goal:
 
 ```text
-Implement the first high-value scenario: AI-assisted infrastructure change planning.
+Implement the first high-value scenario: AI-assisted infrastructure change planning using Kubernetes-style APIs.
 ```
 
 First scenario:
@@ -269,34 +292,122 @@ First scenario:
 ManagedCluster workers replicas 3 -> 6
 ```
 
-Planned packages:
+Implemented docs:
+
+```text
+docs/infra-control-plane-scenario.md
+docs/managedcluster-api-design.md
+infra/README.md
+infra/controller/README.md
+infra/adapter/README.md
+```
+
+Implemented packages:
 
 ```text
 infra/api
 infra/controller
 infra/adapter
-policy/risk
-policy/approval
 ```
 
-Planned objects:
+Implemented examples:
+
+```text
+examples/infra/managedcluster-dev-gpu.yaml
+examples/infra/machineclass-gpu-large.yaml
+```
+
+Implemented objects:
 
 ```text
 ManagedCluster
+ManagedClusterSpec
+ManagedClusterStatus
+WorkerGroupSpec
 MachineClass
-AgentOperation
-RiskPolicy
-ApprovalPolicy
+MachineClassSpec
+Condition
+ClusterAdapter
+ObservedClusterState
+FakeClusterAdapter
+FakeController
+FakeStateStore
+```
+
+Implemented capabilities:
+
+```text
+- Kubernetes-style TypeMeta / ObjectMeta
+- Spec / Status separation
+- ManagedCluster static validation
+- MachineClass static validation
+- worker group uniqueness validation
+- replicas >= 0 validation
+- MachineClass GPU validation
+- deterministic fake controller
+- adapter boundary with ClusterAdapter
+- FakeClusterAdapter with in-memory observed state
+- normalized AdapterError codes
+- Ready / Reconciling / Degraded conditions
+- observedGeneration updates when ready
+```
+
+Current fake reconcile flow:
+
+```text
+ManagedCluster.spec
+  ↓
+FakeController.Reconcile
+  ↓
+ClusterAdapter.ApplyDesiredState
+  ↓
+ClusterAdapter.Observe
+  ↓
+ManagedCluster.status
+```
+
+Community mapping:
+
+```text
+Cluster API:
+  ManagedCluster -> Cluster
+  WorkerGroupSpec -> MachineDeployment
+  MachineClass -> MachineTemplate
+
+KubeVirt:
+  VirtualMachine -> KubeVirt VirtualMachine
+  MachineClass -> VM flavor / template
+
+Metal3:
+  BareMetalHost -> Metal3 BareMetalHost
+  MachineClass -> hardware profile
+
+Crossplane:
+  ManagedCluster -> CompositeResource
+  ProviderRef -> ProviderConfig
 ```
 
 Acceptance criteria:
 
 ```text
-- CRD design exists
+- CRD-style design exists
 - fake controller can update status
-- model-generated ChangePlan can produce PR-ready manifest change
+- adapter boundary exists
+- model-generated ChangePlan can produce PR-ready proposal
 - PolicyChecker classifies dev 3 -> 6 as Medium
 - real execution remains through GitOps / Controller, not model
+```
+
+Remaining tasks:
+
+```text
+- add GitOps manifest generation design
+- add ChangeProposal -> ManagedCluster patch mapping
+- add adapter-driven fake controller integration tests if needed
+- add Cluster API mapping design details
+- add KubeVirt mapping design details
+- add Metal3 mapping design details
+- postpone real controller-runtime implementation
 ```
 
 ## 10. M6 Enterprise Governance
@@ -319,6 +430,8 @@ SSO integration
 Cost and latency tracking
 Data sensitivity policy
 Audit export
+Policy versioning
+Approval workflow state
 ```
 
 Acceptance criteria:
@@ -329,6 +442,7 @@ Acceptance criteria:
 - each model call is audited
 - provider evaluation reports are stored
 - sensitive data rules affect routing
+- policy decisions are versioned and auditable
 ```
 
 ## 11. M7 Custom Model Experiments
@@ -382,18 +496,29 @@ PR-007 model/eval first case
 PR-008 model/routing
 PR-009 model/openai skeleton
 PR-010 model/registry
+PR-011 model structured parser
+PR-012 agent ChangeProposal
+PR-013 deterministic policy checker
+PR-014 PR draft generator
+PR-015 agent pipeline
+PR-016 infrastructure scenario docs
+PR-017 ManagedCluster API skeleton
+PR-018 infra API validation
+PR-019 fake controller
+PR-020 infra adapter boundary
 ```
 
 Next PRs:
 
 ```text
-PR-011 model structured parser
-PR-012 provider config loading
-PR-013 agent ChangeProposal
-PR-014 policy checker MVP
-PR-015 PR draft generator
-PR-016 infra scenario design
-PR-017 ManagedCluster API skeleton
+PR-021 GitOps manifest generation design
+PR-022 ChangeProposal -> ManagedCluster patch mapping
+PR-023 provider config loading
+PR-024 OpenAI-compatible HTTP client
+PR-025 private/self-hosted provider config examples
+PR-026 Cluster API mapping design
+PR-027 KubeVirt mapping design
+PR-028 Metal3 mapping design
 ```
 
 ## 13. Immediate Next Steps
@@ -401,17 +526,18 @@ PR-017 ManagedCluster API skeleton
 Recommended next implementation sequence:
 
 ```text
-1. Fix any CI failures from current model packages.
-2. Update model/README.md to include all packages.
-3. Implement structured parser for OpenAI-compatible provider.
-4. Add agent ChangeProposal model.
-5. Add deterministic PolicyChecker MVP.
-6. Add PR draft generator.
+1. Run or verify go test ./... status.
+2. Add GitOps manifest generation design.
+3. Add ChangeProposal -> ManagedCluster patch mapping.
+4. Add provider config loading.
+5. Add OpenAI-compatible HTTP client implementation.
+6. Add private/self-hosted model provider config examples.
+7. Keep real controller-runtime postponed until fake semantics are stable.
 ```
 
 ## 14. Current Done Definition
 
-The current model-layer MVP is done when:
+Current done definition for this phase:
 
 ```text
 1. go test ./... passes.
@@ -420,5 +546,11 @@ The current model-layer MVP is done when:
 4. EvalRunner produces EvalReport.
 5. Router can route based on ProviderScore.
 6. Registry can register, list, and health-check providers.
-7. OpenAI-compatible provider skeleton fails closed until parser is implemented.
+7. OpenAI-compatible provider can parse strict structured JSON.
+8. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
+9. PolicyChecker decides risk and approval deterministically.
+10. PR draft generation requires policy evaluation.
+11. ManagedCluster / MachineClass API types and validation exist.
+12. FakeController updates status through ClusterAdapter boundary.
+13. Real execution remains outside model and agent layers.
 ```
