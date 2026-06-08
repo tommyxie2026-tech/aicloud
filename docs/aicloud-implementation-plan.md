@@ -28,6 +28,7 @@ Governed hybrid model access + policy-aware agent workflows
 7. Infrastructure control is the first scenario, not the only product direction.
 8. Kubernetes-style infrastructure APIs should be designed before real controllers.
 9. Fake controllers and adapters should prove semantics before real backend integration.
+10. GitOps patch planning should be separated from live execution.
 ```
 
 ## 3. Milestones
@@ -60,14 +61,6 @@ go.mod
 docs/README.md
 ```
 
-Acceptance criteria:
-
-```text
-- repository has clear product README
-- go test ./... is wired into CI
-- docs entrypoint exists
-```
-
 ## 5. M1 Model Core
 
 Status:
@@ -93,16 +86,6 @@ Implemented capabilities:
 - BasicValidator
 - deterministic MockProvider
 - MockProvider unit tests
-```
-
-First working flow:
-
-```text
-MockProvider.GeneratePlan
-  ↓
-schema.ChangePlan
-  ↓
-schema.BasicValidator.ValidateChangePlan
 ```
 
 ## 6. M2 Mock Gateway MVP
@@ -136,7 +119,7 @@ Implemented capabilities:
 - MemoryRegistry
 ```
 
-Current full flow:
+Current flow:
 
 ```text
 MockProvider
@@ -152,16 +135,6 @@ AuditRecord
 EvalRunner
   ↓
 Router / Registry
-```
-
-Acceptance criteria:
-
-```text
-- Gateway.GeneratePlan returns ChangePlan
-- unsafe request is blocked
-- EvalRunner scores MockProvider
-- Router uses ProviderScore
-- Registry lists provider capabilities and health
 ```
 
 ## 7. M3 Provider Integration
@@ -263,15 +236,6 @@ Implemented capabilities:
 - pipeline composes gateway + workflow planner + PR draft generator
 ```
 
-Acceptance criteria:
-
-```text
-- ChangePlan can convert to ChangeProposal
-- risk is determined by deterministic policy, not model alone
-- PR draft contains intent, risk, rollback, validation checklist
-- no direct execution instructions are generated
-```
-
 ## 9. M5 Infrastructure Scenario MVP
 
 Status:
@@ -300,6 +264,7 @@ docs/managedcluster-api-design.md
 infra/README.md
 infra/controller/README.md
 infra/adapter/README.md
+integrations/gitops/README.md
 ```
 
 Implemented packages:
@@ -308,6 +273,7 @@ Implemented packages:
 infra/api
 infra/controller
 infra/adapter
+integrations/gitops
 ```
 
 Implemented examples:
@@ -332,6 +298,11 @@ ObservedClusterState
 FakeClusterAdapter
 FakeController
 FakeStateStore
+ManifestPatchPlan
+ManifestFieldChange
+PatchPlanner
+DryRunManifestWriter
+WriteResult
 ```
 
 Implemented capabilities:
@@ -350,9 +321,14 @@ Implemented capabilities:
 - normalized AdapterError codes
 - Ready / Reconciling / Degraded conditions
 - observedGeneration updates when ready
+- ChangeProposal -> ManifestPatchPlan
+- GitOps field allowlist and blocked field checks
+- rollback inverse patch generation
+- ManagedCluster object-level patch 3 -> 6
+- DryRunManifestWriter returns updated object and summary
 ```
 
-Current fake reconcile flow:
+Current infrastructure flow:
 
 ```text
 ManagedCluster.spec
@@ -364,6 +340,20 @@ ClusterAdapter.ApplyDesiredState
 ClusterAdapter.Observe
   ↓
 ManagedCluster.status
+```
+
+Current GitOps planning flow:
+
+```text
+Evaluated ChangeProposal
+  ↓
+PatchPlanner.BuildPatchPlan
+  ↓
+ManifestPatchPlan
+  ↓
+DryRunManifestWriter.WriteManagedCluster
+  ↓
+Updated ManagedCluster object + WriteResult
 ```
 
 Community mapping:
@@ -393,7 +383,8 @@ Acceptance criteria:
 - CRD-style design exists
 - fake controller can update status
 - adapter boundary exists
-- model-generated ChangePlan can produce PR-ready proposal
+- evaluated ChangeProposal can produce ManifestPatchPlan
+- ManifestPatchPlan can produce updated ManagedCluster object in dry-run mode
 - PolicyChecker classifies dev 3 -> 6 as Medium
 - real execution remains through GitOps / Controller, not model
 ```
@@ -401,13 +392,14 @@ Acceptance criteria:
 Remaining tasks:
 
 ```text
-- add GitOps manifest generation design
-- add ChangeProposal -> ManagedCluster patch mapping
-- add adapter-driven fake controller integration tests if needed
+- add PR-ready metadata fields to ManifestPatchPlan
+- add dry-run branch/commit abstraction
+- add YAML parser/writer after dependency choice is clear
 - add Cluster API mapping design details
 - add KubeVirt mapping design details
 - add Metal3 mapping design details
 - postpone real controller-runtime implementation
+- postpone real GitHub PR creation
 ```
 
 ## 10. M6 Enterprise Governance
@@ -432,17 +424,6 @@ Data sensitivity policy
 Audit export
 Policy versioning
 Approval workflow state
-```
-
-Acceptance criteria:
-
-```text
-- admin can register providers
-- admin can set routing policy
-- each model call is audited
-- provider evaluation reports are stored
-- sensitive data rules affect routing
-- policy decisions are versioned and auditable
 ```
 
 ## 11. M7 Custom Model Experiments
@@ -473,14 +454,6 @@ Prerequisites:
 - safety boundary is stable
 ```
 
-Acceptance criteria:
-
-```text
-- custom model beats baseline on one narrow task
-- no safety regression occurs
-- model is routed only to its approved task class
-```
-
 ## 12. Recommended PR Order
 
 Completed or mostly completed:
@@ -506,19 +479,22 @@ PR-017 ManagedCluster API skeleton
 PR-018 infra API validation
 PR-019 fake controller
 PR-020 infra adapter boundary
+PR-021 GitOps ManifestPatchPlan
+PR-022 ManagedCluster object patcher
+PR-023 DryRunManifestWriter
 ```
 
 Next PRs:
 
 ```text
-PR-021 GitOps manifest generation design
-PR-022 ChangeProposal -> ManagedCluster patch mapping
-PR-023 provider config loading
-PR-024 OpenAI-compatible HTTP client
-PR-025 private/self-hosted provider config examples
-PR-026 Cluster API mapping design
-PR-027 KubeVirt mapping design
-PR-028 Metal3 mapping design
+PR-024 PR-ready metadata fields for ManifestPatchPlan
+PR-025 dry-run branch/commit abstraction
+PR-026 provider config loading
+PR-027 OpenAI-compatible HTTP client
+PR-028 private/self-hosted provider config examples
+PR-029 Cluster API mapping design
+PR-030 KubeVirt mapping design
+PR-031 Metal3 mapping design
 ```
 
 ## 13. Immediate Next Steps
@@ -527,12 +503,12 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add GitOps manifest generation design.
-3. Add ChangeProposal -> ManagedCluster patch mapping.
+2. Add PR-ready metadata fields to ManifestPatchPlan.
+3. Add dry-run branch/commit abstraction.
 4. Add provider config loading.
 5. Add OpenAI-compatible HTTP client implementation.
 6. Add private/self-hosted model provider config examples.
-7. Keep real controller-runtime postponed until fake semantics are stable.
+7. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
 
 ## 14. Current Done Definition
@@ -552,5 +528,6 @@ Current done definition for this phase:
 10. PR draft generation requires policy evaluation.
 11. ManagedCluster / MachineClass API types and validation exist.
 12. FakeController updates status through ClusterAdapter boundary.
-13. Real execution remains outside model and agent layers.
+13. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
+14. Real execution remains outside model and agent layers.
 ```
