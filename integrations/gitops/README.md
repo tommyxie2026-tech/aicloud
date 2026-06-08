@@ -2,7 +2,7 @@
 
 ## 1. Goal
 
-The `integrations/gitops` package converts policy-evaluated infrastructure proposals into deterministic, reviewable manifest patch plans.
+The `integrations/gitops` package converts policy-evaluated infrastructure proposals into deterministic, reviewable manifest patch plans and dry-run manifest write results.
 
 It is the bridge between:
 
@@ -37,6 +37,8 @@ Evaluated ChangeProposal
   ↓
 ManifestPatchPlan
   ↓
+DryRunManifestWriter
+  ↓
 Git branch / commit / PR
   ↓
 GitOps controller
@@ -57,8 +59,10 @@ kubectl apply / helm upgrade / terraform apply / machine power operation
 ```text
 integrations/gitops/patch_plan.go
 integrations/gitops/managedcluster_patch.go
+integrations/gitops/manifest_writer.go
 integrations/gitops/patch_plan_test.go
 integrations/gitops/managedcluster_patch_test.go
+integrations/gitops/manifest_writer_test.go
 ```
 
 ## 4. ManifestPatchPlan
@@ -148,7 +152,42 @@ Important behavior:
 - returns a new updated object
 ```
 
-## 7. Current First Scenario
+## 7. DryRunManifestWriter
+
+`DryRunManifestWriter` converts:
+
+```text
+ManifestPatchPlan + ManagedCluster
+```
+
+into:
+
+```text
+WriteResult
+```
+
+`WriteResult` contains:
+
+```text
+SourcePath
+OutputPath
+Summary
+Updated ManagedCluster
+Changes
+Rollback
+```
+
+It does not:
+
+```text
+- read files
+- write files
+- create commits
+- create PRs
+- call Kubernetes
+```
+
+## 8. Current First Scenario
 
 Input intent:
 
@@ -180,7 +219,7 @@ Rollback patch:
 6 -> 3
 ```
 
-## 8. Safety Rules
+## 9. Safety Rules
 
 GitOps integration must fail closed if:
 
@@ -194,11 +233,12 @@ GitOps integration must fail closed if:
 - generated object fails API validation
 ```
 
-## 9. Current Tests
+## 10. Current Tests
 
 ```text
 integrations/gitops/patch_plan_test.go
 integrations/gitops/managedcluster_patch_test.go
+integrations/gitops/manifest_writer_test.go
 ```
 
 Covered behavior:
@@ -217,9 +257,11 @@ Covered behavior:
 - unsupported field fails closed
 - missing worker group fails closed
 - negative replicas fails closed
+- dry-run writer returns updated object and summary
+- dry-run writer propagates patch errors
 ```
 
-## 10. Not Done Yet
+## 11. Not Done Yet
 
 ```text
 - YAML parser / writer
@@ -232,14 +274,13 @@ Covered behavior:
 - live cluster apply
 ```
 
-## 11. Recommended Next Steps
+## 12. Recommended Next Steps
 
 Recommended next steps:
 
 ```text
-1. Add a ManifestWriter interface.
-2. Add YAML read/write implementation only after dependency choice is clear.
-3. Add PR-ready metadata fields to ManifestPatchPlan.
-4. Add dry-run branch/commit abstraction.
-5. Keep real GitHub PR creation separate from patch planning.
+1. Add PR-ready metadata fields to ManifestPatchPlan.
+2. Add dry-run branch/commit abstraction.
+3. Add YAML read/write implementation only after dependency choice is clear.
+4. Keep real GitHub PR creation separate from patch planning.
 ```
