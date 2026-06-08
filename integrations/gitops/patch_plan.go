@@ -20,6 +20,7 @@ type ManifestPatchPlan struct {
 	Rollback     []ManifestFieldChange
 	Validation   []string
 	PolicyResult proposal.PolicyResult
+	PR           PRMetadata
 }
 
 type ManifestFieldChange struct {
@@ -27,6 +28,15 @@ type ManifestFieldChange struct {
 	From   any
 	To     any
 	Reason string
+}
+
+// PRMetadata contains review-system metadata for future branch/commit/PR generation.
+// It is dry-run metadata only; no GitHub side effect is performed here.
+type PRMetadata struct {
+	BranchName    string
+	CommitMessage string
+	Title         string
+	Draft         bool
 }
 
 type PatchPlanner struct {
@@ -64,6 +74,7 @@ func (p *PatchPlanner) BuildPatchPlan(changeProposal *proposal.ChangeProposal, s
 		OutputPath:   outputPath,
 		Validation:   append([]string{}, changeProposal.ValidationPlan.Expected...),
 		PolicyResult: *changeProposal.PolicyResult,
+		PR:           buildPRMetadata(changeProposal),
 	}
 
 	for _, change := range changeProposal.Changes {
@@ -76,6 +87,38 @@ func (p *PatchPlanner) BuildPatchPlan(changeProposal *proposal.ChangeProposal, s
 	}
 
 	return plan, nil
+}
+
+func buildPRMetadata(changeProposal *proposal.ChangeProposal) PRMetadata {
+	operation := sanitizePathPart(strings.ToLower(changeProposal.OperationType))
+	requestID := sanitizePathPart(changeProposal.RequestID)
+	targetName := sanitizePathPart(changeProposal.Target.Name)
+	if operation == "" {
+		operation = "change"
+	}
+	if requestID == "" {
+		requestID = "request"
+	}
+	if targetName == "" {
+		targetName = "target"
+	}
+	return PRMetadata{
+		BranchName:    fmt.Sprintf("aicloud/%s/%s/%s", requestID, operation, targetName),
+		CommitMessage: fmt.Sprintf("aicloud: %s %s/%s", changeProposal.OperationType, changeProposal.Target.Kind, changeProposal.Target.Name),
+		Title:         fmt.Sprintf("%s %s/%s", changeProposal.OperationType, changeProposal.Target.Kind, changeProposal.Target.Name),
+		Draft:         changeProposal.PolicyResult != nil && changeProposal.PolicyResult.ApprovalRequired,
+	}
+}
+
+func sanitizePathPart(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	value = strings.ReplaceAll(value, "_", "-")
+	value = strings.ReplaceAll(value, " ", "-")
+	value = strings.ReplaceAll(value, "/", "-")
+	for strings.Contains(value, "--") {
+		value = strings.ReplaceAll(value, "--", "-")
+	}
+	return strings.Trim(value, "-")
 }
 
 func (p *PatchPlanner) validateField(field string) error {
