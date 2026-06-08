@@ -36,6 +36,32 @@ func TestBuildPatchPlan(t *testing.T) {
 	if plan.Rollback[0].From != 6 || plan.Rollback[0].To != 3 {
 		t.Fatalf("expected rollback change 6 -> 3, got %v -> %v", plan.Rollback[0].From, plan.Rollback[0].To)
 	}
+	if plan.PR.BranchName != "aicloud/request-001/scaleout/dev-gpu-cluster" {
+		t.Fatalf("unexpected branch name: %s", plan.PR.BranchName)
+	}
+	if plan.PR.CommitMessage != "aicloud: ScaleOut ManagedCluster/dev-gpu-cluster" {
+		t.Fatalf("unexpected commit message: %s", plan.PR.CommitMessage)
+	}
+	if plan.PR.Title != "ScaleOut ManagedCluster/dev-gpu-cluster" {
+		t.Fatalf("unexpected PR title: %s", plan.PR.Title)
+	}
+	if plan.PR.Draft {
+		t.Fatalf("expected non-draft PR metadata when approval is not required")
+	}
+}
+
+func TestBuildPatchPlanMarksDraftWhenApprovalRequired(t *testing.T) {
+	planner := NewPatchPlanner()
+	proposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
+	proposal.ApplyPolicyResult(proposal.PolicyResult{RiskLevel: "High", ApprovalRequired: true, PolicyName: "default-risk-policy", MatchedRule: "prod-or-high-risk", Result: "REVIEW_REQUIRED", Reason: "approval required"})
+
+	plan, err := planner.BuildPatchPlan(proposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
+	if err != nil {
+		t.Fatalf("BuildPatchPlan returned error: %v", err)
+	}
+	if !plan.PR.Draft {
+		t.Fatalf("expected draft PR metadata when approval is required")
+	}
 }
 
 func TestBuildPatchPlanRejectsUnevaluatedProposal(t *testing.T) {
