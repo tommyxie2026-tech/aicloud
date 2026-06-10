@@ -1,0 +1,19 @@
+apiVersion: model.aicloud.dev/v1alpha1
+kind: ModelProviderConfig
+metadata:
+  name: public-openai-compatible
+  namespace: aicloud-system
+spec:
+  type: OpenAICompatible
+  name: public-openai-compatible
+  endpoint: https://api.openai-compatible.example/v1
+  secretRef: secret/openai-public
+  defaultModel: gpt-test
+  timeoutSeconds: 30
+  maxRetries: 2
+  maxInputTokens: 32768
+  maxOutputTokens: 2048
+  private: false
+  dataBoundary:
+    allowRestrictedData: false
+    notes: Public hosted endpoint. Do not route restricted or confidential infrastructure context here.
