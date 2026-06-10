@@ -161,6 +161,9 @@ Current capability:
 - ConfigSource -> LoadConfig -> ValidateConfig
 - config defaults for timeout, retry and token limits
 - raw credential rejection in provider config
+- public hosted provider config example
+- private enterprise gateway config example
+- self-hosted vLLM config example
 - fake client tests
 - strict JSON structured parser
 - parser rejects markdown fenced output
@@ -197,7 +200,6 @@ CompatibleResponse
 Remaining tasks:
 
 ```text
-- add private/self-hosted provider config examples
 - add retry and timeout policy refinements
 - add optional integration tests guarded by env vars
 - add Kubernetes Secret resolver in a runtime integration package
@@ -464,12 +466,12 @@ PR-024 PR-ready metadata fields for ManifestPatchPlan
 PR-025 dry-run branch/commit abstraction
 PR-026 provider config loading
 PR-027 OpenAI-compatible HTTP client
+PR-028 private/self-hosted provider config examples
 ```
 
 Next PRs:
 
 ```text
-PR-028 private/self-hosted provider config examples
 PR-029 retry and timeout policy refinements
 PR-030 Cluster API mapping design
 PR-031 KubeVirt mapping design
@@ -482,11 +484,10 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add private/self-hosted model provider config examples.
-3. Add retry and timeout policy refinements.
-4. Add integration tests only behind explicit environment variables.
-5. Add YAML parser/writer only after dependency choice is clear.
-6. Keep real controller-runtime and real GitHub PR creation postponed.
+2. Add retry and timeout policy refinements.
+3. Add integration tests only behind explicit environment variables.
+4. Add YAML parser/writer only after dependency choice is clear.
+5. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
 
 ## 14. Current Done Definition
@@ -503,12 +504,13 @@ Current done definition for this phase:
 7. OpenAI-compatible provider can parse strict structured JSON.
 8. OpenAI-compatible provider has config loading and validation.
 9. OpenAI-compatible provider has request body builder and narrow HTTP client.
-10. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
-11. PolicyChecker decides risk and approval deterministically.
-12. PR draft generation requires policy evaluation.
-13. ManagedCluster / MachineClass API types and validation exist.
-14. FakeController updates status through ClusterAdapter boundary.
-15. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
-16. GitOps integration can produce dry-run branch/commit/PR metadata.
-17. Real execution remains outside model and agent layers.
+10. OpenAI-compatible provider has public/private/self-hosted config examples without raw credentials.
+11. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
+12. PolicyChecker decides risk and approval deterministically.
+13. PR draft generation requires policy evaluation.
+14. ManagedCluster / MachineClass API types and validation exist.
+15. FakeController updates status through ClusterAdapter boundary.
+16. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
+17. GitOps integration can produce dry-run branch/commit/PR metadata.
+18. Real execution remains outside model and agent layers.
 ```
