@@ -19,6 +19,8 @@ The provider exposes the shared `model/provider.ModelProvider` interface while k
 model/openai/provider.go
 model/openai/parser.go
 model/openai/config_loader.go
+model/openai/http_request.go
+model/openai/http_client.go
 model/openai/*_test.go
 ```
 
@@ -89,7 +91,7 @@ apikey=...
 token=...
 ```
 
-The runtime implementation should resolve `SecretRef` outside this package.
+The runtime implementation should resolve `SecretRef` outside config loading.
 
 ## 7. Public Hosted Provider Example
 
@@ -121,9 +123,71 @@ DefaultModel: qwen2.5-coder
 Private:      true
 ```
 
-## 10. Safety Properties
+## 10. HTTP Request Builder
 
-Current config loading fails closed when:
+`BuildChatCompletionRequest` converts:
+
+```text
+CompatibleRequest
+```
+
+into:
+
+```text
+ChatCompletionRequest
+```
+
+It builds an OpenAI-compatible `/chat/completions` request body.
+
+Current request fields:
+
+```text
+model
+messages
+temperature
+max_tokens
+stream=false
+response_format=json_object when OutputSchema is set
+```
+
+It does not:
+
+```text
+- send HTTP requests
+- attach credentials
+- resolve secrets
+```
+
+## 11. Narrow HTTP Client
+
+`HTTPClient` uses injected interfaces:
+
+```text
+HTTPDoer
+SecretResolver
+```
+
+Current flow:
+
+```text
+CompatibleRequest
+  ↓
+BuildChatCompletionRequest
+  ↓
+BuildChatCompletionsURL
+  ↓
+SecretResolver.ResolveSecret
+  ↓
+HTTPDoer.Do
+  ↓
+CompatibleResponse
+```
+
+The default implementation does not read environment variables, files, or Kubernetes Secrets directly.
+
+## 12. Safety Properties
+
+Current config and HTTP layers fail closed when:
 
 ```text
 - name is missing
@@ -136,9 +200,16 @@ Current config loading fails closed when:
 - maxRetries is invalid
 - maxInputTokens is invalid
 - maxOutputTokens is invalid
+- model is missing from request
+- instruction is missing from request
+- endpoint URL is missing
+- SecretResolver is missing
+- resolved secret is empty
+- HTTP response is non-2xx
+- HTTP response has no choices
 ```
 
-## 11. Provider Capabilities
+## 13. Provider Capabilities
 
 The provider advertises:
 
@@ -163,12 +234,11 @@ Restricted capabilities include:
 - auto merge
 ```
 
-## 12. Not Done Yet
+## 14. Not Done Yet
 
 ```text
-- real HTTP client
 - retry policy implementation
-- timeout propagation to HTTP request
+- timeout propagation refinements
 - streaming
 - tool use
 - env-guarded integration tests
@@ -176,12 +246,12 @@ Restricted capabilities include:
 - external config file loader
 ```
 
-## 13. Recommended Next Steps
+## 15. Recommended Next Steps
 
 ```text
-1. Add OpenAI-compatible HTTP request body builder.
-2. Add a narrow HTTP client implementation.
-3. Keep credential resolution outside this package.
-4. Add provider config examples for public/private/self-hosted endpoints.
-5. Add integration tests only behind explicit environment variables.
+1. Add provider config examples for public/private/self-hosted endpoints.
+2. Add retry policy implementation.
+3. Keep credential resolution outside config loading.
+4. Add integration tests only behind explicit environment variables.
+5. Add a Kubernetes Secret resolver in a separate runtime integration package.
 ```
