@@ -29,6 +29,7 @@ Governed hybrid model access + policy-aware agent workflows
 8. Kubernetes-style infrastructure APIs should be designed before real controllers.
 9. Fake controllers and adapters should prove semantics before real backend integration.
 10. GitOps patch planning should be separated from live execution.
+11. Provider credentials must stay behind references and resolvers, not raw config fields.
 ```
 
 ## 3. Milestones
@@ -157,6 +158,9 @@ Current capability:
 - OpenAI-compatible Provider skeleton
 - public/private provider type support
 - Config with Endpoint / EndpointRef / SecretRef
+- ConfigSource -> LoadConfig -> ValidateConfig
+- config defaults for timeout, retry and token limits
+- raw credential rejection in provider config
 - fake client tests
 - strict JSON structured parser
 - parser rejects markdown fenced output
@@ -165,16 +169,39 @@ Current capability:
 - parser rejects unsupported schemas
 - parser rejects trailing JSON content
 - parser can parse ChangePlan / RollbackPlan / ValidationReport / RiskExplanation and other schema kinds
+- OpenAI-compatible chat completions request body builder
+- /chat/completions URL builder
+- narrow HTTPClient with injectable HTTPDoer and SecretResolver
+- HTTPClient parses choices, finish reason and token usage
+- HTTPClient rejects missing resolver, empty secret, non-2xx response and missing choices
+```
+
+Current provider flow:
+
+```text
+ConfigSource
+  ↓
+LoadConfig
+  ↓
+ValidateConfig
+  ↓
+HTTPClient
+  ↓
+BuildChatCompletionRequest
+  ↓
+HTTPDoer
+  ↓
+CompatibleResponse
 ```
 
 Remaining tasks:
 
 ```text
-- add provider config loading
-- add OpenAI-compatible HTTP request body implementation
-- add retry and timeout policy
+- add private/self-hosted provider config examples
+- add retry and timeout policy refinements
 - add optional integration tests guarded by env vars
-- add private/self-hosted runtime adapters or configs
+- add Kubernetes Secret resolver in a runtime integration package
+- add external config file loader if needed
 ```
 
 ## 8. M4 Agent Workflow MVP
@@ -244,27 +271,10 @@ Status:
 Design and fake implementation in progress
 ```
 
-Goal:
-
-```text
-Implement the first high-value scenario: AI-assisted infrastructure change planning using Kubernetes-style APIs.
-```
-
 First scenario:
 
 ```text
 ManagedCluster workers replicas 3 -> 6
-```
-
-Implemented docs:
-
-```text
-docs/infra-control-plane-scenario.md
-docs/managedcluster-api-design.md
-infra/README.md
-infra/controller/README.md
-infra/adapter/README.md
-integrations/gitops/README.md
 ```
 
 Implemented packages:
@@ -274,6 +284,19 @@ infra/api
 infra/controller
 infra/adapter
 integrations/gitops
+```
+
+Implemented docs and examples:
+
+```text
+docs/infra-control-plane-scenario.md
+docs/managedcluster-api-design.md
+infra/README.md
+infra/controller/README.md
+infra/adapter/README.md
+integrations/gitops/README.md
+examples/infra/managedcluster-dev-gpu.yaml
+examples/infra/machineclass-gpu-large.yaml
 ```
 
 Implemented objects:
@@ -328,20 +351,6 @@ Implemented capabilities:
 - dry-run BranchPlan / CommitPlan / PullRequestPlan generation
 ```
 
-Current infrastructure flow:
-
-```text
-ManagedCluster.spec
-  ↓
-FakeController.Reconcile
-  ↓
-ClusterAdapter.ApplyDesiredState
-  ↓
-ClusterAdapter.Observe
-  ↓
-ManagedCluster.status
-```
-
 Current GitOps planning flow:
 
 ```text
@@ -358,19 +367,6 @@ Updated ManagedCluster object + WriteResult
 BuildBranchPlan
   ↓
 BranchPlan / CommitPlan / PullRequestPlan
-```
-
-Acceptance criteria:
-
-```text
-- CRD-style design exists
-- fake controller can update status
-- adapter boundary exists
-- evaluated ChangeProposal can produce ManifestPatchPlan
-- ManifestPatchPlan can produce updated ManagedCluster object in dry-run mode
-- dry-run branch/commit/PR metadata can be generated
-- PolicyChecker classifies dev 3 -> 6 as Medium
-- real execution remains through GitOps / Controller, not model
 ```
 
 Remaining tasks:
@@ -466,17 +462,18 @@ PR-022 ManagedCluster object patcher
 PR-023 DryRunManifestWriter
 PR-024 PR-ready metadata fields for ManifestPatchPlan
 PR-025 dry-run branch/commit abstraction
+PR-026 provider config loading
+PR-027 OpenAI-compatible HTTP client
 ```
 
 Next PRs:
 
 ```text
-PR-026 provider config loading
-PR-027 OpenAI-compatible HTTP client
 PR-028 private/self-hosted provider config examples
-PR-029 Cluster API mapping design
-PR-030 KubeVirt mapping design
-PR-031 Metal3 mapping design
+PR-029 retry and timeout policy refinements
+PR-030 Cluster API mapping design
+PR-031 KubeVirt mapping design
+PR-032 Metal3 mapping design
 ```
 
 ## 13. Immediate Next Steps
@@ -485,9 +482,9 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add provider config loading.
-3. Add OpenAI-compatible HTTP client implementation.
-4. Add private/self-hosted model provider config examples.
+2. Add private/self-hosted model provider config examples.
+3. Add retry and timeout policy refinements.
+4. Add integration tests only behind explicit environment variables.
 5. Add YAML parser/writer only after dependency choice is clear.
 6. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
@@ -504,12 +501,14 @@ Current done definition for this phase:
 5. Router can route based on ProviderScore.
 6. Registry can register, list, and health-check providers.
 7. OpenAI-compatible provider can parse strict structured JSON.
-8. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
-9. PolicyChecker decides risk and approval deterministically.
-10. PR draft generation requires policy evaluation.
-11. ManagedCluster / MachineClass API types and validation exist.
-12. FakeController updates status through ClusterAdapter boundary.
-13. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
-14. GitOps integration can produce dry-run branch/commit/PR metadata.
-15. Real execution remains outside model and agent layers.
+8. OpenAI-compatible provider has config loading and validation.
+9. OpenAI-compatible provider has request body builder and narrow HTTP client.
+10. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
+11. PolicyChecker decides risk and approval deterministically.
+12. PR draft generation requires policy evaluation.
+13. ManagedCluster / MachineClass API types and validation exist.
+14. FakeController updates status through ClusterAdapter boundary.
+15. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
+16. GitOps integration can produce dry-run branch/commit/PR metadata.
+17. Real execution remains outside model and agent layers.
 ```
