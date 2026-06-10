@@ -1,13 +1,18 @@
 package openai
 
+import "strings"
+
+const defaultChatCompletionsPath = "/chat/completions"
+
 // ChatCompletionRequest is the OpenAI-compatible request body used by many hosted,
 // private, and self-hosted model servers.
 type ChatCompletionRequest struct {
-	Model       string                `json:"model"`
-	Messages    []ChatCompletionMessage `json:"messages"`
-	Temperature float32               `json:"temperature,omitempty"`
-	MaxTokens   int                   `json:"max_tokens,omitempty"`
-	ResponseFormat ResponseFormat     `json:"response_format,omitempty"`
+	Model          string                  `json:"model"`
+	Messages       []ChatCompletionMessage `json:"messages"`
+	Temperature    float32                 `json:"temperature,omitempty"`
+	MaxTokens      int                     `json:"max_tokens,omitempty"`
+	Stream         bool                    `json:"stream"`
+	ResponseFormat ResponseFormat          `json:"response_format,omitempty"`
 }
 
 type ChatCompletionMessage struct {
@@ -24,32 +29,50 @@ type ResponseFormat struct {
 //
 // It does not send HTTP requests and does not attach credentials.
 func BuildChatCompletionRequest(req CompatibleRequest) (ChatCompletionRequest, error) {
-	if req.Model == "" {
+	if strings.TrimSpace(req.Model) == "" {
 		return ChatCompletionRequest{}, NewHTTPBuildError("MissingModel", "model is required")
 	}
-	if req.Instruction == "" {
+	if strings.TrimSpace(req.Instruction) == "" {
 		return ChatCompletionRequest{}, NewHTTPBuildError("MissingInstruction", "instruction is required")
 	}
 
-	messages := make([]ChatCompletionMessage, 0, 3)
-	if req.SystemPrompt != "" {
-		messages = append(messages, ChatCompletionMessage{Role: "system", Content: req.SystemPrompt})
+	messages := make([]ChatCompletionMessage, 0, 2)
+	if strings.TrimSpace(req.SystemPrompt) != "" {
+		messages = append(messages, ChatCompletionMessage{Role: "system", Content: strings.TrimSpace(req.SystemPrompt)})
 	}
-	if req.ContextText != "" {
-		messages = append(messages, ChatCompletionMessage{Role: "user", Content: "Context:\n" + req.ContextText})
-	}
-	messages = append(messages, ChatCompletionMessage{Role: "user", Content: req.Instruction})
+	messages = append(messages, ChatCompletionMessage{Role: "user", Content: buildUserMessage(req)})
 
 	body := ChatCompletionRequest{
-		Model:       req.Model,
+		Model:       strings.TrimSpace(req.Model),
 		Messages:    messages,
 		Temperature: req.Temperature,
 		MaxTokens:   req.MaxOutputTokens,
+		Stream:      false,
 	}
-	if req.OutputSchema != "" {
+	if strings.TrimSpace(req.OutputSchema) != "" {
 		body.ResponseFormat = ResponseFormat{Type: "json_object"}
 	}
 	return body, nil
+}
+
+func BuildChatCompletionsURL(endpoint string) (string, error) {
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if endpoint == "" {
+		return "", NewHTTPBuildError("MissingEndpoint", "endpoint is required")
+	}
+	return endpoint + defaultChatCompletionsPath, nil
+}
+
+func buildUserMessage(req CompatibleRequest) string {
+	parts := []string{"instruction:\n" + strings.TrimSpace(req.Instruction)}
+	if strings.TrimSpace(req.ContextText) != "" {
+		parts = append(parts, "context:\n"+strings.TrimSpace(req.ContextText))
+	}
+	if strings.TrimSpace(req.OutputSchema) != "" {
+		parts = append(parts, "outputSchema:\n"+strings.TrimSpace(req.OutputSchema))
+	}
+	parts = append(parts, "Return only raw JSON. Do not wrap output in markdown fences.")
+	return strings.Join(parts, "\n\n")
 }
 
 type HTTPBuildError struct {
