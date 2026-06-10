@@ -1,0 +1,19 @@
+apiVersion: model.aicloud.dev/v1alpha1
+kind: ModelProviderConfig
+metadata:
+  name: private-enterprise-gateway
+  namespace: aicloud-system
+spec:
+  type: OpenAICompatible
+  name: private-enterprise-gateway
+  endpointRef: endpoint/private-model-gateway
+  secretRef: secret/private-model-gateway
+  defaultModel: qwen-enterprise
+  timeoutSeconds: 30
+  maxRetries: 2
+  maxInputTokens: 32768
+  maxOutputTokens: 2048
+  private: true
+  dataBoundary:
+    allowRestrictedData: true
+    notes: Private enterprise gateway. Secret material must be resolved by runtime SecretResolver, not stored in this file.
