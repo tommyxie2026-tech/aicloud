@@ -2,7 +2,7 @@
 
 ## 1. Goal
 
-The `integrations/gitops` package converts policy-evaluated infrastructure proposals into deterministic, reviewable manifest patch plans and dry-run manifest write results.
+The `integrations/gitops` package converts policy-evaluated infrastructure proposals into deterministic, reviewable manifest patch plans, dry-run manifest write results, and dry-run branch/commit/PR plans.
 
 It is the bridge between:
 
@@ -39,7 +39,9 @@ ManifestPatchPlan
   ↓
 DryRunManifestWriter
   ↓
-Git branch / commit / PR
+BranchPlan / CommitPlan / PullRequestPlan
+  ↓
+future Git branch / commit / PR integration
   ↓
 GitOps controller
   ↓
@@ -60,9 +62,11 @@ kubectl apply / helm upgrade / terraform apply / machine power operation
 integrations/gitops/patch_plan.go
 integrations/gitops/managedcluster_patch.go
 integrations/gitops/manifest_writer.go
+integrations/gitops/branch_plan.go
 integrations/gitops/patch_plan_test.go
 integrations/gitops/managedcluster_patch_test.go
 integrations/gitops/manifest_writer_test.go
+integrations/gitops/branch_plan_test.go
 ```
 
 ## 4. ManifestPatchPlan
@@ -81,6 +85,7 @@ Changes
 Rollback
 Validation
 PolicyResult
+PRMetadata
 ```
 
 It is created from a policy-evaluated `ChangeProposal`.
@@ -116,9 +121,32 @@ Important behavior:
 - rejects blocked fields
 - rejects fields outside the allowlist
 - generates rollback as inverse patch
+- generates dry-run PR metadata
 ```
 
-## 6. ManagedCluster Object Patcher
+## 6. PRMetadata
+
+`PRMetadata` contains:
+
+```text
+BranchName
+CommitMessage
+Title
+Draft
+```
+
+Example:
+
+```text
+BranchName:    aicloud/request-001/scaleout/dev-gpu-cluster
+CommitMessage: aicloud: ScaleOut ManagedCluster/dev-gpu-cluster
+Title:         ScaleOut ManagedCluster/dev-gpu-cluster
+Draft:         false
+```
+
+`Draft` is derived from deterministic policy approval requirement.
+
+## 7. ManagedCluster Object Patcher
 
 `ApplyManagedClusterPatch` applies a `ManifestPatchPlan` to an in-memory `infraapi.ManagedCluster` object.
 
@@ -152,7 +180,7 @@ Important behavior:
 - returns a new updated object
 ```
 
-## 7. DryRunManifestWriter
+## 8. DryRunManifestWriter
 
 `DryRunManifestWriter` converts:
 
@@ -187,7 +215,42 @@ It does not:
 - call Kubernetes
 ```
 
-## 8. Current First Scenario
+## 9. BranchPlan / CommitPlan / PullRequestPlan
+
+`BuildBranchPlan` converts:
+
+```text
+ManifestPatchPlan + WriteResult
+```
+
+into:
+
+```text
+BranchPlan
+```
+
+`BranchPlan` contains:
+
+```text
+BaseBranch
+HeadBranch
+CommitPlan
+PullRequestPlan
+```
+
+This is dry-run metadata only.
+
+It does not:
+
+```text
+- create a Git branch
+- create a Git commit
+- push to remote
+- create a GitHub PR
+- merge a PR
+```
+
+## 10. Current First Scenario
 
 Input intent:
 
@@ -219,7 +282,7 @@ Rollback patch:
 6 -> 3
 ```
 
-## 9. Safety Rules
+## 11. Safety Rules
 
 GitOps integration must fail closed if:
 
@@ -231,14 +294,18 @@ GitOps integration must fail closed if:
 - target manifest does not match proposal target
 - current value does not match expected `from`
 - generated object fails API validation
+- base branch is missing
+- head branch metadata is missing
+- output path is missing
 ```
 
-## 10. Current Tests
+## 12. Current Tests
 
 ```text
 integrations/gitops/patch_plan_test.go
 integrations/gitops/managedcluster_patch_test.go
 integrations/gitops/manifest_writer_test.go
+integrations/gitops/branch_plan_test.go
 ```
 
 Covered behavior:
@@ -246,6 +313,8 @@ Covered behavior:
 ```text
 - evaluated proposal creates ManifestPatchPlan
 - rollback patch is inverse of forward patch
+- PR metadata is generated
+- draft flag follows approval requirement
 - unevaluated proposal is rejected
 - blocked field is rejected
 - unknown field is rejected
@@ -259,28 +328,33 @@ Covered behavior:
 - negative replicas fails closed
 - dry-run writer returns updated object and summary
 - dry-run writer propagates patch errors
+- branch plan includes base/head branch
+- branch plan includes commit file change
+- branch plan includes PR title/body/draft flag
 ```
 
-## 11. Not Done Yet
+## 13. Not Done Yet
 
 ```text
 - YAML parser / writer
 - stable YAML formatting
 - multi-file manifest changes
-- branch creation
-- commit creation
+- real branch creation
+- real commit creation
 - GitHub PR creation
 - Argo CD / Flux integration
 - live cluster apply
 ```
 
-## 12. Recommended Next Steps
+## 14. Recommended Next Steps
 
 Recommended next steps:
 
 ```text
-1. Add PR-ready metadata fields to ManifestPatchPlan.
-2. Add dry-run branch/commit abstraction.
-3. Add YAML read/write implementation only after dependency choice is clear.
-4. Keep real GitHub PR creation separate from patch planning.
+1. Run or verify go test ./... status.
+2. Add provider config loading.
+3. Add OpenAI-compatible HTTP client.
+4. Add private/self-hosted provider config examples.
+5. Add YAML read/write implementation only after dependency choice is clear.
+6. Keep real GitHub PR creation separate from patch planning.
 ```
