@@ -22,6 +22,10 @@ model/openai/config_loader.go
 model/openai/http_request.go
 model/openai/http_client.go
 model/openai/*_test.go
+examples/model-providers/README.md
+examples/model-providers/public-openai-compatible.yaml
+examples/model-providers/private-enterprise-gateway.yaml
+examples/model-providers/self-hosted-vllm.yaml
 ```
 
 ## 3. Configuration Model
@@ -93,7 +97,27 @@ token=...
 
 The runtime implementation should resolve `SecretRef` outside config loading.
 
-## 7. Public Hosted Provider Example
+## 7. Provider Config Examples
+
+Current examples:
+
+```text
+examples/model-providers/public-openai-compatible.yaml
+examples/model-providers/private-enterprise-gateway.yaml
+examples/model-providers/self-hosted-vllm.yaml
+```
+
+Example categories:
+
+```text
+public hosted API
+private enterprise model gateway
+self-hosted OpenAI-compatible vLLM endpoint
+```
+
+All examples intentionally use `SecretRef` only. They do not include real API keys.
+
+## 8. Public Hosted Provider Example
 
 ```text
 Name:         openai-public
@@ -103,7 +127,7 @@ DefaultModel: gpt-test
 Private:      false
 ```
 
-## 8. Private Enterprise Gateway Example
+## 9. Private Enterprise Gateway Example
 
 ```text
 Name:         private-enterprise-gateway
@@ -113,7 +137,7 @@ DefaultModel: qwen-enterprise
 Private:      true
 ```
 
-## 9. Self-Hosted Open Model Example
+## 10. Self-Hosted Open Model Example
 
 ```text
 Name:         self-hosted-vllm
@@ -123,7 +147,7 @@ DefaultModel: qwen2.5-coder
 Private:      true
 ```
 
-## 10. HTTP Request Builder
+## 11. HTTP Request Builder
 
 `BuildChatCompletionRequest` converts:
 
@@ -158,7 +182,7 @@ It does not:
 - resolve secrets
 ```
 
-## 11. Narrow HTTP Client
+## 12. Narrow HTTP Client
 
 `HTTPClient` uses injected interfaces:
 
@@ -185,7 +209,7 @@ CompatibleResponse
 
 The default implementation does not read environment variables, files, or Kubernetes Secrets directly.
 
-## 12. Safety Properties
+## 13. Safety Properties
 
 Current config and HTTP layers fail closed when:
 
@@ -209,7 +233,7 @@ Current config and HTTP layers fail closed when:
 - HTTP response has no choices
 ```
 
-## 13. Provider Capabilities
+## 14. Provider Capabilities
 
 The provider advertises:
 
@@ -234,7 +258,7 @@ Restricted capabilities include:
 - auto merge
 ```
 
-## 14. Not Done Yet
+## 15. Not Done Yet
 
 ```text
 - retry policy implementation
@@ -246,12 +270,12 @@ Restricted capabilities include:
 - external config file loader
 ```
 
-## 15. Recommended Next Steps
+## 16. Recommended Next Steps
 
 ```text
-1. Add provider config examples for public/private/self-hosted endpoints.
-2. Add retry policy implementation.
-3. Keep credential resolution outside config loading.
-4. Add integration tests only behind explicit environment variables.
-5. Add a Kubernetes Secret resolver in a separate runtime integration package.
+1. Add retry policy implementation.
+2. Keep credential resolution outside config loading.
+3. Add integration tests only behind explicit environment variables.
+4. Add a Kubernetes Secret resolver in a separate runtime integration package.
+5. Add external config file loader only if needed.
 ```
