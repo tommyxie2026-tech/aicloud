@@ -170,8 +170,8 @@ Current capability:
 Remaining tasks:
 
 ```text
-- add OpenAI-compatible HTTP request body implementation
 - add provider config loading
+- add OpenAI-compatible HTTP request body implementation
 - add retry and timeout policy
 - add optional integration tests guarded by env vars
 - add private/self-hosted runtime adapters or configs
@@ -276,13 +276,6 @@ infra/adapter
 integrations/gitops
 ```
 
-Implemented examples:
-
-```text
-examples/infra/managedcluster-dev-gpu.yaml
-examples/infra/machineclass-gpu-large.yaml
-```
-
 Implemented objects:
 
 ```text
@@ -300,9 +293,14 @@ FakeController
 FakeStateStore
 ManifestPatchPlan
 ManifestFieldChange
+PRMetadata
 PatchPlanner
 DryRunManifestWriter
 WriteResult
+BranchPlan
+CommitPlan
+FileChangePlan
+PullRequestPlan
 ```
 
 Implemented capabilities:
@@ -324,8 +322,10 @@ Implemented capabilities:
 - ChangeProposal -> ManifestPatchPlan
 - GitOps field allowlist and blocked field checks
 - rollback inverse patch generation
+- PR-ready metadata generation
 - ManagedCluster object-level patch 3 -> 6
 - DryRunManifestWriter returns updated object and summary
+- dry-run BranchPlan / CommitPlan / PullRequestPlan generation
 ```
 
 Current infrastructure flow:
@@ -349,32 +349,15 @@ Evaluated ChangeProposal
   ↓
 PatchPlanner.BuildPatchPlan
   ↓
-ManifestPatchPlan
+ManifestPatchPlan + PRMetadata
   ↓
 DryRunManifestWriter.WriteManagedCluster
   ↓
 Updated ManagedCluster object + WriteResult
-```
-
-Community mapping:
-
-```text
-Cluster API:
-  ManagedCluster -> Cluster
-  WorkerGroupSpec -> MachineDeployment
-  MachineClass -> MachineTemplate
-
-KubeVirt:
-  VirtualMachine -> KubeVirt VirtualMachine
-  MachineClass -> VM flavor / template
-
-Metal3:
-  BareMetalHost -> Metal3 BareMetalHost
-  MachineClass -> hardware profile
-
-Crossplane:
-  ManagedCluster -> CompositeResource
-  ProviderRef -> ProviderConfig
+  ↓
+BuildBranchPlan
+  ↓
+BranchPlan / CommitPlan / PullRequestPlan
 ```
 
 Acceptance criteria:
@@ -385,6 +368,7 @@ Acceptance criteria:
 - adapter boundary exists
 - evaluated ChangeProposal can produce ManifestPatchPlan
 - ManifestPatchPlan can produce updated ManagedCluster object in dry-run mode
+- dry-run branch/commit/PR metadata can be generated
 - PolicyChecker classifies dev 3 -> 6 as Medium
 - real execution remains through GitOps / Controller, not model
 ```
@@ -392,8 +376,6 @@ Acceptance criteria:
 Remaining tasks:
 
 ```text
-- add PR-ready metadata fields to ManifestPatchPlan
-- add dry-run branch/commit abstraction
 - add YAML parser/writer after dependency choice is clear
 - add Cluster API mapping design details
 - add KubeVirt mapping design details
@@ -482,13 +464,13 @@ PR-020 infra adapter boundary
 PR-021 GitOps ManifestPatchPlan
 PR-022 ManagedCluster object patcher
 PR-023 DryRunManifestWriter
+PR-024 PR-ready metadata fields for ManifestPatchPlan
+PR-025 dry-run branch/commit abstraction
 ```
 
 Next PRs:
 
 ```text
-PR-024 PR-ready metadata fields for ManifestPatchPlan
-PR-025 dry-run branch/commit abstraction
 PR-026 provider config loading
 PR-027 OpenAI-compatible HTTP client
 PR-028 private/self-hosted provider config examples
@@ -503,12 +485,11 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add PR-ready metadata fields to ManifestPatchPlan.
-3. Add dry-run branch/commit abstraction.
-4. Add provider config loading.
-5. Add OpenAI-compatible HTTP client implementation.
-6. Add private/self-hosted model provider config examples.
-7. Keep real controller-runtime and real GitHub PR creation postponed.
+2. Add provider config loading.
+3. Add OpenAI-compatible HTTP client implementation.
+4. Add private/self-hosted model provider config examples.
+5. Add YAML parser/writer only after dependency choice is clear.
+6. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
 
 ## 14. Current Done Definition
@@ -529,5 +510,6 @@ Current done definition for this phase:
 11. ManagedCluster / MachineClass API types and validation exist.
 12. FakeController updates status through ClusterAdapter boundary.
 13. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
-14. Real execution remains outside model and agent layers.
+14. GitOps integration can produce dry-run branch/commit/PR metadata.
+15. Real execution remains outside model and agent layers.
 ```
