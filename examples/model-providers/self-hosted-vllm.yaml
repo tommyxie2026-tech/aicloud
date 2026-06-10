@@ -1,0 +1,19 @@
+apiVersion: model.aicloud.dev/v1alpha1
+kind: ModelProviderConfig
+metadata:
+  name: self-hosted-vllm
+  namespace: aicloud-system
+spec:
+  type: OpenAICompatible
+  name: self-hosted-vllm
+  endpointRef: endpoint/vllm-internal
+  secretRef: secret/vllm-internal
+  defaultModel: qwen2.5-coder
+  timeoutSeconds: 60
+  maxRetries: 1
+  maxInputTokens: 32768
+  maxOutputTokens: 4096
+  private: true
+  dataBoundary:
+    allowRestrictedData: true
+    notes: Self-hosted OpenAI-compatible endpoint. Keep credentials in runtime secret storage only.
