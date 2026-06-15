@@ -19,9 +19,10 @@ type SecretResolver interface {
 }
 
 type HTTPClient struct {
-	config   Config
-	doer     HTTPDoer
-	resolver SecretResolver
+	config      Config
+	doer        HTTPDoer
+	resolver    SecretResolver
+	retryPolicy RetryPolicy
 }
 
 func NewHTTPClient(config Config, doer HTTPDoer, resolver SecretResolver) (*HTTPClient, error) {
@@ -34,7 +35,7 @@ func NewHTTPClient(config Config, doer HTTPDoer, resolver SecretResolver) (*HTTP
 	if resolver == nil {
 		return nil, NewHTTPClientError("MissingSecretResolver", "secret resolver is required")
 	}
-	return &HTTPClient{config: config, doer: doer, resolver: resolver}, nil
+	return &HTTPClient{config: config, doer: doer, resolver: resolver, retryPolicy: NewRetryPolicy(config.MaxRetries)}, nil
 }
 
 func (c *HTTPClient) Health(ctx context.Context) error {
@@ -63,36 +64,51 @@ func (c *HTTPClient) Generate(ctx context.Context, req CompatibleRequest) (*Comp
 		return nil, NewHTTPClientError("RequestMarshalFailed", err.Error())
 	}
 
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		response, statusCode, err := c.doOnce(ctx, url, apiKey, payload)
+		if err == nil {
+			return response, nil
+		}
+		lastErr = err
+		decision := c.retryPolicy.ShouldRetry(attempt, statusCode, err)
+		if !decision.Retry {
+			return nil, lastErr
+		}
+	}
+}
+
+func (c *HTTPClient) doOnce(ctx context.Context, url string, apiKey string, payload []byte) (*CompatibleResponse, int, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		return nil, NewHTTPClientError("RequestBuildFailed", err.Error())
+		return nil, 0, NewHTTPClientError("RequestBuildFailed", err.Error())
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := c.doer.Do(httpReq)
 	if err != nil {
-		return nil, NewHTTPClientError("RequestFailed", err.Error())
+		return nil, 0, NewHTTPClientError("RequestFailed", err.Error())
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(resp.Body)
-		return nil, NewHTTPClientError("Non2xxResponse", fmt.Sprintf("status=%d body=%s", resp.StatusCode, string(data)))
+		return nil, resp.StatusCode, NewHTTPClientError("Non2xxResponse", fmt.Sprintf("status=%d body=%s", resp.StatusCode, string(data)))
 	}
 
 	var parsed chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return nil, NewHTTPClientError("ResponseDecodeFailed", err.Error())
+		return nil, resp.StatusCode, NewHTTPClientError("ResponseDecodeFailed", err.Error())
 	}
 	if len(parsed.Choices) == 0 {
-		return nil, NewHTTPClientError("MissingChoices", "response choices are empty")
+		return nil, resp.StatusCode, NewHTTPClientError("MissingChoices", "response choices are empty")
 	}
 	return &CompatibleResponse{
 		OutputText:   parsed.Choices[0].Message.Content,
 		FinishReason: parsed.Choices[0].FinishReason,
 		InputTokens:  parsed.Usage.PromptTokens,
 		OutputTokens: parsed.Usage.CompletionTokens,
-	}, nil
+	}, resp.StatusCode, nil
 }
 
 type chatCompletionResponse struct {
