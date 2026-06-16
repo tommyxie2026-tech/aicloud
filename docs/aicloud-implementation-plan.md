@@ -143,7 +143,7 @@ Router / Registry
 Status:
 
 ```text
-In progress
+Mostly complete
 ```
 
 Implemented package:
@@ -174,9 +174,13 @@ Current capability:
 - parser can parse ChangePlan / RollbackPlan / ValidationReport / RiskExplanation and other schema kinds
 - OpenAI-compatible chat completions request body builder
 - /chat/completions URL builder
+- RetryPolicy with deterministic retry decisions
+- TimeoutPolicy with request-scoped deadline propagation
 - narrow HTTPClient with injectable HTTPDoer and SecretResolver
 - HTTPClient parses choices, finish reason and token usage
-- HTTPClient rejects missing resolver, empty secret, non-2xx response and missing choices
+- HTTPClient retries transport error and retryable status codes
+- HTTPClient propagates timeout context into SecretResolver and HTTP request
+- HTTPClient rejects missing resolver, empty secret, non-retryable non-2xx response and missing choices
 ```
 
 Current provider flow:
@@ -190,7 +194,11 @@ ValidateConfig
   ↓
 HTTPClient
   ↓
+TimeoutPolicy.WithTimeout
+  ↓
 BuildChatCompletionRequest
+  ↓
+RetryPolicy.ShouldRetry
   ↓
 HTTPDoer
   ↓
@@ -200,10 +208,10 @@ CompatibleResponse
 Remaining tasks:
 
 ```text
-- add retry and timeout policy refinements
 - add optional integration tests guarded by env vars
 - add Kubernetes Secret resolver in a runtime integration package
 - add external config file loader if needed
+- keep streaming and tool use out of the MVP unless needed
 ```
 
 ## 8. M4 Agent Workflow MVP
@@ -467,15 +475,17 @@ PR-025 dry-run branch/commit abstraction
 PR-026 provider config loading
 PR-027 OpenAI-compatible HTTP client
 PR-028 private/self-hosted provider config examples
+PR-029 retry and timeout policy refinements
 ```
 
 Next PRs:
 
 ```text
-PR-029 retry and timeout policy refinements
-PR-030 Cluster API mapping design
-PR-031 KubeVirt mapping design
-PR-032 Metal3 mapping design
+PR-030 env-guarded provider integration tests
+PR-031 Kubernetes Secret resolver runtime integration
+PR-032 Cluster API mapping design
+PR-033 KubeVirt mapping design
+PR-034 Metal3 mapping design
 ```
 
 ## 13. Immediate Next Steps
@@ -484,8 +494,8 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add retry and timeout policy refinements.
-3. Add integration tests only behind explicit environment variables.
+2. Add env-guarded provider integration tests.
+3. Add Kubernetes Secret resolver in a separate runtime integration package.
 4. Add YAML parser/writer only after dependency choice is clear.
 5. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
@@ -505,12 +515,13 @@ Current done definition for this phase:
 8. OpenAI-compatible provider has config loading and validation.
 9. OpenAI-compatible provider has request body builder and narrow HTTP client.
 10. OpenAI-compatible provider has public/private/self-hosted config examples without raw credentials.
-11. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
-12. PolicyChecker decides risk and approval deterministically.
-13. PR draft generation requires policy evaluation.
-14. ManagedCluster / MachineClass API types and validation exist.
-15. FakeController updates status through ClusterAdapter boundary.
-16. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
-17. GitOps integration can produce dry-run branch/commit/PR metadata.
-18. Real execution remains outside model and agent layers.
+11. OpenAI-compatible provider has retry and timeout policy refinements.
+12. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
+13. PolicyChecker decides risk and approval deterministically.
+14. PR draft generation requires policy evaluation.
+15. ManagedCluster / MachineClass API types and validation exist.
+16. FakeController updates status through ClusterAdapter boundary.
+17. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
+18. GitOps integration can produce dry-run branch/commit/PR metadata.
+19. Real execution remains outside model and agent layers.
 ```
