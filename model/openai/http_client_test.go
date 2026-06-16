@@ -38,6 +38,24 @@ func TestHTTPClientGenerate(t *testing.T) {
 	if doer.request.URL.String() != "https://api.example.com/v1/chat/completions" {
 		t.Fatalf("unexpected request url: %s", doer.request.URL.String())
 	}
+	if _, ok := doer.request.Context().Deadline(); !ok {
+		t.Fatalf("expected request context deadline")
+	}
+}
+
+func TestHTTPClientGeneratePassesDeadlineToSecretResolver(t *testing.T) {
+	resolver := &deadlineCheckingSecretResolver{value: "test-key"}
+	client, err := NewHTTPClient(validHTTPConfig(), &fakeHTTPDoer{responseBody: successResponseBody(), statusCode: 200}, resolver)
+	if err != nil {
+		t.Fatalf("NewHTTPClient returned error: %v", err)
+	}
+	_, err = client.Generate(context.Background(), CompatibleRequest{Model: "gpt-test", Instruction: "return json"})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	if !resolver.sawDeadline {
+		t.Fatalf("expected resolver to receive context with deadline")
+	}
 }
 
 func TestNewHTTPClientRequiresSecretResolver(t *testing.T) {
@@ -144,6 +162,16 @@ func successResponseBody() string {
 type fakeSecretResolver struct{ value string }
 
 func (r fakeSecretResolver) ResolveSecret(ctx context.Context, secretRef string) (string, error) {
+	return r.value, nil
+}
+
+type deadlineCheckingSecretResolver struct {
+	value       string
+	sawDeadline bool
+}
+
+func (r *deadlineCheckingSecretResolver) ResolveSecret(ctx context.Context, secretRef string) (string, error) {
+	_, r.sawDeadline = ctx.Deadline()
 	return r.value, nil
 }
 
