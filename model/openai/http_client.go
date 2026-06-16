@@ -19,10 +19,11 @@ type SecretResolver interface {
 }
 
 type HTTPClient struct {
-	config      Config
-	doer        HTTPDoer
-	resolver    SecretResolver
-	retryPolicy RetryPolicy
+	config        Config
+	doer          HTTPDoer
+	resolver      SecretResolver
+	retryPolicy   RetryPolicy
+	timeoutPolicy TimeoutPolicy
 }
 
 func NewHTTPClient(config Config, doer HTTPDoer, resolver SecretResolver) (*HTTPClient, error) {
@@ -35,7 +36,13 @@ func NewHTTPClient(config Config, doer HTTPDoer, resolver SecretResolver) (*HTTP
 	if resolver == nil {
 		return nil, NewHTTPClientError("MissingSecretResolver", "secret resolver is required")
 	}
-	return &HTTPClient{config: config, doer: doer, resolver: resolver, retryPolicy: NewRetryPolicy(config.MaxRetries)}, nil
+	return &HTTPClient{
+		config:        config,
+		doer:          doer,
+		resolver:      resolver,
+		retryPolicy:   NewRetryPolicy(config.MaxRetries),
+		timeoutPolicy: NewTimeoutPolicy(config.TimeoutSeconds),
+	}, nil
 }
 
 func (c *HTTPClient) Health(ctx context.Context) error {
@@ -43,6 +50,9 @@ func (c *HTTPClient) Health(ctx context.Context) error {
 }
 
 func (c *HTTPClient) Generate(ctx context.Context, req CompatibleRequest) (*CompatibleResponse, error) {
+	ctx, cancel := c.timeoutPolicy.WithTimeout(ctx)
+	defer cancel()
+
 	body, err := BuildChatCompletionRequest(req)
 	if err != nil {
 		return nil, err
