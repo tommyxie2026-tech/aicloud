@@ -21,6 +21,8 @@ model/openai/parser.go
 model/openai/config_loader.go
 model/openai/http_request.go
 model/openai/http_client.go
+model/openai/retry_policy.go
+model/openai/timeout_policy.go
 model/openai/*_test.go
 examples/model-providers/README.md
 examples/model-providers/public-openai-compatible.yaml
@@ -182,7 +184,47 @@ It does not:
 - resolve secrets
 ```
 
-## 12. Narrow HTTP Client
+## 12. Retry Policy
+
+`RetryPolicy` provides deterministic retry decisions.
+
+Retryable cases:
+
+```text
+transport error
+408 Request Timeout
+429 Too Many Requests
+502 Bad Gateway
+503 Service Unavailable
+504 Gateway Timeout
+```
+
+Non-retryable examples:
+
+```text
+400 Bad Request
+401 Unauthorized
+403 Forbidden
+404 Not Found
+500 Internal Server Error
+max retries reached
+```
+
+## 13. Timeout Policy
+
+`TimeoutPolicy` normalizes timeout seconds and derives request-scoped context deadlines.
+
+Current behavior:
+
+```text
+timeoutSeconds < 1 -> DefaultTimeoutSeconds
+nil parent context -> context.Background()
+Generate -> context with deadline
+SecretResolver receives deadline context
+HTTP request receives deadline context
+```
+
+## 14. Narrow HTTP Client
 
 `HTTPClient` uses injected interfaces:
 
@@ -196,11 +238,15 @@ Current flow:
 ```text
 CompatibleRequest
   ↓
+TimeoutPolicy.WithTimeout
+  ↓
 BuildChatCompletionRequest
   ↓
 BuildChatCompletionsURL
   ↓
 SecretResolver.ResolveSecret
+  ↓
+RetryPolicy.ShouldRetry
   ↓
 HTTPDoer.Do
   ↓
@@ -209,7 +255,7 @@ CompatibleResponse
 
 The default implementation does not read environment variables, files, or Kubernetes Secrets directly.
 
-## 13. Safety Properties
+## 15. Safety Properties
 
 Current config and HTTP layers fail closed when:
 
@@ -229,11 +275,12 @@ Current config and HTTP layers fail closed when:
 - endpoint URL is missing
 - SecretResolver is missing
 - resolved secret is empty
-- HTTP response is non-2xx
+- HTTP response is non-2xx and non-retryable
 - HTTP response has no choices
+- max retries reached
 ```
 
-## 14. Provider Capabilities
+## 16. Provider Capabilities
 
 The provider advertises:
 
@@ -258,11 +305,9 @@ Restricted capabilities include:
 - auto merge
 ```
 
-## 15. Not Done Yet
+## 17. Not Done Yet
 
 ```text
-- retry policy implementation
-- timeout propagation refinements
 - streaming
 - tool use
 - env-guarded integration tests
@@ -270,12 +315,11 @@ Restricted capabilities include:
 - external config file loader
 ```
 
-## 16. Recommended Next Steps
+## 18. Recommended Next Steps
 
 ```text
-1. Add retry policy implementation.
-2. Keep credential resolution outside config loading.
-3. Add integration tests only behind explicit environment variables.
-4. Add a Kubernetes Secret resolver in a separate runtime integration package.
-5. Add external config file loader only if needed.
+1. Add integration tests only behind explicit environment variables.
+2. Add a Kubernetes Secret resolver in a separate runtime integration package.
+3. Add external config file loader only if needed.
+4. Keep streaming and tool use out of the MVP unless needed.
 ```
