@@ -23,6 +23,7 @@ model/openai/http_request.go
 model/openai/http_client.go
 model/openai/retry_policy.go
 model/openai/timeout_policy.go
+model/openai/integration_test.go
 model/openai/*_test.go
 examples/model-providers/README.md
 examples/model-providers/public-openai-compatible.yaml
@@ -255,7 +256,31 @@ CompatibleResponse
 
 The default implementation does not read environment variables, files, or Kubernetes Secrets directly.
 
-## 15. Safety Properties
+## 15. Env-Guarded Integration Test
+
+`integration_test.go` is skipped by default.
+
+It runs only when:
+
+```text
+AICLOUD_OPENAI_INTEGRATION_TEST=1
+AICLOUD_OPENAI_ENDPOINT is set
+AICLOUD_OPENAI_MODEL is set
+AICLOUD_OPENAI_API_KEY is set
+```
+
+The test uses:
+
+```text
+ConfigSource
+LoadConfig
+HTTPClient
+SecretResolver
+```
+
+The API key is read only inside the test and passed through a local test resolver. It is not stored in provider config.
+
+## 16. Safety Properties
 
 Current config and HTTP layers fail closed when:
 
@@ -280,7 +305,7 @@ Current config and HTTP layers fail closed when:
 - max retries reached
 ```
 
-## 16. Provider Capabilities
+## 17. Provider Capabilities
 
 The provider advertises:
 
@@ -305,21 +330,19 @@ Restricted capabilities include:
 - auto merge
 ```
 
-## 17. Not Done Yet
+## 18. Not Done Yet
 
 ```text
 - streaming
 - tool use
-- env-guarded integration tests
 - Kubernetes Secret resolver
 - external config file loader
 ```
 
-## 18. Recommended Next Steps
+## 19. Recommended Next Steps
 
 ```text
-1. Add integration tests only behind explicit environment variables.
-2. Add a Kubernetes Secret resolver in a separate runtime integration package.
-3. Add external config file loader only if needed.
-4. Keep streaming and tool use out of the MVP unless needed.
+1. Add a Kubernetes Secret resolver in a separate runtime integration package.
+2. Add external config file loader only if needed.
+3. Keep streaming and tool use out of the MVP unless needed.
 ```
