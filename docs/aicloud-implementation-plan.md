@@ -165,6 +165,7 @@ Current capability:
 - private enterprise gateway config example
 - self-hosted vLLM config example
 - fake client tests
+- env-guarded OpenAI-compatible provider integration test
 - strict JSON structured parser
 - parser rejects markdown fenced output
 - parser rejects unknown fields
@@ -182,6 +183,17 @@ Current capability:
 - HTTPClient propagates timeout context into SecretResolver and HTTP request
 - HTTPClient rejects missing resolver, empty secret, non-retryable non-2xx response and missing choices
 ```
+
+Env-guarded integration test:
+
+```text
+AICLOUD_OPENAI_INTEGRATION_TEST=1
+AICLOUD_OPENAI_ENDPOINT
+AICLOUD_OPENAI_MODEL
+AICLOUD_OPENAI_API_KEY
+```
+
+The integration test is skipped by default and must not run in normal CI unless the environment is explicitly configured.
 
 Current provider flow:
 
@@ -208,7 +220,6 @@ CompatibleResponse
 Remaining tasks:
 
 ```text
-- add optional integration tests guarded by env vars
 - add Kubernetes Secret resolver in a runtime integration package
 - add external config file loader if needed
 - keep streaming and tool use out of the MVP unless needed
@@ -476,12 +487,12 @@ PR-026 provider config loading
 PR-027 OpenAI-compatible HTTP client
 PR-028 private/self-hosted provider config examples
 PR-029 retry and timeout policy refinements
+PR-030 env-guarded provider integration tests
 ```
 
 Next PRs:
 
 ```text
-PR-030 env-guarded provider integration tests
 PR-031 Kubernetes Secret resolver runtime integration
 PR-032 Cluster API mapping design
 PR-033 KubeVirt mapping design
@@ -494,9 +505,9 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add env-guarded provider integration tests.
-3. Add Kubernetes Secret resolver in a separate runtime integration package.
-4. Add YAML parser/writer only after dependency choice is clear.
+2. Add Kubernetes Secret resolver in a separate runtime integration package.
+3. Add YAML parser/writer only after dependency choice is clear.
+4. Add Cluster API / KubeVirt / Metal3 mapping design details.
 5. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
 
@@ -516,12 +527,13 @@ Current done definition for this phase:
 9. OpenAI-compatible provider has request body builder and narrow HTTP client.
 10. OpenAI-compatible provider has public/private/self-hosted config examples without raw credentials.
 11. OpenAI-compatible provider has retry and timeout policy refinements.
-12. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
-13. PolicyChecker decides risk and approval deterministically.
-14. PR draft generation requires policy evaluation.
-15. ManagedCluster / MachineClass API types and validation exist.
-16. FakeController updates status through ClusterAdapter boundary.
-17. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
-18. GitOps integration can produce dry-run branch/commit/PR metadata.
-19. Real execution remains outside model and agent layers.
+12. OpenAI-compatible provider has env-guarded integration test.
+13. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
+14. PolicyChecker decides risk and approval deterministically.
+15. PR draft generation requires policy evaluation.
+16. ManagedCluster / MachineClass API types and validation exist.
+17. FakeController updates status through ClusterAdapter boundary.
+18. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
+19. GitOps integration can produce dry-run branch/commit/PR metadata.
+20. Real execution remains outside model and agent layers.
 ```
