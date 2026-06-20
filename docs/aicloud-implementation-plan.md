@@ -146,10 +146,11 @@ Status:
 Mostly complete
 ```
 
-Implemented package:
+Implemented packages:
 
 ```text
 model/openai
+runtime/secrets
 ```
 
 Current capability:
@@ -181,7 +182,11 @@ Current capability:
 - HTTPClient parses choices, finish reason and token usage
 - HTTPClient retries transport error and retryable status codes
 - HTTPClient propagates timeout context into SecretResolver and HTTP request
+- HTTPClient accepts runtime/secrets.MemoryResolver without an adapter
 - HTTPClient rejects missing resolver, empty secret, non-retryable non-2xx response and missing choices
+- runtime/secrets Resolver interface
+- runtime/secrets SecretRef parser
+- runtime/secrets MemoryResolver for tests and local wiring
 ```
 
 Env-guarded integration test:
@@ -195,6 +200,18 @@ AICLOUD_OPENAI_API_KEY
 
 The integration test is skipped by default and must not run in normal CI unless the environment is explicitly configured.
 
+Runtime secret reference format:
+
+```text
+secret/<namespace>/<name>:<key>
+```
+
+Example:
+
+```text
+secret/aicloud-system/openai-public:api-key
+```
+
 Current provider flow:
 
 ```text
@@ -203,6 +220,8 @@ ConfigSource
 LoadConfig
   ↓
 ValidateConfig
+  ↓
+runtime/secrets.Resolver
   ↓
 HTTPClient
   ↓
@@ -220,9 +239,17 @@ CompatibleResponse
 Remaining tasks:
 
 ```text
-- add Kubernetes Secret resolver in a runtime integration package
+- add Kubernetes-backed Secret resolver with explicit dependency and RBAC design
 - add external config file loader if needed
 - keep streaming and tool use out of the MVP unless needed
+```
+
+Important boundary:
+
+```text
+runtime/secrets does not read real Kubernetes Secrets yet.
+It does not import client-go or controller-runtime.
+It only proves the resolver boundary and fake memory implementation.
 ```
 
 ## 8. M4 Agent Workflow MVP
@@ -488,15 +515,16 @@ PR-027 OpenAI-compatible HTTP client
 PR-028 private/self-hosted provider config examples
 PR-029 retry and timeout policy refinements
 PR-030 env-guarded provider integration tests
+PR-031 runtime secret resolver integration
 ```
 
 Next PRs:
 
 ```text
-PR-031 Kubernetes Secret resolver runtime integration
 PR-032 Cluster API mapping design
 PR-033 KubeVirt mapping design
 PR-034 Metal3 mapping design
+PR-035 Kubernetes-backed Secret resolver design
 ```
 
 ## 13. Immediate Next Steps
@@ -505,9 +533,9 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add Kubernetes Secret resolver in a separate runtime integration package.
-3. Add YAML parser/writer only after dependency choice is clear.
-4. Add Cluster API / KubeVirt / Metal3 mapping design details.
+2. Add Cluster API / KubeVirt / Metal3 mapping design details.
+3. Add Kubernetes-backed Secret resolver design before importing client-go.
+4. Add YAML parser/writer only after dependency choice is clear.
 5. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
 
@@ -528,12 +556,13 @@ Current done definition for this phase:
 10. OpenAI-compatible provider has public/private/self-hosted config examples without raw credentials.
 11. OpenAI-compatible provider has retry and timeout policy refinements.
 12. OpenAI-compatible provider has env-guarded integration test.
-13. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
-14. PolicyChecker decides risk and approval deterministically.
-15. PR draft generation requires policy evaluation.
-16. ManagedCluster / MachineClass API types and validation exist.
-17. FakeController updates status through ClusterAdapter boundary.
-18. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
-19. GitOps integration can produce dry-run branch/commit/PR metadata.
-20. Real execution remains outside model and agent layers.
+13. Runtime secret resolver boundary exists and can inject MemoryResolver into HTTPClient.
+14. Agent workflow can convert ChangePlan to evaluated ChangeProposal.
+15. PolicyChecker decides risk and approval deterministically.
+16. PR draft generation requires policy evaluation.
+17. ManagedCluster / MachineClass API types and validation exist.
+18. FakeController updates status through ClusterAdapter boundary.
+19. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
+20. GitOps integration can produce dry-run branch/commit/PR metadata.
+21. Real execution remains outside model and agent layers.
 ```
