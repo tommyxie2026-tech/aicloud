@@ -332,6 +332,7 @@ infra/api
 infra/controller
 infra/adapter
 infra/mapping/clusterapi
+infra/mapping/kubevirt
 integrations/gitops
 ```
 
@@ -341,10 +342,12 @@ Implemented docs and examples:
 docs/infra-control-plane-scenario.md
 docs/managedcluster-api-design.md
 docs/cluster-api-mapping-design.md
+docs/kubevirt-mapping-design.md
 infra/README.md
 infra/controller/README.md
 infra/adapter/README.md
 infra/mapping/clusterapi/README.md
+infra/mapping/kubevirt/README.md
 integrations/gitops/README.md
 examples/infra/managedcluster-dev-gpu.yaml
 examples/infra/machineclass-gpu-large.yaml
@@ -377,9 +380,13 @@ FileChangePlan
 PullRequestPlan
 DesiredCluster
 DesiredMachineDeployment
-MappingResult
-MappingError
+Cluster API MappingResult
+Cluster API MappingError
 ClusterAPI Mapper
+DesiredVirtualMachine
+KubeVirt MappingResult
+KubeVirt MappingError
+KubeVirt Mapper
 ```
 
 Implemented capabilities:
@@ -410,6 +417,11 @@ Implemented capabilities:
 - provider-neutral DesiredMachineDeployment shape
 - ManagedCluster -> DesiredMachineDeployment[] mapper
 - MachineDeployment patch path helper
+- KubeVirt mapping design
+- provider-neutral DesiredVirtualMachine shape
+- ManagedCluster + MachineClass[] -> DesiredVirtualMachine[] mapper
+- replica expansion into stable VM identities
+- missing MachineClass fail-closed behavior
 ```
 
 Current GitOps planning flow:
@@ -444,11 +456,22 @@ DesiredCluster
 DesiredMachineDeployment[]
 ```
 
+Current KubeVirt mapping flow:
+
+```text
+ManagedCluster + MachineClass[]
+  ↓
+kubevirt.Mapper.MapManagedCluster
+  ↓
+MappingResult
+  ↓
+DesiredVirtualMachine[]
+```
+
 Remaining tasks:
 
 ```text
 - add YAML parser/writer after dependency choice is clear
-- add KubeVirt mapping design details
 - add Metal3 mapping design details
 - postpone real controller-runtime implementation
 - postpone real GitHub PR creation
@@ -543,12 +566,12 @@ PR-029 retry and timeout policy refinements
 PR-030 env-guarded provider integration tests
 PR-031 runtime secret resolver integration
 PR-032 Cluster API mapping design
+PR-033 KubeVirt mapping design
 ```
 
 Next PRs:
 
 ```text
-PR-033 KubeVirt mapping design
 PR-034 Metal3 mapping design
 PR-035 Kubernetes-backed Secret resolver design
 ```
@@ -559,7 +582,7 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add KubeVirt / Metal3 mapping design details.
+2. Add Metal3 mapping design details.
 3. Add Kubernetes-backed Secret resolver design before importing client-go.
 4. Add YAML parser/writer only after dependency choice is clear.
 5. Keep real controller-runtime and real GitHub PR creation postponed.
@@ -591,5 +614,6 @@ Current done definition for this phase:
 19. GitOps integration can produce ManifestPatchPlan and dry-run updated ManagedCluster object.
 20. GitOps integration can produce dry-run branch/commit/PR metadata.
 21. Cluster API mapping design and provider-neutral mapper skeleton exist.
-22. Real execution remains outside model and agent layers.
+22. KubeVirt mapping design and provider-neutral mapper skeleton exist.
+23. Real execution remains outside model and agent layers.
 ```
