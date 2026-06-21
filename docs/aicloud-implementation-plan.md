@@ -333,6 +333,7 @@ infra/controller
 infra/adapter
 infra/mapping/clusterapi
 infra/mapping/kubevirt
+infra/mapping/metal3
 integrations/gitops
 ```
 
@@ -343,11 +344,13 @@ docs/infra-control-plane-scenario.md
 docs/managedcluster-api-design.md
 docs/cluster-api-mapping-design.md
 docs/kubevirt-mapping-design.md
+docs/metal3-mapping-design.md
 infra/README.md
 infra/controller/README.md
 infra/adapter/README.md
 infra/mapping/clusterapi/README.md
 infra/mapping/kubevirt/README.md
+infra/mapping/metal3/README.md
 integrations/gitops/README.md
 examples/infra/managedcluster-dev-gpu.yaml
 examples/infra/machineclass-gpu-large.yaml
@@ -387,6 +390,10 @@ DesiredVirtualMachine
 KubeVirt MappingResult
 KubeVirt MappingError
 KubeVirt Mapper
+DesiredBareMetalHostClaim
+Metal3 MappingResult
+Metal3 MappingError
+Metal3 Mapper
 ```
 
 Implemented capabilities:
@@ -420,8 +427,13 @@ Implemented capabilities:
 - KubeVirt mapping design
 - provider-neutral DesiredVirtualMachine shape
 - ManagedCluster + MachineClass[] -> DesiredVirtualMachine[] mapper
-- replica expansion into stable VM identities
-- missing MachineClass fail-closed behavior
+- KubeVirt replica expansion into stable VM identities
+- KubeVirt missing MachineClass fail-closed behavior
+- Metal3 mapping design
+- provider-neutral DesiredBareMetalHostClaim shape
+- ManagedCluster + MachineClass[] -> DesiredBareMetalHostClaim[] mapper
+- Metal3 replica expansion into stable host claim identities
+- Metal3 missing MachineClass fail-closed behavior
 ```
 
 Current GitOps planning flow:
@@ -468,11 +480,22 @@ MappingResult
 DesiredVirtualMachine[]
 ```
 
+Current Metal3 mapping flow:
+
+```text
+ManagedCluster + MachineClass[]
+  ↓
+metal3.Mapper.MapManagedCluster
+  ↓
+MappingResult
+  ↓
+DesiredBareMetalHostClaim[]
+```
+
 Remaining tasks:
 
 ```text
 - add YAML parser/writer after dependency choice is clear
-- add Metal3 mapping design details
 - postpone real controller-runtime implementation
 - postpone real GitHub PR creation
 ```
@@ -567,12 +590,12 @@ PR-030 env-guarded provider integration tests
 PR-031 runtime secret resolver integration
 PR-032 Cluster API mapping design
 PR-033 KubeVirt mapping design
+PR-034 Metal3 mapping design
 ```
 
 Next PRs:
 
 ```text
-PR-034 Metal3 mapping design
 PR-035 Kubernetes-backed Secret resolver design
 ```
 
@@ -582,10 +605,9 @@ Recommended next implementation sequence:
 
 ```text
 1. Run or verify go test ./... status.
-2. Add Metal3 mapping design details.
-3. Add Kubernetes-backed Secret resolver design before importing client-go.
-4. Add YAML parser/writer only after dependency choice is clear.
-5. Keep real controller-runtime and real GitHub PR creation postponed.
+2. Add Kubernetes-backed Secret resolver design before importing client-go.
+3. Add YAML parser/writer only after dependency choice is clear.
+4. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
 
 ## 14. Current Done Definition
@@ -615,5 +637,6 @@ Current done definition for this phase:
 20. GitOps integration can produce dry-run branch/commit/PR metadata.
 21. Cluster API mapping design and provider-neutral mapper skeleton exist.
 22. KubeVirt mapping design and provider-neutral mapper skeleton exist.
-23. Real execution remains outside model and agent layers.
+23. Metal3 mapping design and provider-neutral mapper skeleton exist.
+24. Real execution remains outside model and agent layers.
 ```
