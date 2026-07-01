@@ -62,6 +62,13 @@ go.mod
 docs/README.md
 ```
 
+Current dependency note:
+
+```text
+gopkg.in/yaml.v3 is declared in go.mod.
+go.sum has not been confirmed by go mod tidy in this workflow.
+```
+
 ## 5. M1 Model Core
 
 Status:
@@ -212,12 +219,6 @@ Runtime secret reference format:
 secret/<namespace>/<name>:<key>
 ```
 
-Example:
-
-```text
-secret/aicloud-system/openai-public:api-key
-```
-
 Current provider flow:
 
 ```text
@@ -357,6 +358,7 @@ infra/mapping/clusterapi
 infra/mapping/kubevirt
 infra/mapping/metal3
 integrations/gitops
+integrations/gitops/yamlio
 ```
 
 Implemented docs and examples:
@@ -367,6 +369,7 @@ docs/managedcluster-api-design.md
 docs/cluster-api-mapping-design.md
 docs/kubevirt-mapping-design.md
 docs/metal3-mapping-design.md
+docs/yaml-parser-writer-dependency-decision.md
 infra/README.md
 infra/controller/README.md
 infra/adapter/README.md
@@ -374,6 +377,7 @@ infra/mapping/clusterapi/README.md
 infra/mapping/kubevirt/README.md
 infra/mapping/metal3/README.md
 integrations/gitops/README.md
+integrations/gitops/yamlio/README.md
 examples/infra/managedcluster-dev-gpu.yaml
 examples/infra/machineclass-gpu-large.yaml
 ```
@@ -416,6 +420,10 @@ DesiredBareMetalHostClaim
 Metal3 MappingResult
 Metal3 MappingError
 Metal3 Mapper
+ManagedClusterYAML
+ManagedClusterSpecYAML
+WorkerGroupYAML
+YAMLIOError
 ```
 
 Implemented capabilities:
@@ -456,6 +464,10 @@ Implemented capabilities:
 - ManagedCluster + MachineClass[] -> DesiredBareMetalHostClaim[] mapper
 - Metal3 replica expansion into stable host claim identities
 - Metal3 missing MachineClass fail-closed behavior
+- YAML parser/writer dependency decision
+- gopkg.in/yaml.v3 declared in go.mod
+- ManagedCluster YAML read/write skeleton
+- ManagedCluster YAML round-trip tests
 ```
 
 Current GitOps planning flow:
@@ -474,6 +486,34 @@ Updated ManagedCluster object + WriteResult
 BuildBranchPlan
   ↓
 BranchPlan / CommitPlan / PullRequestPlan
+```
+
+Current yamlio flow:
+
+```text
+YAML bytes
+  ↓
+yaml.Unmarshal
+  ↓
+ManagedClusterYAML DTO
+  ↓
+infra/api.ManagedCluster
+  ↓
+api.ValidateManagedCluster
+```
+
+Write flow:
+
+```text
+infra/api.ManagedCluster
+  ↓
+api.ValidateManagedCluster
+  ↓
+ManagedClusterYAML DTO
+  ↓
+yaml.Marshal
+  ↓
+YAML bytes
 ```
 
 Current Cluster API mapping flow:
@@ -517,9 +557,21 @@ DesiredBareMetalHostClaim[]
 Remaining tasks:
 
 ```text
-- add YAML parser/writer after dependency choice is clear
+- run go mod tidy to confirm go.sum
+- run or verify go test ./... status
+- wire yamlio into DryRunManifestWriter after tests stabilize
 - postpone real controller-runtime implementation
 - postpone real GitHub PR creation
+```
+
+Important yamlio boundary:
+
+```text
+yamlio does not read files.
+yamlio does not write files.
+yamlio does not call GitHub APIs.
+yamlio does not call Kubernetes APIs.
+yamlio only transforms bytes into internal objects and internal objects into bytes.
 ```
 
 ## 10. M6 Enterprise Governance
@@ -614,13 +666,14 @@ PR-032 Cluster API mapping design
 PR-033 KubeVirt mapping design
 PR-034 Metal3 mapping design
 PR-035 Kubernetes-backed Secret resolver design
+PR-036 YAML parser/writer dependency decision and yamlio skeleton
 ```
 
 Next PRs:
 
 ```text
-PR-036 YAML parser/writer dependency decision
 PR-037 go test ./... stabilization
+PR-038 wire yamlio into DryRunManifestWriter
 ```
 
 ## 13. Immediate Next Steps
@@ -628,10 +681,11 @@ PR-037 go test ./... stabilization
 Recommended next implementation sequence:
 
 ```text
-1. Run or verify go test ./... status.
-2. Add YAML parser/writer only after dependency choice is clear.
-3. Keep real controller-runtime and real GitHub PR creation postponed.
-4. Add client-go-backed SecretGetter only after RBAC and deployment manifests are finalized.
+1. Run go mod tidy to generate or verify go.sum.
+2. Run or verify go test ./... status.
+3. Fix compile issues from new yamlio dependency and existing tests.
+4. Wire yamlio into DryRunManifestWriter only after tests stabilize.
+5. Keep real controller-runtime and real GitHub PR creation postponed.
 ```
 
 ## 14. Current Done Definition
@@ -663,5 +717,6 @@ Current done definition for this phase:
 22. Cluster API mapping design and provider-neutral mapper skeleton exist.
 23. KubeVirt mapping design and provider-neutral mapper skeleton exist.
 24. Metal3 mapping design and provider-neutral mapper skeleton exist.
-25. Real execution remains outside model and agent layers.
+25. yamlio can read/write ManagedCluster YAML bytes in skeleton form.
+26. Real execution remains outside model and agent layers.
 ```
