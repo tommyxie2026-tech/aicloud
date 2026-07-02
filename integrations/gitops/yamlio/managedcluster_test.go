@@ -11,11 +11,11 @@ func TestReadManagedCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadManagedCluster returned error: %v", err)
 	}
-	if cluster.Metadata.Name != "dev-gpu-cluster" {
-		t.Fatalf("unexpected cluster name: %s", cluster.Metadata.Name)
+	if cluster.Name != "dev-gpu-cluster" {
+		t.Fatalf("unexpected cluster name: %s", cluster.Name)
 	}
-	if cluster.Metadata.Namespace != "aicloud-system" {
-		t.Fatalf("unexpected namespace: %s", cluster.Metadata.Namespace)
+	if cluster.Namespace != "aicloud-system" {
+		t.Fatalf("unexpected namespace: %s", cluster.Namespace)
 	}
 	if cluster.Spec.Environment != "dev" {
 		t.Fatalf("unexpected environment: %s", cluster.Spec.Environment)
@@ -54,8 +54,8 @@ func TestWriteManagedClusterRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadManagedCluster after write returned error: %v", err)
 	}
-	if parsed.Metadata.Name != original.Metadata.Name {
-		t.Fatalf("unexpected name after round trip: %s", parsed.Metadata.Name)
+	if parsed.Name != original.Name {
+		t.Fatalf("unexpected name after round trip: %s", parsed.Name)
 	}
 	if parsed.Spec.Workers[0].Replicas != original.Spec.Workers[0].Replicas {
 		t.Fatalf("unexpected replicas after round trip: %d", parsed.Spec.Workers[0].Replicas)
@@ -70,8 +70,7 @@ func TestWriteManagedClusterRejectsInvalidObject(t *testing.T) {
 }
 
 func validManagedCluster() api.ManagedCluster {
-	cluster := api.NewManagedCluster("dev-gpu-cluster", "aicloud-system")
-	cluster.Spec.Environment = "dev"
+	cluster := api.NewManagedCluster("dev-gpu-cluster", "aicloud-system", "dev")
 	cluster.Spec.Workers = []api.WorkerGroupSpec{{Name: "gpu-workers", Replicas: 3, MachineClassRef: api.LocalObjectReference{Name: "gpu-large"}}}
 	return cluster
 }
