@@ -69,8 +69,7 @@ func TestMachineDeploymentPatchPath(t *testing.T) {
 }
 
 func validManagedCluster() api.ManagedCluster {
-	cluster := api.NewManagedCluster("dev-gpu-cluster", "aicloud-system")
-	cluster.Spec.Environment = "dev"
+	cluster := api.NewManagedCluster("dev-gpu-cluster", "aicloud-system", "dev")
 	cluster.Spec.Workers = []api.WorkerGroupSpec{{Name: "gpu-workers", Replicas: 6, MachineClassRef: api.LocalObjectReference{Name: "gpu-large"}}}
 	return cluster
 }
