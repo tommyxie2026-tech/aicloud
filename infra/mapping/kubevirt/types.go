@@ -5,12 +5,11 @@ type DesiredVirtualMachine struct {
 	Namespace        string
 	ClusterName      string
 	WorkerGroupName  string
-	Ordinal          int
+	Ordinal          int32
 	MachineClassName string
 	CPU              string
 	Memory           string
 	GPUProfile       string
-	StorageProfile   string
 	Labels           map[string]string
 }
 
