@@ -9,9 +9,9 @@ import (
 
 func TestBuildPatchPlan(t *testing.T) {
 	planner := NewPatchPlanner()
-	proposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
+	changeProposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
 
-	plan, err := planner.BuildPatchPlan(proposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
+	plan, err := planner.BuildPatchPlan(changeProposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
 	if err != nil {
 		t.Fatalf("BuildPatchPlan returned error: %v", err)
 	}
@@ -52,10 +52,10 @@ func TestBuildPatchPlan(t *testing.T) {
 
 func TestBuildPatchPlanMarksDraftWhenApprovalRequired(t *testing.T) {
 	planner := NewPatchPlanner()
-	proposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
-	proposal.ApplyPolicyResult(proposal.PolicyResult{RiskLevel: "High", ApprovalRequired: true, PolicyName: "default-risk-policy", MatchedRule: "prod-or-high-risk", Result: "REVIEW_REQUIRED", Reason: "approval required"})
+	changeProposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
+	changeProposal.ApplyPolicyResult(proposal.PolicyResult{RiskLevel: "High", ApprovalRequired: true, PolicyName: "default-risk-policy", MatchedRule: "prod-or-high-risk", Result: "REVIEW_REQUIRED", Reason: "approval required"})
 
-	plan, err := planner.BuildPatchPlan(proposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
+	plan, err := planner.BuildPatchPlan(changeProposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
 	if err != nil {
 		t.Fatalf("BuildPatchPlan returned error: %v", err)
 	}
@@ -66,10 +66,10 @@ func TestBuildPatchPlanMarksDraftWhenApprovalRequired(t *testing.T) {
 
 func TestBuildPatchPlanRejectsUnevaluatedProposal(t *testing.T) {
 	planner := NewPatchPlanner()
-	proposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
-	proposal.PolicyResult = nil
+	changeProposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
+	changeProposal.PolicyResult = nil
 
-	_, err := planner.BuildPatchPlan(proposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
+	_, err := planner.BuildPatchPlan(changeProposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
 	if err == nil {
 		t.Fatalf("expected policy not evaluated error")
 	}
@@ -77,9 +77,9 @@ func TestBuildPatchPlanRejectsUnevaluatedProposal(t *testing.T) {
 
 func TestBuildPatchPlanRejectsBlockedField(t *testing.T) {
 	planner := NewPatchPlanner()
-	proposal := validEvaluatedProposal("status.phase")
+	changeProposal := validEvaluatedProposal("status.phase")
 
-	_, err := planner.BuildPatchPlan(proposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
+	_, err := planner.BuildPatchPlan(changeProposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
 	if err == nil {
 		t.Fatalf("expected blocked field error")
 	}
@@ -87,9 +87,9 @@ func TestBuildPatchPlanRejectsBlockedField(t *testing.T) {
 
 func TestBuildPatchPlanRejectsUnknownField(t *testing.T) {
 	planner := NewPatchPlanner()
-	proposal := validEvaluatedProposal("spec.network.cidr")
+	changeProposal := validEvaluatedProposal("spec.network.cidr")
 
-	_, err := planner.BuildPatchPlan(proposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
+	_, err := planner.BuildPatchPlan(changeProposal, "examples/infra/managedcluster-dev-gpu.yaml", "")
 	if err == nil {
 		t.Fatalf("expected field not allowed error")
 	}
@@ -97,9 +97,9 @@ func TestBuildPatchPlanRejectsUnknownField(t *testing.T) {
 
 func TestBuildPatchPlanRequiresSourcePath(t *testing.T) {
 	planner := NewPatchPlanner()
-	proposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
+	changeProposal := validEvaluatedProposal("spec.workers[name=gpu-workers].replicas")
 
-	_, err := planner.BuildPatchPlan(proposal, "", "")
+	_, err := planner.BuildPatchPlan(changeProposal, "", "")
 	if err == nil {
 		t.Fatalf("expected missing source path error")
 	}
