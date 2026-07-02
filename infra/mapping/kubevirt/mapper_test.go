@@ -23,7 +23,7 @@ func TestMapManagedClusterToDesiredVirtualMachines(t *testing.T) {
 	if first.Ordinal != 1 {
 		t.Fatalf("unexpected ordinal: %d", first.Ordinal)
 	}
-	if first.CPU != "8" || first.Memory != "32Gi" || first.GPUProfile != "nvidia-a10" || first.StorageProfile != "fast-ssd" {
+	if first.CPU != "8" || first.Memory != "32Gi" || first.GPUProfile != "1xnvidia-a10" {
 		t.Fatalf("unexpected machine profile: %+v", first)
 	}
 	if first.Labels["aicloud.dev/machine-class"] != "gpu-large" {
@@ -66,17 +66,15 @@ func TestMapManagedClusterMultipleWorkerGroups(t *testing.T) {
 }
 
 func validManagedCluster() api.ManagedCluster {
-	cluster := api.NewManagedCluster("dev-gpu-cluster", "aicloud-system")
-	cluster.Spec.Environment = "dev"
+	cluster := api.NewManagedCluster("dev-gpu-cluster", "aicloud-system", "dev")
 	cluster.Spec.Workers = []api.WorkerGroupSpec{{Name: "gpu-workers", Replicas: 3, MachineClassRef: api.LocalObjectReference{Name: "gpu-large"}}}
 	return cluster
 }
 
 func validMachineClass(name string) api.MachineClass {
-	class := api.NewMachineClass(name, "aicloud-system")
+	class := api.NewMachineClass(name, "kubevirt")
 	class.Spec.CPU = "8"
 	class.Spec.Memory = "32Gi"
-	class.Spec.GPU = "nvidia-a10"
-	class.Spec.Storage = "fast-ssd"
+	class.Spec.GPU = &api.GPUSpec{Count: 1, Type: "nvidia-a10"}
 	return class
 }
