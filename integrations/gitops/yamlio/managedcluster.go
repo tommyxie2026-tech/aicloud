@@ -25,7 +25,7 @@ type ManagedClusterSpecYAML struct {
 
 type WorkerGroupYAML struct {
 	Name            string                   `yaml:"name"`
-	Replicas        int                      `yaml:"replicas"`
+	Replicas        int32                    `yaml:"replicas"`
 	MachineClassRef LocalObjectReferenceYAML `yaml:"machineClassRef"`
 }
 
@@ -73,11 +73,10 @@ func WriteManagedCluster(cluster api.ManagedCluster) ([]byte, error) {
 }
 
 func fromManagedClusterYAML(doc ManagedClusterYAML) api.ManagedCluster {
-	cluster := api.NewManagedCluster(doc.Metadata.Name, doc.Metadata.Namespace)
+	cluster := api.NewManagedCluster(doc.Metadata.Name, doc.Metadata.Namespace, doc.Spec.Environment)
 	cluster.APIVersion = doc.APIVersion
 	cluster.Kind = doc.Kind
-	cluster.Metadata.Labels = doc.Metadata.Labels
-	cluster.Spec.Environment = doc.Spec.Environment
+	cluster.Labels = doc.Metadata.Labels
 	for _, worker := range doc.Spec.Workers {
 		cluster.Spec.Workers = append(cluster.Spec.Workers, api.WorkerGroupSpec{
 			Name:     worker.Name,
@@ -95,9 +94,9 @@ func toManagedClusterYAML(cluster api.ManagedCluster) ManagedClusterYAML {
 		APIVersion: cluster.APIVersion,
 		Kind:       cluster.Kind,
 		Metadata: ObjectMetaYAML{
-			Name:      cluster.Metadata.Name,
-			Namespace: cluster.Metadata.Namespace,
-			Labels:    cluster.Metadata.Labels,
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+			Labels:    cluster.Labels,
 		},
 		Spec: ManagedClusterSpecYAML{
 			Environment: cluster.Spec.Environment,
