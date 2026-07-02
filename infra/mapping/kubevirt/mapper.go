@@ -24,19 +24,18 @@ func (m Mapper) MapManagedCluster(cluster api.ManagedCluster, classes []api.Mach
 		if !ok {
 			return MappingResult{}, NewMappingError("MachineClassNotFound", "machine class not found: "+worker.MachineClassRef.Name)
 		}
-		for ordinal := 1; ordinal <= worker.Replicas; ordinal++ {
+		for ordinal := int32(1); ordinal <= worker.Replicas; ordinal++ {
 			result.VirtualMachines = append(result.VirtualMachines, DesiredVirtualMachine{
-				Name:             virtualMachineName(cluster.Metadata.Name, worker.Name, ordinal),
-				Namespace:        cluster.Metadata.Namespace,
-				ClusterName:      cluster.Metadata.Name,
+				Name:             virtualMachineName(cluster.Name, worker.Name, ordinal),
+				Namespace:        cluster.Namespace,
+				ClusterName:      cluster.Name,
 				WorkerGroupName:  worker.Name,
 				Ordinal:          ordinal,
-				MachineClassName: class.Metadata.Name,
+				MachineClassName: class.Name,
 				CPU:              class.Spec.CPU,
 				Memory:           class.Spec.Memory,
-				GPUProfile:       class.Spec.GPU,
-				StorageProfile:   class.Spec.Storage,
-				Labels:           baseLabels(cluster.Metadata.Name, cluster.Spec.Environment, worker.Name, class.Metadata.Name),
+				GPUProfile:       gpuProfile(class.Spec.GPU),
+				Labels:           baseLabels(cluster.Name, cluster.Spec.Environment, worker.Name, class.Name),
 			})
 		}
 	}
@@ -46,12 +45,19 @@ func (m Mapper) MapManagedCluster(cluster api.ManagedCluster, classes []api.Mach
 func indexMachineClasses(classes []api.MachineClass) map[string]api.MachineClass {
 	index := map[string]api.MachineClass{}
 	for _, class := range classes {
-		index[class.Metadata.Name] = class
+		index[class.Name] = class
 	}
 	return index
 }
 
-func virtualMachineName(clusterName string, workerGroupName string, ordinal int) string {
+func gpuProfile(gpu *api.GPUSpec) string {
+	if gpu == nil || gpu.Count == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%dx%s", gpu.Count, gpu.Type)
+}
+
+func virtualMachineName(clusterName string, workerGroupName string, ordinal int32) string {
 	return fmt.Sprintf("%s-%s-%04d", sanitizeName(clusterName), sanitizeName(workerGroupName), ordinal)
 }
 
