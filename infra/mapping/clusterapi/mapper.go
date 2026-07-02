@@ -19,21 +19,21 @@ func (m Mapper) MapManagedCluster(cluster api.ManagedCluster) (MappingResult, er
 	}
 	result := MappingResult{
 		Cluster: DesiredCluster{
-			Name:        cluster.Metadata.Name,
-			Namespace:   cluster.Metadata.Namespace,
+			Name:        cluster.Name,
+			Namespace:   cluster.Namespace,
 			Environment: cluster.Spec.Environment,
-			Labels:      baseLabels(cluster.Metadata.Name, cluster.Spec.Environment, ""),
+			Labels:      baseLabels(cluster.Name, cluster.Spec.Environment, ""),
 		},
 	}
 	for _, worker := range cluster.Spec.Workers {
 		result.MachineDeployments = append(result.MachineDeployments, DesiredMachineDeployment{
-			Name:             machineDeploymentName(cluster.Metadata.Name, worker.Name),
-			Namespace:        cluster.Metadata.Namespace,
-			ClusterName:      cluster.Metadata.Name,
+			Name:             machineDeploymentName(cluster.Name, worker.Name),
+			Namespace:        cluster.Namespace,
+			ClusterName:      cluster.Name,
 			WorkerGroupName:  worker.Name,
 			Replicas:         worker.Replicas,
 			MachineClassName: worker.MachineClassRef.Name,
-			Labels:           baseLabels(cluster.Metadata.Name, cluster.Spec.Environment, worker.Name),
+			Labels:           baseLabels(cluster.Name, cluster.Spec.Environment, worker.Name),
 		})
 	}
 	return result, nil
