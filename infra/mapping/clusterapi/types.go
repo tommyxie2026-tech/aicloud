@@ -12,7 +12,7 @@ type DesiredMachineDeployment struct {
 	Namespace        string
 	ClusterName      string
 	WorkerGroupName  string
-	Replicas         int
+	Replicas         int32
 	MachineClassName string
 	Labels           map[string]string
 }
