@@ -3,6 +3,7 @@ package yamlio
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -247,8 +248,13 @@ func formatManagedClusterYAML(doc ManagedClusterYAML) []byte {
 	fmt.Fprintf(&buf, "  namespace: %s\n", doc.Metadata.Namespace)
 	if len(doc.Metadata.Labels) > 0 {
 		buf.WriteString("  labels:\n")
-		for key, value := range doc.Metadata.Labels {
-			fmt.Fprintf(&buf, "    %s: %s\n", key, value)
+		keys := make([]string, 0, len(doc.Metadata.Labels))
+		for key := range doc.Metadata.Labels {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			fmt.Fprintf(&buf, "    %s: %s\n", key, doc.Metadata.Labels[key])
 		}
 	}
 	buf.WriteString("spec:\n")
