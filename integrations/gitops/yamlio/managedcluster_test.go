@@ -1,6 +1,7 @@
 package yamlio
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tommyxie2026-tech/aicloud/infra/api"
@@ -59,6 +60,34 @@ func TestWriteManagedClusterRoundTrip(t *testing.T) {
 	}
 	if parsed.Spec.Workers[0].Replicas != original.Spec.Workers[0].Replicas {
 		t.Fatalf("unexpected replicas after round trip: %d", parsed.Spec.Workers[0].Replicas)
+	}
+}
+
+func TestWriteManagedClusterSortsLabelsDeterministically(t *testing.T) {
+	cluster := validManagedCluster()
+	cluster.Labels = map[string]string{
+		"z.example/last":  "last",
+		"a.example/first": "first",
+	}
+	data, err := WriteManagedCluster(cluster)
+	if err != nil {
+		t.Fatalf("WriteManagedCluster returned error: %v", err)
+	}
+	output := string(data)
+	first := strings.Index(output, "a.example/first: first")
+	last := strings.Index(output, "z.example/last: last")
+	if first == -1 || last == -1 {
+		t.Fatalf("expected both labels in output: %s", output)
+	}
+	if first > last {
+		t.Fatalf("expected labels to be sorted, got: %s", output)
+	}
+	parsed, err := ReadManagedCluster(data)
+	if err != nil {
+		t.Fatalf("ReadManagedCluster after write returned error: %v", err)
+	}
+	if parsed.Labels["a.example/first"] != "first" || parsed.Labels["z.example/last"] != "last" {
+		t.Fatalf("labels did not round trip: %+v", parsed.Labels)
 	}
 }
 
