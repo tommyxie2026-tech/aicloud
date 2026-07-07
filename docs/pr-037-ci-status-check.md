@@ -50,10 +50,12 @@ This matches the repository default branch.
 
 ## Latest Visible Status Check
 
-A status query was made for the latest documentation commit:
+Status checks were queried for PR-037 stabilization commits, including:
 
 ```text
 d3aed820c0daa147778248c9a43154cfb1e204f3
+38e8ccac13ad30a83c1bf828cd805af58550a215
+654049bd3533bbfa7677751961b80dd37133057c
 ```
 
 Visible status result:
@@ -62,13 +64,37 @@ Visible status result:
 statuses: []
 ```
 
+Workflow run lookup for the latest stabilization commit returned:
+
+```text
+workflow_runs: []
+```
+
+Tool limitation note:
+
+```text
+The workflow-run lookup available in this workflow is filtered to pull-request-triggered runs, so it may not show push-triggered runs on main.
+```
+
 Interpretation:
 
 ```text
-No status check result was visible through the current tool response.
+No status check result was visible through the current tool responses.
 This is not a pass.
 This is not a fail.
 This is an unknown CI state.
+```
+
+## Current Dependency State
+
+`gopkg.in/yaml.v3` was temporarily removed during PR-037 stabilization.
+
+Current `go.mod` has no external dependency requirement.
+
+Current `go.sum` state:
+
+```text
+go.sum is not present and is not currently expected while go.mod has no external dependencies.
 ```
 
 ## Important Boundary
@@ -82,10 +108,6 @@ CI passed
 
 until an actual successful workflow run or local test run is observed.
 
-## Expected Next Failure If CI Runs Now
-
-Because `gopkg.in/yaml.v3` was added to `go.mod` and `go.sum` is not present yet, the `Verify module files are tidy` step is expected to fail until `go mod tidy` is run locally and the generated `go.sum` is committed.
-
 ## Required Local Command Sequence
 
 ```bash
@@ -94,6 +116,6 @@ go test ./...
 git status --short
 ```
 
-If `go.sum` is generated, commit it.
+If future dependency work generates `go.sum`, commit it.
 
 Do not hand-write `go.sum`.
