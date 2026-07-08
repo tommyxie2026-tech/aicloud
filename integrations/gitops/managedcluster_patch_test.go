@@ -3,8 +3,8 @@ package gitops
 import (
 	"testing"
 
-	"github.com/tommyxie2026-tech/aicloud/model/schema"
 	infraapi "github.com/tommyxie2026-tech/aicloud/infra/api"
+	"github.com/tommyxie2026-tech/aicloud/model/schema"
 )
 
 func TestApplyManagedClusterPatch(t *testing.T) {
@@ -76,6 +76,22 @@ func TestApplyManagedClusterPatchRejectsNegativeReplicas(t *testing.T) {
 	}
 }
 
+func TestApplyManagedClusterPatchRejectsFractionalReplicaValue(t *testing.T) {
+	cluster := validManagedCluster(3)
+	plan := validPatchPlan(3, 6.5)
+
+	_, err := ApplyManagedClusterPatch(plan, cluster)
+	assertGitOpsError(t, err, "InvalidToValue")
+}
+
+func TestApplyManagedClusterPatchRejectsReplicaOverflow(t *testing.T) {
+	cluster := validManagedCluster(3)
+	plan := validPatchPlan(3, int64(2147483648))
+
+	_, err := ApplyManagedClusterPatch(plan, cluster)
+	assertGitOpsError(t, err, "InvalidToValue")
+}
+
 func validManagedCluster(replicas int32) infraapi.ManagedCluster {
 	cluster := infraapi.NewManagedCluster("dev-gpu-cluster", "default", "dev")
 	cluster.Spec.Workers = []infraapi.WorkerGroupSpec{
@@ -94,5 +110,19 @@ func validPatchPlan(from any, to any) ManifestPatchPlan {
 		Changes: []ManifestFieldChange{
 			{Field: managedClusterWorkerReplicasField, From: from, To: to, Reason: "scale out"},
 		},
+	}
+}
+
+func assertGitOpsError(t *testing.T, err error, code string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected error %s", code)
+	}
+	gitopsErr, ok := err.(*GitOpsError)
+	if !ok {
+		t.Fatalf("expected GitOpsError, got %T", err)
+	}
+	if gitopsErr.Code != code {
+		t.Fatalf("expected code %s, got %s", code, gitopsErr.Code)
 	}
 }
