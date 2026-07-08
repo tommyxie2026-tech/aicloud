@@ -150,6 +150,14 @@ Fix:
 - renamed local variable proposal to changeProposal to avoid shadowing the imported proposal package
 ```
 
+Additional static inspection:
+
+```text
+- validEvaluatedProposal was inspected and does not depend on infra/api constructors.
+- It builds agent/proposal.ChangeProposal and schema.ResourceRef only.
+- No NewManagedCluster or MachineClass API mismatch was found in patch_plan_test.go.
+```
+
 ### CI workflow
 
 Updated file:
@@ -164,6 +172,19 @@ Fix:
 - added go mod tidy check before go test ./...
 - added git diff --exit-code -- go.mod go.sum to detect uncommitted module metadata changes
 ```
+
+### CI visibility caveat
+
+Current workflow/status checks visible through the connector have remained empty for direct main-branch commits.
+
+```text
+statuses: []
+workflow_runs: []
+```
+
+This should be interpreted as unknown, not pass or fail.
+
+The workflow-run query available here filters PR-triggered runs, so direct push runs may not appear through that specific query.
 
 ## Known Remaining Work
 
