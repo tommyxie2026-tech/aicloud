@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"fmt"
+	"math"
 
 	infraapi "github.com/tommyxie2026-tech/aicloud/infra/api"
 )
@@ -73,14 +74,27 @@ func findWorkerGroup(cluster infraapi.ManagedCluster, name string) int {
 func toInt32(value any) (int32, bool) {
 	switch v := value.(type) {
 	case int:
+		if v < math.MinInt32 || v > math.MaxInt32 {
+			return 0, false
+		}
 		return int32(v), true
 	case int32:
 		return v, true
 	case int64:
+		if v < math.MinInt32 || v > math.MaxInt32 {
+			return 0, false
+		}
 		return int32(v), true
 	case float64:
+		if math.Trunc(v) != v || v < math.MinInt32 || v > math.MaxInt32 {
+			return 0, false
+		}
 		return int32(v), true
 	case float32:
+		f := float64(v)
+		if math.Trunc(f) != f || f < math.MinInt32 || f > math.MaxInt32 {
+			return 0, false
+		}
 		return int32(v), true
 	default:
 		return 0, false
