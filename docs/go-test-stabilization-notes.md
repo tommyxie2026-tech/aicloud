@@ -11,7 +11,7 @@ This document records static compile-risk fixes made before a real test run.
 ## Current Status
 
 ```text
-Status: static stabilization in progress
+Status: static stabilization complete; real test run pending
 Real go test ./... run: not confirmed
 Real go mod tidy run: not confirmed
 go.sum: not present and currently not required because go.mod has no external dependencies
@@ -158,6 +158,39 @@ Additional static inspection:
 - No NewManagedCluster or MachineClass API mismatch was found in patch_plan_test.go.
 ```
 
+### GitOps ManagedCluster patch helpers
+
+Inspected file:
+
+```text
+integrations/gitops/managedcluster_patch_test.go
+```
+
+Static inspection result:
+
+```text
+- validManagedCluster(replicas int32) uses infraapi.NewManagedCluster(name, namespace, environment).
+- WorkerGroupSpec.Replicas uses int32.
+- validPatchPlan uses infraapi.KindManagedCluster and schema.ResourceRef.
+- No cluster.Metadata or class.Metadata usage was found in these helpers.
+```
+
+### GitOps branch and manifest writer tests
+
+Inspected files:
+
+```text
+integrations/gitops/branch_plan_test.go
+integrations/gitops/manifest_writer_test.go
+```
+
+Static inspection result:
+
+```text
+- These tests reuse validManagedCluster and validPatchPlan from managedcluster_patch_test.go.
+- No direct infra/api shape mismatch was found in these files.
+```
+
 ### CI workflow
 
 Updated file:
@@ -185,6 +218,20 @@ workflow_runs: []
 This should be interpreted as unknown, not pass or fail.
 
 The workflow-run query available here filters PR-triggered runs, so direct push runs may not appear through that specific query.
+
+## Static Stabilization Exit Criteria
+
+The static phase is considered complete because:
+
+```text
+- known infra/api shape mismatches were fixed
+- yaml dependency/go.sum blocker was removed from the current compile path
+- GitOps helper tests were inspected and found compatible with current infra/api constructors
+- yamlio deterministic output risk was addressed
+- CI validation was strengthened without claiming a pass
+```
+
+This does not mean the repository is green.
 
 ## Known Remaining Work
 
