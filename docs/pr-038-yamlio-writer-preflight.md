@@ -126,10 +126,20 @@ type ManagedClusterManifestBytesWriter struct {
 }
 ```
 
-Possible method:
+Preferred method:
 
 ```go
-WriteManagedClusterBytes(plan ManifestPatchPlan, cluster infraapi.ManagedCluster) (*WriteResult, []byte, error)
+WriteManagedClusterBytes(plan ManifestPatchPlan, input []byte) (*WriteResult, []byte, error)
+```
+
+Expected internal flow:
+
+```text
+input bytes
+  -> yamlio.ReadManagedCluster
+  -> ObjectWriter.WriteManagedCluster
+  -> yamlio.WriteManagedCluster(result.Updated)
+  -> return original WriteResult plus rendered bytes
 ```
 
 Pros:
@@ -137,6 +147,7 @@ Pros:
 ```text
 preserves existing object-level writer behavior
 keeps serialization as an explicit layer
+lets branch/commit integration consume bytes later without mutating WriteResult now
 less risky while PR-037 test result is still pending
 ```
 
@@ -158,6 +169,15 @@ The current architecture deliberately separates patch planning, object patching,
 A wrapper preserves that separation and avoids changing DryRunManifestWriter behavior before go test ./... is confirmed.
 ```
 
+The wrapper should accept bytes, not an already parsed object.
+
+Reason:
+
+```text
+The purpose of PR-038 is to exercise yamlio in the writer path.
+If the wrapper accepts an object, yamlio.ReadManagedCluster is not covered by the main PR-038 flow.
+```
+
 ## Proposed PR-038 Scope
 
 After PR-037 test confirmation, PR-038 should:
@@ -165,9 +185,22 @@ After PR-037 test confirmation, PR-038 should:
 ```text
 1. Add a yamlio-backed wrapper around DryRunManifestWriter.
 2. Keep DryRunManifestWriter object-level and in-memory.
-3. Serialize only the Updated ManagedCluster returned by the object writer.
-4. Return manifest bytes separately or through a new result type.
-5. Add tests proving bytes can be read back through yamlio.ReadManagedCluster.
+3. Parse input bytes with yamlio.ReadManagedCluster.
+4. Patch through the existing object-level ManifestWriter.
+5. Serialize only the Updated ManagedCluster returned by the object writer.
+6. Return manifest bytes separately from WriteResult.
+7. Add tests proving bytes can be read back through yamlio.ReadManagedCluster.
+```
+
+## Proposed Tests
+
+```text
+- valid ManagedCluster bytes are patched and rendered
+- rendered bytes can be parsed back by yamlio.ReadManagedCluster
+- invalid YAML-shaped bytes fail closed
+- current value mismatch still fails closed
+- unsupported patch field still fails closed
+- existing DryRunManifestWriter tests remain unchanged
 ```
 
 ## Explicit Non-Goals
