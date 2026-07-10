@@ -30,7 +30,7 @@ Current file:
 integrations/gitops/manifest_writer.go
 ```
 
-Current interface:
+Verified current interface:
 
 ```go
 type ManifestWriter interface {
@@ -38,7 +38,7 @@ type ManifestWriter interface {
 }
 ```
 
-Current `WriteResult`:
+Verified current `WriteResult`:
 
 ```go
 type WriteResult struct {
@@ -60,6 +60,42 @@ ManifestPatchPlan + infra/api.ManagedCluster
 ```
 
 It does not currently produce manifest bytes.
+
+It does not read files, write files, create commits, create PRs, or call Kubernetes.
+
+## Current BranchPlan Shape
+
+Current file:
+
+```text
+integrations/gitops/branch_plan.go
+```
+
+Verified current `FileChangePlan`:
+
+```go
+type FileChangePlan struct {
+    Path    string
+    Summary string
+}
+```
+
+`BuildBranchPlan` currently uses:
+
+```text
+result.OutputPath
+result.Summary
+plan.PR.BranchName
+plan.PR.CommitMessage
+plan.PR.Title
+plan.PR.Draft
+```
+
+It does not carry rendered file bytes.
+
+This means PR-038 can introduce rendered manifest bytes without changing `BranchPlan` immediately.
+
+Future real commit creation may need bytes, but that belongs to a later GitHub integration step, not this preflight.
 
 ## yamlio Current Shape
 
@@ -160,6 +196,7 @@ preserves existing object-level writer behavior
 keeps serialization as an explicit layer
 input boundary is bytes, not an already parsed object
 less risky while PR-037 test result is still pending
+does not require BranchPlan changes because BranchPlan currently tracks path/summary only
 ```
 
 Cons:
@@ -181,6 +218,13 @@ A wrapper preserves that separation and avoids changing DryRunManifestWriter beh
 The byte-oriented method should accept input bytes so yamlio is genuinely part of the read/patch/write path.
 ```
 
+Additional verified reason:
+
+```text
+BuildBranchPlan currently does not need rendered file bytes.
+Therefore byte rendering can remain one layer above object writing and one layer before future real commit creation.
+```
+
 ## Proposed PR-038 Scope
 
 After PR-037 test confirmation, PR-038 should:
@@ -194,6 +238,7 @@ After PR-037 test confirmation, PR-038 should:
 6. Serialize only the Updated ManagedCluster returned by the object writer.
 7. Return manifest bytes separately from the existing WriteResult.
 8. Add tests proving bytes can be read back through yamlio.ReadManagedCluster.
+9. Keep BranchPlan unchanged unless a future real commit-file content layer requires bytes.
 ```
 
 ## Error Boundaries
@@ -219,6 +264,7 @@ Do not collapse all failures into a generic writer error.
 - current value mismatch still fails closed at patch boundary
 - unsupported patch field still fails closed at patch boundary
 - existing DryRunManifestWriter tests remain unchanged
+- BranchPlan tests remain unchanged unless future commit-file content needs bytes
 ```
 
 ## Explicit Non-Goals
