@@ -118,7 +118,18 @@ couples object patching and serialization earlier
 
 ### Option B: Add a Separate ManifestBytesWriter
 
-Keep current `DryRunManifestWriter` object-level only, and add a wrapper:
+Keep current `DryRunManifestWriter` object-level only, and add a wrapper.
+
+Recommended result type:
+
+```go
+type ManagedClusterManifestBytesResult struct {
+    WriteResult *WriteResult
+    Manifest    []byte
+}
+```
+
+Recommended wrapper:
 
 ```go
 type ManagedClusterManifestBytesWriter struct {
@@ -126,20 +137,20 @@ type ManagedClusterManifestBytesWriter struct {
 }
 ```
 
-Preferred method:
+Recommended method:
 
 ```go
-WriteManagedClusterBytes(plan ManifestPatchPlan, input []byte) (*WriteResult, []byte, error)
+func (w *ManagedClusterManifestBytesWriter) WriteManagedClusterBytes(plan ManifestPatchPlan, input []byte) (*ManagedClusterManifestBytesResult, error)
 ```
 
-Expected internal flow:
+Expected flow:
 
 ```text
-input bytes
-  -> yamlio.ReadManagedCluster
-  -> ObjectWriter.WriteManagedCluster
+input YAML-shaped bytes
+  -> yamlio.ReadManagedCluster(input)
+  -> ObjectWriter.WriteManagedCluster(plan, parsedCluster)
   -> yamlio.WriteManagedCluster(result.Updated)
-  -> return original WriteResult plus rendered bytes
+  -> ManagedClusterManifestBytesResult{WriteResult: result, Manifest: renderedBytes}
 ```
 
 Pros:
@@ -147,7 +158,7 @@ Pros:
 ```text
 preserves existing object-level writer behavior
 keeps serialization as an explicit layer
-lets branch/commit integration consume bytes later without mutating WriteResult now
+input boundary is bytes, not an already parsed object
 less risky while PR-037 test result is still pending
 ```
 
@@ -167,15 +178,7 @@ Reason:
 ```text
 The current architecture deliberately separates patch planning, object patching, branch planning, and live execution.
 A wrapper preserves that separation and avoids changing DryRunManifestWriter behavior before go test ./... is confirmed.
-```
-
-The wrapper should accept bytes, not an already parsed object.
-
-Reason:
-
-```text
-The purpose of PR-038 is to exercise yamlio in the writer path.
-If the wrapper accepts an object, yamlio.ReadManagedCluster is not covered by the main PR-038 flow.
+The byte-oriented method should accept input bytes so yamlio is genuinely part of the read/patch/write path.
 ```
 
 ## Proposed PR-038 Scope
@@ -183,23 +186,38 @@ If the wrapper accepts an object, yamlio.ReadManagedCluster is not covered by th
 After PR-037 test confirmation, PR-038 should:
 
 ```text
-1. Add a yamlio-backed wrapper around DryRunManifestWriter.
-2. Keep DryRunManifestWriter object-level and in-memory.
-3. Parse input bytes with yamlio.ReadManagedCluster.
-4. Patch through the existing object-level ManifestWriter.
-5. Serialize only the Updated ManagedCluster returned by the object writer.
-6. Return manifest bytes separately from WriteResult.
-7. Add tests proving bytes can be read back through yamlio.ReadManagedCluster.
+1. Add ManagedClusterManifestBytesResult.
+2. Add ManagedClusterManifestBytesWriter around the existing ManifestWriter interface.
+3. Keep DryRunManifestWriter object-level and in-memory.
+4. Read input bytes with yamlio.ReadManagedCluster.
+5. Patch by delegating to ObjectWriter.WriteManagedCluster.
+6. Serialize only the Updated ManagedCluster returned by the object writer.
+7. Return manifest bytes separately from the existing WriteResult.
+8. Add tests proving bytes can be read back through yamlio.ReadManagedCluster.
 ```
+
+## Error Boundaries
+
+PR-038 should keep read, patch, and write failures distinguishable.
+
+Recommended error handling:
+
+```text
+yamlio.ReadManagedCluster failure -> read/input error boundary
+ObjectWriter.WriteManagedCluster failure -> patch/write-result error boundary
+yamlio.WriteManagedCluster failure -> render/output error boundary
+```
+
+Do not collapse all failures into a generic writer error.
 
 ## Proposed Tests
 
 ```text
 - valid ManagedCluster bytes are patched and rendered
 - rendered bytes can be parsed back by yamlio.ReadManagedCluster
-- invalid YAML-shaped bytes fail closed
-- current value mismatch still fails closed
-- unsupported patch field still fails closed
+- invalid YAML-shaped bytes fail closed at read boundary
+- current value mismatch still fails closed at patch boundary
+- unsupported patch field still fails closed at patch boundary
 - existing DryRunManifestWriter tests remain unchanged
 ```
 
@@ -226,6 +244,18 @@ Policy and approval remain outside yamlio.
 Controller/live execution remains deferred.
 
 GitOps writer behavior remains dry-run only.
+
+## Temporary yamlio Limitation
+
+The current `yamlio` implementation is a dependency-free narrow skeleton.
+
+It only supports the current ManagedCluster example shape.
+
+Do not treat it as a general YAML parser.
+
+Do not expand it into a full parser inside PR-038.
+
+If real YAML support is needed, reintroduce `gopkg.in/yaml.v3` only after Go tooling can generate and verify `go.sum`.
 
 ## Next Step
 
