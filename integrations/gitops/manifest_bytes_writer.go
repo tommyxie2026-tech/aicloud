@@ -28,9 +28,9 @@ func NewManagedClusterManifestBytesWriter(objectWriter ManifestWriter) *ManagedC
 }
 
 func (w *ManagedClusterManifestBytesWriter) WriteManagedClusterBytes(plan ManifestPatchPlan, input []byte) (*ManagedClusterManifestBytesResult, error) {
-	objectWriter := w.ObjectWriter
-	if objectWriter == nil {
-		objectWriter = NewDryRunManifestWriter()
+	objectWriter := ManifestWriter(NewDryRunManifestWriter())
+	if w != nil && w.ObjectWriter != nil {
+		objectWriter = w.ObjectWriter
 	}
 	cluster, err := yamlio.ReadManagedCluster(input)
 	if err != nil {
