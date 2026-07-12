@@ -46,6 +46,17 @@ func TestManagedClusterManifestBytesWriterPropagatesPatchFailure(t *testing.T) {
 	}
 }
 
+func TestManagedClusterManifestBytesWriterRejectsUnsupportedPatchField(t *testing.T) {
+	writer := NewManagedClusterManifestBytesWriter(NewDryRunManifestWriter())
+	plan := validPatchPlan(3, 6)
+	plan.Changes[0].Field = "spec.network.cidr"
+
+	_, err := writer.WriteManagedClusterBytes(plan, []byte(validManagedClusterManifestYAML()))
+	if err == nil {
+		t.Fatalf("expected unsupported patch field failure")
+	}
+}
+
 func TestManagedClusterManifestBytesWriterUsesDefaultObjectWriter(t *testing.T) {
 	writer := NewManagedClusterManifestBytesWriter(nil)
 	result, err := writer.WriteManagedClusterBytes(validPatchPlan(3, 6), []byte(validManagedClusterManifestYAML()))
@@ -54,6 +65,17 @@ func TestManagedClusterManifestBytesWriterUsesDefaultObjectWriter(t *testing.T) 
 	}
 	if result.WriteResult.Updated.Spec.Workers[0].Replicas != 6 {
 		t.Fatalf("expected default object writer to patch replicas to 6")
+	}
+}
+
+func TestManagedClusterManifestBytesWriterNilReceiverUsesDefaultObjectWriter(t *testing.T) {
+	var writer *ManagedClusterManifestBytesWriter
+	result, err := writer.WriteManagedClusterBytes(validPatchPlan(3, 6), []byte(validManagedClusterManifestYAML()))
+	if err != nil {
+		t.Fatalf("WriteManagedClusterBytes returned error: %v", err)
+	}
+	if result.WriteResult.Updated.Spec.Workers[0].Replicas != 6 {
+		t.Fatalf("expected nil receiver to use default object writer")
 	}
 }
 
