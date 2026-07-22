@@ -25,7 +25,7 @@ func (p RetryPolicy) ShouldRetry(attempt int, statusCode int, err error) RetryDe
 	if attempt >= p.MaxRetries {
 		return RetryDecision{Retry: false, Reason: "max retries reached"}
 	}
-	if err != nil {
+	if err != nil && statusCode == 0 {
 		return RetryDecision{Retry: true, Reason: "transport error"}
 	}
 	if isRetryableStatus(statusCode) {

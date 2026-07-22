@@ -154,3 +154,37 @@ AICLOUD-006 Add deterministic MockProvider
 AICLOUD-008 Add ModelGateway with MockProvider path
 AICLOUD-009 Add EvalRunner and first golden case
 ```
+
+## 9. v0.1 Skeleton Implementation
+
+The repository now includes a runnable modular-monolith skeleton for the
+Developer AI Cloud path:
+
+```text
+cmd/api-server       HTTP API entrypoint
+cmd/worker           workflow worker placeholder
+internal/            control-plane and execution seams
+model/               existing model/provider packages
+agent/               existing planning/workflow packages
+policy/              existing deterministic policy packages
+db/migrations/       PostgreSQL persistence contract
+deploy/helm/aicloud  minimal Kubernetes deployment
+```
+
+Run locally without external services:
+
+```bash
+go run ./cmd/api-server
+curl http://localhost:8080/healthz
+curl http://localhost:8080/api/v1/models
+```
+
+The v0.1 API exposes `/healthz`, `/readyz`, `GET/POST /api/v1/models`, and
+`GET/POST /api/v1/tasks` plus task lookup by ID. Runtime persistence is
+in-memory for fast startup; PostgreSQL and Redis are available through
+`docker compose up -d`, and the migration is the contract for the next
+persistence adapter.
+
+The implementation intentionally keeps one deployable application and
+separates internal packages by domain. Temporal, LiteLLM, OPA, OpenTelemetry,
+and stronger sandbox runtimes remain integration seams for the next sprint.
