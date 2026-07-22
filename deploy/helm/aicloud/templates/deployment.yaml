@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aicloud.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "aicloud.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "aicloud.name" . }}
+    spec:
+      containers:
+        - name: api-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: AICLOUD_HTTP_ADDR
+              value: ":8080"
+            - name: AICLOUD_DATABASE_URL
+              value: {{ .Values.env.databaseURL | quote }}
+            - name: AICLOUD_REDIS_URL
+              value: {{ .Values.env.redisURL | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
