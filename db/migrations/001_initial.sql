@@ -1,0 +1,3 @@
+-- v0.1 persistence contract. The running skeleton uses memory repositories.
+CREATE TABLE IF NOT EXISTS models (id TEXT PRIMARY KEY, name TEXT NOT NULL, provider TEXT NOT NULL, capabilities JSONB NOT NULL DEFAULT '[]'::jsonb, pricing JSONB NOT NULL DEFAULT '{}'::jsonb, license TEXT NOT NULL DEFAULT '', risk_level TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, agent_id TEXT NOT NULL DEFAULT '', input TEXT NOT NULL, status TEXT NOT NULL, result TEXT NOT NULL DEFAULT '', cost DOUBLE PRECISION NOT NULL DEFAULT 0, trace_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
