@@ -13,15 +13,21 @@ import (
 	"time"
 
 	"github.com/tommyxie2026-tech/aicloud/db/migrations"
+	"github.com/tommyxie2026-tech/aicloud/internal/approval"
+	"github.com/tommyxie2026-tech/aicloud/internal/audit"
 	"github.com/tommyxie2026-tech/aicloud/internal/config"
 	"github.com/tommyxie2026-tech/aicloud/internal/controlplane"
+	"github.com/tommyxie2026-tech/aicloud/internal/credentials"
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 	"github.com/tommyxie2026-tech/aicloud/internal/httpapi"
 	"github.com/tommyxie2026-tech/aicloud/internal/logging"
 	"github.com/tommyxie2026-tech/aicloud/internal/modelservice"
+	"github.com/tommyxie2026-tech/aicloud/internal/policy"
 	"github.com/tommyxie2026-tech/aicloud/internal/providerfactory"
 	"github.com/tommyxie2026-tech/aicloud/internal/repository"
+	"github.com/tommyxie2026-tech/aicloud/internal/sandbox"
 	"github.com/tommyxie2026-tech/aicloud/internal/telemetry"
+	"github.com/tommyxie2026-tech/aicloud/internal/toolgateway"
 	"github.com/tommyxie2026-tech/aicloud/internal/workflow"
 	"github.com/tommyxie2026-tech/aicloud/model/provider"
 )
@@ -51,7 +57,10 @@ func main() {
 		}
 	}
 
-	control := controlplane.New(models, taskRepo, workflow.NoopEngine{}).WithGovernance(routeRepo, costRepo)
+	toolService, auditStore := buildSecureTools()
+	control := controlplane.New(models, taskRepo, workflow.NoopEngine{}).
+		WithGovernance(routeRepo, costRepo).
+		WithSecureTools(toolService, auditStore)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           httpapi.New(control, log).Handler(),
@@ -98,7 +107,7 @@ func buildRepositories(ctx context.Context, cfg config.Config) (
 
 	now := time.Now().UTC()
 	mock := domain.Model{
-		ID:                "mock/model-v1",
+		ID:                "mock-model-v1",
 		Name:              "Mock Model",
 		Version:           "v1",
 		Provider:          "mock",
@@ -118,6 +127,39 @@ func buildRepositories(ctx context.Context, cfg config.Config) (
 		UpdatedAt:         now,
 	}
 	return repository.NewMemoryModels(mock), repository.NewMemoryTasks(), repository.NewMemoryRouteDecisions(), repository.NewMemoryCostEvents(), func() {}, nil
+}
+
+func buildSecureTools() (*toolgateway.Service, *audit.MemoryStore) {
+	registry := toolgateway.NewMemoryRegistry(
+		toolgateway.Definition{
+			ID: "repo-inspect", Version: "v1", Image: "alpine/git:2.45.2",
+			Command: []string{"git", "status", "--short"}, RiskLevel: "low",
+			Permission: "repository:read", CredentialTTL: 2 * time.Minute,
+			CPU: "250m", Memory: "256Mi", Timeout: 2 * time.Minute,
+			NetworkMode: sandbox.NetworkDenyAll, WorkspaceWrite: false,
+		},
+		toolgateway.Definition{
+			ID: "workspace-command", Version: "v1", Image: "alpine:3.20",
+			Command: []string{"/bin/echo"}, RiskLevel: "high",
+			Permission: "workspace:write", CredentialTTL: 2 * time.Minute,
+			CPU: "500m", Memory: "512Mi", Timeout: 2 * time.Minute,
+			NetworkMode: sandbox.NetworkDenyAll, WorkspaceWrite: true,
+		},
+	)
+	policyEngine := policy.StaticEngine{Version: "builtin-tool-policy-v1", Rules: []policy.Rule{
+		{Name: "allow-repo-inspect", Subject: "*", Action: "inspect", Resource: "repo-inspect", Allowed: true, Reason: "read-only repository inspection"},
+		{Name: "approve-workspace-command", Subject: "*", Action: "execute", Resource: "workspace-command", Allowed: true, RequireApproval: true, Reason: "workspace modifications require approval"},
+	}}
+	auditStore := audit.NewMemoryStore()
+	service := toolgateway.NewService(
+		registry,
+		policyEngine,
+		approval.NewMemoryStore(),
+		credentials.NewMemoryBroker(),
+		sandbox.NewPlanningExecutor(),
+		auditStore,
+	)
+	return service, auditStore
 }
 
 func registerConfiguredProvider(ctx context.Context, models *modelservice.Service, adapter provider.ModelProvider, cfg config.ProviderConfig, log *slog.Logger) error {
@@ -142,9 +184,9 @@ func registerConfiguredProvider(ctx context.Context, models *modelservice.Servic
 			lifecycle = domain.ModelActive
 		}
 	}
-	approval := domain.ApprovalDiscovered
+	approvalStatus := domain.ApprovalDiscovered
 	if cfg.Approved {
-		approval = domain.ApprovalApproved
+		approvalStatus = domain.ApprovalApproved
 	}
 	deployment := domain.DeploymentPublicAPI
 	switch adapter.Type() {
@@ -183,7 +225,7 @@ func registerConfiguredProvider(ctx context.Context, models *modelservice.Servic
 			ReviewedAt:           reviewedAt(cfg.Approved, now),
 		},
 		Provenance:     domain.ModelProvenance{Source: cfg.Endpoint},
-		ApprovalStatus: approval,
+		ApprovalStatus: approvalStatus,
 		DataResidency:  cfg.DataResidency,
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -202,8 +244,8 @@ func registerConfiguredProvider(ctx context.Context, models *modelservice.Servic
 }
 
 func providerModelID(providerName, modelName, version string) string {
-	value := strings.ToLower(strings.Join([]string{providerName, modelName, version}, "/"))
-	replacer := strings.NewReplacer(" ", "-", ":", "-", "@", "-")
+	value := strings.ToLower(strings.Join([]string{providerName, modelName, version}, "-"))
+	replacer := strings.NewReplacer(" ", "-", ":", "-", "@", "-", "/", "-")
 	return replacer.Replace(value)
 }
 
