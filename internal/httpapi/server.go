@@ -237,12 +237,12 @@ func (s *Server) executeTool(w http.ResponseWriter, r *http.Request, taskID, too
 		return
 	}
 	var req struct {
-		AgentID      string            `json:"agentId,omitempty"`
-		Action       string            `json:"action"`
-		Arguments    []string          `json:"arguments,omitempty"`
-		Environment  map[string]string `json:"environment,omitempty"`
-		ApprovalID   string            `json:"approvalId,omitempty"`
-		WorkspacePath string           `json:"workspacePath,omitempty"`
+		AgentID       string            `json:"agentId,omitempty"`
+		Action        string            `json:"action"`
+		Arguments     []string          `json:"arguments,omitempty"`
+		Environment   map[string]string `json:"environment,omitempty"`
+		ApprovalID    string            `json:"approvalId,omitempty"`
+		WorkspacePath string            `json:"workspacePath,omitempty"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErrorStatus(w, http.StatusBadRequest, err.Error())

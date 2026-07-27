@@ -101,15 +101,15 @@ func (r *MemoryRegistry) List(_ context.Context) ([]Definition, error) {
 }
 
 type Request struct {
-	TaskID       string            `json:"taskId"`
-	TraceID      string            `json:"traceId"`
-	AgentID      string            `json:"agentId"`
-	ToolID       string            `json:"toolId"`
-	Action       string            `json:"action"`
-	Arguments    []string          `json:"arguments,omitempty"`
-	Environment  map[string]string `json:"environment,omitempty"`
-	ApprovalID   string            `json:"approvalId,omitempty"`
-	WorkspacePath string           `json:"workspacePath,omitempty"`
+	TaskID        string            `json:"taskId"`
+	TraceID       string            `json:"traceId"`
+	AgentID       string            `json:"agentId"`
+	ToolID        string            `json:"toolId"`
+	Action        string            `json:"action"`
+	Arguments     []string          `json:"arguments,omitempty"`
+	Environment   map[string]string `json:"environment,omitempty"`
+	ApprovalID    string            `json:"approvalId,omitempty"`
+	WorkspacePath string            `json:"workspacePath,omitempty"`
 }
 
 type Result struct {

@@ -24,13 +24,13 @@ func (DenyByDefault) Evaluate(context.Context, string, string, string) (Decision
 }
 
 type Rule struct {
-	Name             string
-	Subject          string
-	Action           string
-	Resource         string
-	Allowed          bool
-	RequireApproval  bool
-	Reason           string
+	Name            string
+	Subject         string
+	Action          string
+	Resource        string
+	Allowed         bool
+	RequireApproval bool
+	Reason          string
 }
 
 type StaticEngine struct {

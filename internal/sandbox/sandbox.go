@@ -20,14 +20,14 @@ const (
 )
 
 type Limits struct {
-	CPU             string        `json:"cpu"`
-	Memory          string        `json:"memory"`
-	Timeout         time.Duration `json:"timeout"`
-	NetworkMode     NetworkMode   `json:"networkMode"`
-	AllowedHosts    []string      `json:"allowedHosts,omitempty"`
-	ReadOnlyRootFS  bool          `json:"readOnlyRootFs"`
-	WorkspacePath   string        `json:"workspacePath"`
-	WorkspaceWrite  bool          `json:"workspaceWrite"`
+	CPU            string        `json:"cpu"`
+	Memory         string        `json:"memory"`
+	Timeout        time.Duration `json:"timeout"`
+	NetworkMode    NetworkMode   `json:"networkMode"`
+	AllowedHosts   []string      `json:"allowedHosts,omitempty"`
+	ReadOnlyRootFS bool          `json:"readOnlyRootFs"`
+	WorkspacePath  string        `json:"workspacePath"`
+	WorkspaceWrite bool          `json:"workspaceWrite"`
 }
 
 type Request struct {
@@ -42,10 +42,10 @@ type Request struct {
 }
 
 type Plan struct {
-	Namespace     string         `json:"namespace"`
-	ServiceAccount string        `json:"serviceAccount"`
-	Job           map[string]any `json:"job"`
-	NetworkPolicy map[string]any `json:"networkPolicy"`
+	Namespace      string         `json:"namespace"`
+	ServiceAccount string         `json:"serviceAccount"`
+	Job            map[string]any `json:"job"`
+	NetworkPolicy  map[string]any `json:"networkPolicy"`
 }
 
 type Result struct {
@@ -79,20 +79,20 @@ func (Planner) Plan(request Request) (Plan, error) {
 		"metadata": map[string]any{
 			"name":      "tool-" + name,
 			"namespace": namespace,
-			"labels": map[string]string{"aicloud.dev/task-id": request.TaskID, "aicloud.dev/tool-id": request.ToolID},
+			"labels":    map[string]string{"aicloud.dev/task-id": request.TaskID, "aicloud.dev/tool-id": request.ToolID},
 		},
 		"spec": map[string]any{
-			"backoffLimit":          0,
-			"activeDeadlineSeconds": deadline,
+			"backoffLimit":            0,
+			"activeDeadlineSeconds":   deadline,
 			"ttlSecondsAfterFinished": 300,
 			"template": map[string]any{
 				"metadata": map[string]any{"labels": map[string]string{"aicloud.dev/task-id": request.TaskID}},
 				"spec": map[string]any{
-					"restartPolicy":                 "Never",
-					"serviceAccountName":            serviceAccount,
+					"restartPolicy":                "Never",
+					"serviceAccountName":           serviceAccount,
 					"automountServiceAccountToken": false,
 					"securityContext": map[string]any{
-						"runAsNonRoot": true,
+						"runAsNonRoot":   true,
 						"seccompProfile": map[string]string{"type": "RuntimeDefault"},
 					},
 					"containers": []any{map[string]any{
@@ -104,7 +104,7 @@ func (Planner) Plan(request Request) (Plan, error) {
 							"allowPrivilegeEscalation": false,
 							"privileged":               false,
 							"readOnlyRootFilesystem":   request.Limits.ReadOnlyRootFS,
-							"capabilities": map[string]any{"drop": []string{"ALL"}},
+							"capabilities":             map[string]any{"drop": []string{"ALL"}},
 						},
 						"resources": map[string]any{
 							"requests": map[string]string{"cpu": request.Limits.CPU, "memory": request.Limits.Memory},
@@ -197,7 +197,7 @@ func networkEgress(limits Limits) []any {
 	// resolve them through an approved egress proxy rather than converting them
 	// directly into broad CIDR rules.
 	return []any{map[string]any{
-		"to": []any{map[string]any{"namespaceSelector": map[string]any{"matchLabels": map[string]string{"aicloud.dev/egress-proxy": "true"}}}},
+		"to":    []any{map[string]any{"namespaceSelector": map[string]any{"matchLabels": map[string]string{"aicloud.dev/egress-proxy": "true"}}}},
 		"ports": []any{map[string]any{"protocol": "TCP", "port": 443}},
 	}}
 }

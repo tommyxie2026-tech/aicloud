@@ -23,8 +23,8 @@ func (c OPAClient) Evaluate(ctx context.Context, subject, action, resource strin
 		return Decision{}, fmt.Errorf("OPA base URL and decision path are required")
 	}
 	body, err := json.Marshal(map[string]any{"input": map[string]string{
-		"subject": subject,
-		"action": action,
+		"subject":  subject,
+		"action":   action,
 		"resource": resource,
 	}})
 	if err != nil {
