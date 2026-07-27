@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -46,6 +47,27 @@ func NewHTTPClient(config Config, doer HTTPDoer, resolver SecretResolver) (*HTTP
 }
 
 func (c *HTTPClient) Health(ctx context.Context) error {
+	ctx, cancel := c.timeoutPolicy.WithTimeout(ctx)
+	defer cancel()
+	apiKey, err := c.resolver.ResolveSecret(ctx, c.config.SecretRef)
+	if err != nil {
+		return NewHTTPClientError("SecretResolveFailed", err.Error())
+	}
+	url := strings.TrimRight(c.config.Endpoint, "/") + "/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return NewHTTPClientError("HealthRequestBuildFailed", err.Error())
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := c.doer.Do(req)
+	if err != nil {
+		return NewHTTPClientError("HealthRequestFailed", err.Error())
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return NewHTTPClientError("HealthNon2xxResponse", fmt.Sprintf("status=%d body=%s", resp.StatusCode, string(data)))
+	}
 	return nil
 }
 

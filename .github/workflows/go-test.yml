@@ -9,6 +9,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: go test
@@ -17,17 +20,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          cache: false
+          cache: true
 
       - name: Verify module files are tidy
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
+      - name: Check changed Go files are formatted
+        run: |
+          changed=$(git diff --name-only --diff-filter=ACMR HEAD^ -- '*.go')
+          if [ -n "$changed" ]; then
+            test -z "$(gofmt -l $changed)"
+          fi
+
       - name: Run tests
         run: go test ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Build entrypoints
+        run: go build ./cmd/api-server ./cmd/worker ./cmd/migrate

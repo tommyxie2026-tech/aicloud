@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/tommyxie2026-tech/aicloud/internal/controlplane"
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 	"github.com/tommyxie2026-tech/aicloud/internal/repository"
+	"github.com/tommyxie2026-tech/aicloud/internal/router"
 )
 
 type Server struct {
@@ -26,8 +28,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/api/v1/models", s.models)
+	mux.HandleFunc("/api/v1/models/", s.modelByID)
 	mux.HandleFunc("/api/v1/tasks", s.tasks)
-	mux.HandleFunc("/api/v1/tasks/", s.taskByID)
+	mux.HandleFunc("/api/v1/tasks/", s.taskResource)
 	return requestLogger(s.log, mux)
 }
 
@@ -69,6 +72,42 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) modelByID(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/models/")
+	if id == "" || strings.Contains(id, "/") {
+		writeErrorStatus(w, http.StatusBadRequest, "model id is required")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		model, err := s.control.GetModel(r.Context(), id)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, model)
+	case http.MethodPut:
+		var model domain.Model
+		if err := decodeJSON(r, &model); err != nil {
+			writeErrorStatus(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		model.ID = id
+		if model.Name == "" || model.Provider == "" {
+			writeErrorStatus(w, http.StatusBadRequest, "name and provider are required")
+			return
+		}
+		updated, err := s.control.UpdateModel(r.Context(), model)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPut)
+	}
+}
+
 func (s *Server) tasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -102,22 +141,112 @@ func (s *Server) tasks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) taskByID(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w, http.MethodGet)
-		return
-	}
-	id := strings.TrimPrefix(r.URL.Path, "/api/v1/tasks/")
-	if id == "" {
+func (s *Server) taskResource(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/tasks/"), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
 		writeErrorStatus(w, http.StatusBadRequest, "task id is required")
 		return
 	}
-	task, err := s.control.GetTask(r.Context(), id)
+	taskID := parts[0]
+	if len(parts) == 1 {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		task, err := s.control.GetTask(r.Context(), taskID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, task)
+		return
+	}
+	if len(parts) != 2 {
+		writeErrorStatus(w, http.StatusNotFound, "task resource not found")
+		return
+	}
+	switch parts[1] {
+	case "route":
+		s.routeTask(w, r, taskID)
+	case "routes":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		items, err := s.control.ListRouteDecisions(r.Context(), taskID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, items)
+	case "costs":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		items, err := s.control.ListCostEvents(r.Context(), taskID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, items)
+	default:
+		writeErrorStatus(w, http.StatusNotFound, "task resource not found")
+	}
+}
+
+func (s *Server) routeTask(w http.ResponseWriter, r *http.Request, taskID string) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	var req struct {
+		RouteClass            domain.RouteClass      `json:"routeClass"`
+		RequiredCapabilities  []string               `json:"requiredCapabilities,omitempty"`
+		InferenceEffort       domain.InferenceEffort `json:"inferenceEffort,omitempty"`
+		ServiceTier           domain.ServiceTier     `json:"serviceTier,omitempty"`
+		EstimatedInputTokens  int                    `json:"estimatedInputTokens,omitempty"`
+		EstimatedOutputTokens int                    `json:"estimatedOutputTokens,omitempty"`
+		Budget                float64                `json:"budget,omitempty"`
+		Currency              string                 `json:"currency,omitempty"`
+		DataResidency         string                 `json:"dataResidency,omitempty"`
+		EvidenceVersion       string                 `json:"evidenceVersion,omitempty"`
+		PolicyVersion         string                 `json:"policyVersion,omitempty"`
+		AllowDegraded         bool                   `json:"allowDegraded,omitempty"`
+		RequireFreshSignals   bool                   `json:"requireFreshSignals,omitempty"`
+		SignalMaxAgeSeconds   int                    `json:"signalMaxAgeSeconds,omitempty"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	decision, err := s.control.DecideRoute(r.Context(), router.Request{
+		TaskID:                taskID,
+		RouteClass:            req.RouteClass,
+		RequiredCapabilities:  req.RequiredCapabilities,
+		InferenceEffort:       req.InferenceEffort,
+		ServiceTier:           req.ServiceTier,
+		EstimatedInputTokens:  req.EstimatedInputTokens,
+		EstimatedOutputTokens: req.EstimatedOutputTokens,
+		Budget:                req.Budget,
+		Currency:              req.Currency,
+		DataResidency:         req.DataResidency,
+		EvidenceVersion:       req.EvidenceVersion,
+		PolicyVersion:         req.PolicyVersion,
+		AllowDegraded:         req.AllowDegraded,
+		RequireFreshSignals:   req.RequireFreshSignals,
+		SignalMaxAge:          time.Duration(req.SignalMaxAgeSeconds) * time.Second,
+	})
 	if err != nil {
+		if strings.Contains(err.Error(), "no policy-compliant model capacity") {
+			writeErrorStatus(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, task)
+	writeJSON(w, http.StatusCreated, decision)
 }
 
 func decodeJSON(r *http.Request, target any) error {

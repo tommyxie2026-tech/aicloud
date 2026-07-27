@@ -7,5 +7,19 @@ service:
   type: ClusterIP
   port: 8080
 env:
+  repositoryMode: postgres
+  runMigrations: true
   databaseURL: postgres://aicloud:aicloud@postgres:5432/aicloud?sslmode=disable
   redisURL: redis://redis:6379/0
+  provider:
+    enabled: false
+    name: openai-compatible
+    endpoint: https://api.openai.com/v1
+    secretEnv: OPENAI_API_KEY
+    model: ""
+    modelVersion: v1
+    approved: false
+    license: commercial-api
+    currency: USD
+    inputPerMillion: 0
+    outputPerMillion: 0
