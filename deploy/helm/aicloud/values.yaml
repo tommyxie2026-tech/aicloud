@@ -1,0 +1,11 @@
+replicaCount: 1
+image:
+  repository: aicloud
+  tag: latest
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 8080
+env:
+  databaseURL: postgres://aicloud:aicloud@postgres:5432/aicloud?sslmode=disable
+  redisURL: redis://redis:6379/0
