@@ -22,10 +22,36 @@ spec:
           env:
             - name: AICLOUD_HTTP_ADDR
               value: ":8080"
+            - name: AICLOUD_REPOSITORY_MODE
+              value: {{ .Values.env.repositoryMode | quote }}
+            - name: AICLOUD_RUN_MIGRATIONS
+              value: {{ .Values.env.runMigrations | quote }}
             - name: AICLOUD_DATABASE_URL
               value: {{ .Values.env.databaseURL | quote }}
             - name: AICLOUD_REDIS_URL
               value: {{ .Values.env.redisURL | quote }}
+            - name: AICLOUD_PROVIDER_ENABLED
+              value: {{ .Values.env.provider.enabled | quote }}
+            - name: AICLOUD_PROVIDER_NAME
+              value: {{ .Values.env.provider.name | quote }}
+            - name: AICLOUD_PROVIDER_ENDPOINT
+              value: {{ .Values.env.provider.endpoint | quote }}
+            - name: AICLOUD_PROVIDER_SECRET_ENV
+              value: {{ .Values.env.provider.secretEnv | quote }}
+            - name: AICLOUD_PROVIDER_MODEL
+              value: {{ .Values.env.provider.model | quote }}
+            - name: AICLOUD_PROVIDER_MODEL_VERSION
+              value: {{ .Values.env.provider.modelVersion | quote }}
+            - name: AICLOUD_PROVIDER_APPROVED
+              value: {{ .Values.env.provider.approved | quote }}
+            - name: AICLOUD_PROVIDER_LICENSE
+              value: {{ .Values.env.provider.license | quote }}
+            - name: AICLOUD_PROVIDER_CURRENCY
+              value: {{ .Values.env.provider.currency | quote }}
+            - name: AICLOUD_PROVIDER_INPUT_PER_MILLION
+              value: {{ .Values.env.provider.inputPerMillion | quote }}
+            - name: AICLOUD_PROVIDER_OUTPUT_PER_MILLION
+              value: {{ .Values.env.provider.outputPerMillion | quote }}
           readinessProbe:
             httpGet:
               path: /readyz
