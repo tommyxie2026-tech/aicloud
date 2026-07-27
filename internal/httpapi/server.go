@@ -12,6 +12,8 @@ import (
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 	"github.com/tommyxie2026-tech/aicloud/internal/repository"
 	"github.com/tommyxie2026-tech/aicloud/internal/router"
+	"github.com/tommyxie2026-tech/aicloud/internal/sandbox"
+	"github.com/tommyxie2026-tech/aicloud/internal/toolgateway"
 )
 
 type Server struct {
@@ -29,6 +31,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/api/v1/models", s.models)
 	mux.HandleFunc("/api/v1/models/", s.modelByID)
+	mux.HandleFunc("/api/v1/tools", s.tools)
 	mux.HandleFunc("/api/v1/tasks", s.tasks)
 	mux.HandleFunc("/api/v1/tasks/", s.taskResource)
 	return requestLogger(s.log, mux)
@@ -108,6 +111,19 @@ func (s *Server) modelByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) tools(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	items, err := s.control.ListTools(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 func (s *Server) tasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -162,6 +178,10 @@ func (s *Server) taskResource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, task)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "tools" {
+		s.executeTool(w, r, taskID, parts[2])
+		return
+	}
 	if len(parts) != 2 {
 		writeErrorStatus(w, http.StatusNotFound, "task resource not found")
 		return
@@ -191,9 +211,61 @@ func (s *Server) taskResource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, items)
+	case "audit":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		items, err := s.control.ListToolAudit(r.Context(), taskID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, items)
 	default:
 		writeErrorStatus(w, http.StatusNotFound, "task resource not found")
 	}
+}
+
+func (s *Server) executeTool(w http.ResponseWriter, r *http.Request, taskID, toolID string) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	if toolID == "" {
+		writeErrorStatus(w, http.StatusBadRequest, "tool id is required")
+		return
+	}
+	var req struct {
+		AgentID       string            `json:"agentId,omitempty"`
+		Action        string            `json:"action"`
+		Arguments     []string          `json:"arguments,omitempty"`
+		Environment   map[string]string `json:"environment,omitempty"`
+		ApprovalID    string            `json:"approvalId,omitempty"`
+		WorkspacePath string            `json:"workspacePath,omitempty"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Action) == "" {
+		writeErrorStatus(w, http.StatusBadRequest, "action is required")
+		return
+	}
+	result, err := s.control.ExecuteTool(r.Context(), taskID, toolgateway.Request{
+		AgentID:       req.AgentID,
+		ToolID:        toolID,
+		Action:        req.Action,
+		Arguments:     req.Arguments,
+		Environment:   req.Environment,
+		ApprovalID:    req.ApprovalID,
+		WorkspacePath: req.WorkspacePath,
+	})
+	if err != nil {
+		writeToolError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, result)
 }
 
 func (s *Server) routeTask(w http.ResponseWriter, r *http.Request, taskID string) {
@@ -268,6 +340,21 @@ func writeError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeErrorStatus(w, http.StatusInternalServerError, err.Error())
+}
+
+func writeToolError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, repository.ErrNotFound), errors.Is(err, toolgateway.ErrToolNotFound):
+		writeErrorStatus(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, toolgateway.ErrDenied):
+		writeErrorStatus(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, toolgateway.ErrApprovalRequired):
+		writeErrorStatus(w, http.StatusConflict, err.Error())
+	case errors.Is(err, sandbox.ErrInvalidRequest):
+		writeErrorStatus(w, http.StatusBadRequest, err.Error())
+	default:
+		writeErrorStatus(w, http.StatusInternalServerError, err.Error())
+	}
 }
 
 func writeErrorStatus(w http.ResponseWriter, status int, message string) {
