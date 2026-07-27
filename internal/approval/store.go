@@ -23,7 +23,7 @@ type Record struct {
 type Store interface {
 	Get(context.Context, string) (Record, error)
 	Put(context.Context, Record) error
-	Validate(context.Context, string, string, string) (Record, error)
+	Validate(context.Context, string, string, string, string) (Record, error)
 }
 
 type MemoryStore struct {
@@ -53,12 +53,12 @@ func (s *MemoryStore) Put(_ context.Context, record Record) error {
 	return nil
 }
 
-func (s *MemoryStore) Validate(ctx context.Context, approvalID, taskID, toolID string) (Record, error) {
+func (s *MemoryStore) Validate(ctx context.Context, approvalID, taskID, toolID, action string) (Record, error) {
 	record, err := s.Get(ctx, approvalID)
 	if err != nil {
 		return Record{}, err
 	}
-	if record.Revoked || record.TaskID != taskID || record.ToolID != toolID || !record.ExpiresAt.After(s.now()) {
+	if record.Revoked || record.TaskID != taskID || record.ToolID != toolID || record.Action != action || !record.ExpiresAt.After(s.now()) {
 		return Record{}, ErrApprovalNotFound
 	}
 	return record, nil
