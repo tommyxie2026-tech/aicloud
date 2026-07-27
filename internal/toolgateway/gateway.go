@@ -35,19 +35,19 @@ func (DenyByDefault) Invoke(context.Context, string, string) (string, error) {
 }
 
 type Definition struct {
-	ID                 string              `json:"id"`
-	Version            string              `json:"version"`
-	Image              string              `json:"image"`
-	Command            []string            `json:"command"`
-	RiskLevel          string              `json:"riskLevel"`
-	Permission         string              `json:"permission"`
-	CredentialTTL      time.Duration       `json:"credentialTtl"`
-	CPU                string              `json:"cpu"`
-	Memory             string              `json:"memory"`
-	Timeout            time.Duration       `json:"timeout"`
-	NetworkMode        sandbox.NetworkMode `json:"networkMode"`
-	AllowedHosts       []string            `json:"allowedHosts,omitempty"`
-	WorkspaceWrite     bool                `json:"workspaceWrite"`
+	ID             string              `json:"id"`
+	Version        string              `json:"version"`
+	Image          string              `json:"image"`
+	Command        []string            `json:"command"`
+	RiskLevel      string              `json:"riskLevel"`
+	Permission     string              `json:"permission"`
+	CredentialTTL  time.Duration       `json:"credentialTtl"`
+	CPU            string              `json:"cpu"`
+	Memory         string              `json:"memory"`
+	Timeout        time.Duration       `json:"timeout"`
+	NetworkMode    sandbox.NetworkMode `json:"networkMode"`
+	AllowedHosts   []string            `json:"allowedHosts,omitempty"`
+	WorkspaceWrite bool                `json:"workspaceWrite"`
 }
 
 type Registry interface {
@@ -113,11 +113,11 @@ type Request struct {
 }
 
 type Result struct {
-	ToolID        string         `json:"toolId"`
+	ToolID        string          `json:"toolId"`
 	Policy        policy.Decision `json:"policy"`
-	ApprovalID    string         `json:"approvalId,omitempty"`
-	CredentialID  string         `json:"credentialId,omitempty"`
-	SandboxResult sandbox.Result `json:"sandboxResult"`
+	ApprovalID    string          `json:"approvalId,omitempty"`
+	CredentialID  string          `json:"credentialId,omitempty"`
+	SandboxResult sandbox.Result  `json:"sandboxResult"`
 }
 
 type Service struct {
@@ -138,6 +138,9 @@ func (s *Service) Execute(ctx context.Context, request Request) (Result, error) 
 	if request.TaskID == "" || request.TraceID == "" || request.AgentID == "" || request.ToolID == "" || request.Action == "" {
 		return Result{}, fmt.Errorf("invalid tool request")
 	}
+	if s.registry == nil || s.policy == nil || s.approvals == nil || s.credentials == nil || s.sandbox == nil {
+		return Result{}, fmt.Errorf("tool gateway dependencies are incomplete")
+	}
 	definition, err := s.registry.Get(ctx, request.ToolID)
 	if err != nil {
 		return Result{}, err
@@ -155,25 +158,20 @@ func (s *Service) Execute(ctx context.Context, request Request) (Result, error) 
 			s.appendAudit(ctx, request, definition, decision, "WAITING_APPROVAL", "approval is required", "", "", nil)
 			return Result{ToolID: request.ToolID, Policy: decision}, ErrApprovalRequired
 		}
-		if _, err := s.approvals.Validate(ctx, request.ApprovalID, request.TaskID, request.ToolID); err != nil {
+		if _, err := s.approvals.Validate(ctx, request.ApprovalID, request.TaskID, request.ToolID, request.Action); err != nil {
 			s.appendAudit(ctx, request, definition, decision, "DENIED", "approval is invalid", "", "", nil)
 			return Result{ToolID: request.ToolID, Policy: decision}, ErrApprovalRequired
 		}
 	}
-	lease, err := s.credentials.Issue(ctx, credentials.Request{TaskID: request.TaskID, ToolID: request.ToolID, Permission: definition.Permission, TTL: definition.CredentialTTL})
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = s.credentials.Revoke(context.Background(), lease.ID) }()
+
 	command := append(append([]string(nil), definition.Command...), request.Arguments...)
 	sandboxRequest := sandbox.Request{
-		TaskID:            request.TaskID,
-		TraceID:           request.TraceID,
-		ToolID:            request.ToolID,
-		Image:             definition.Image,
-		Command:           command,
-		Environment:       request.Environment,
-		CredentialLeaseID: lease.ID,
+		TaskID:      request.TaskID,
+		TraceID:     request.TraceID,
+		ToolID:      request.ToolID,
+		Image:       definition.Image,
+		Command:     command,
+		Environment: request.Environment,
 		Limits: sandbox.Limits{
 			CPU:            definition.CPU,
 			Memory:         definition.Memory,
@@ -185,6 +183,17 @@ func (s *Service) Execute(ctx context.Context, request Request) (Result, error) 
 			WorkspaceWrite: definition.WorkspaceWrite,
 		},
 	}
+	if _, err := (sandbox.Planner{}).Plan(sandboxRequest); err != nil {
+		s.appendAudit(ctx, request, definition, decision, "DENIED", err.Error(), request.ApprovalID, "", nil)
+		return Result{}, err
+	}
+
+	lease, err := s.credentials.Issue(ctx, credentials.Request{TaskID: request.TaskID, ToolID: request.ToolID, Permission: definition.Permission, TTL: definition.CredentialTTL})
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = s.credentials.Revoke(context.Background(), lease.ID) }()
+	sandboxRequest.CredentialLeaseID = lease.ID
 	sandboxResult, err := s.sandbox.Execute(ctx, sandboxRequest)
 	if err != nil {
 		s.appendAudit(ctx, request, definition, decision, "FAILED", err.Error(), request.ApprovalID, lease.ID, nil)
