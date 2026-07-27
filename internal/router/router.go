@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tommyxie2026-tech/aicloud/internal/admission"
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 )
 
@@ -31,11 +32,17 @@ type Request struct {
 type Router struct {
 	models    domain.ModelRepository
 	decisions domain.RouteDecisionRepository
+	admission *admission.Service
 	now       func() time.Time
 }
 
 func New(models domain.ModelRepository, decisions domain.RouteDecisionRepository) *Router {
 	return &Router{models: models, decisions: decisions, now: time.Now}
+}
+
+func (r *Router) WithAdmission(service *admission.Service) *Router {
+	r.admission = service
+	return r
 }
 
 func (r *Router) Decide(ctx context.Context, req Request) (domain.RouteDecision, error) {
@@ -73,6 +80,15 @@ func (r *Router) Decide(ctx context.Context, req Request) (domain.RouteDecision,
 	eligible := make([]domain.RouteCandidate, 0, len(models))
 	for _, model := range models {
 		candidate := evaluate(model, req, now)
+		if r.admission != nil {
+			admissionDecision, admissionErr := r.admission.Check(ctx, model)
+			if admissionErr != nil {
+				return domain.RouteDecision{}, fmt.Errorf("check model admission for %s: %w", model.ID, admissionErr)
+			}
+			if !admissionDecision.Allowed {
+				candidate.RejectionReasons = append(candidate.RejectionReasons, admissionDecision.Reasons...)
+			}
+		}
 		candidates = append(candidates, candidate)
 		if len(candidate.RejectionReasons) == 0 {
 			eligible = append(eligible, candidate)
@@ -94,7 +110,7 @@ func (r *Router) Decide(ctx context.Context, req Request) (domain.RouteDecision,
 		TaskID:          req.TaskID,
 		Selected:        selected,
 		Candidates:      candidates,
-		Reason:          fmt.Sprintf("selected %s@%s by capability, governance, health, capacity and estimated task cost", selected.ModelID, selected.ModelVersion),
+		Reason:          fmt.Sprintf("selected %s@%s by capability, admission evidence, health, capacity and estimated task cost", selected.ModelID, selected.ModelVersion),
 		FallbackChain:   fallback,
 		EvidenceVersion: req.EvidenceVersion,
 		PolicyVersion:   req.PolicyVersion,
@@ -131,8 +147,6 @@ func evaluate(model domain.Model, req Request, now time.Time) domain.RouteCandid
 	if req.RequireFreshSignals && (model.HealthCheckedAt == nil || now.Sub(*model.HealthCheckedAt) > req.SignalMaxAge) {
 		reject("runtime health and capacity signals are stale")
 	}
-	// Negative means the provider does not expose the signal. Zero is an
-	// explicit exhausted state and is rejected.
 	if model.HealthCheckedAt != nil && model.CapacityAvailable == 0 {
 		reject("model has no reported available capacity")
 	}
