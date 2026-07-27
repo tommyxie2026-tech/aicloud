@@ -29,6 +29,7 @@ func ApplyManagedClusterPatch(plan ManifestPatchPlan, cluster infraapi.ManagedCl
 	}
 
 	updated := cluster
+	updated.Spec.Workers = append([]infraapi.WorkerGroupSpec(nil), cluster.Spec.Workers...)
 	for _, change := range plan.Changes {
 		if change.Field != managedClusterWorkerReplicasField {
 			return cluster, NewGitOpsError("UnsupportedManagedClusterField", fmt.Sprintf("unsupported ManagedCluster patch field %s", change.Field))
