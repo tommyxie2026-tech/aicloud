@@ -131,10 +131,12 @@ func evaluate(model domain.Model, req Request, now time.Time) domain.RouteCandid
 	if req.RequireFreshSignals && (model.HealthCheckedAt == nil || now.Sub(*model.HealthCheckedAt) > req.SignalMaxAge) {
 		reject("runtime health and capacity signals are stale")
 	}
-	if model.HealthCheckedAt != nil && model.CapacityAvailable <= 0 {
+	// Negative means the provider does not expose the signal. Zero is an
+	// explicit exhausted state and is rejected.
+	if model.HealthCheckedAt != nil && model.CapacityAvailable == 0 {
 		reject("model has no reported available capacity")
 	}
-	if model.HealthCheckedAt != nil && model.QuotaRemaining <= 0 {
+	if model.HealthCheckedAt != nil && model.QuotaRemaining == 0 {
 		reject("provider quota is exhausted")
 	}
 	if req.DataResidency != "" && model.DataResidency != "" && !strings.EqualFold(req.DataResidency, model.DataResidency) {
