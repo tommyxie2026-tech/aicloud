@@ -20,9 +20,9 @@ func TestRouterSelectsApprovedLowerCostHealthyModel(t *testing.T) {
 	r.now = func() time.Time { return now }
 
 	decision, err := r.Decide(context.Background(), Request{
-		TaskID:               "task-1",
+		TaskID:                "task-1",
 		RouteClass:            domain.RouteEfficient,
-		RequiredCapabilities: []string{"coding"},
+		RequiredCapabilities:  []string{"coding"},
 		EstimatedInputTokens:  1000,
 		EstimatedOutputTokens: 1000,
 		Budget:                1,
@@ -49,8 +49,8 @@ func TestRouterRejectsUnapprovedAndOverBudgetModels(t *testing.T) {
 	r.now = func() time.Time { return now }
 
 	_, err := r.Decide(context.Background(), Request{
-		TaskID:               "task-2",
-		RequiredCapabilities: []string{"coding"},
+		TaskID:                "task-2",
+		RequiredCapabilities:  []string{"coding"},
 		EstimatedInputTokens:  1_000_000,
 		EstimatedOutputTokens: 1_000_000,
 		Budget:                1,

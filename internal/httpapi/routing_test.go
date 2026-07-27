@@ -56,7 +56,7 @@ func TestTaskRoutingAPI(t *testing.T) {
 
 	routeBody, _ := json.Marshal(map[string]any{
 		"routeClass":            "efficient",
-		"requiredCapabilities": []string{"coding"},
+		"requiredCapabilities":  []string{"coding"},
 		"estimatedInputTokens":  1000,
 		"estimatedOutputTokens": 1000,
 		"budget":                1,

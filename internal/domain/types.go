@@ -86,34 +86,34 @@ type ModelProvenance struct {
 }
 
 type Model struct {
-	ID                  string            `json:"id"`
-	Name                string            `json:"name"`
-	Version             string            `json:"version"`
-	Provider            string            `json:"provider"`
-	Endpoint            string            `json:"endpoint,omitempty"`
-	DeploymentMode      DeploymentMode    `json:"deploymentMode,omitempty"`
-	Lifecycle           ModelLifecycle    `json:"lifecycle"`
-	Capabilities        []string          `json:"capabilities,omitempty"`
-	Pricing             PricingProfile    `json:"pricing,omitempty"`
-	Health              HealthStatus      `json:"health"`
-	HealthCheckedAt     *time.Time         `json:"healthCheckedAt,omitempty"`
-	P95LatencyMS        int64              `json:"p95LatencyMs,omitempty"`
-	ErrorRate           float64            `json:"errorRate,omitempty"`
-	QuotaRemaining      int64              `json:"quotaRemaining,omitempty"`
-	CapacityAvailable   int64              `json:"capacityAvailable,omitempty"`
-	QueueDepth          int64              `json:"queueDepth,omitempty"`
-	ServiceTiers        []ServiceTier      `json:"serviceTiers,omitempty"`
-	InferenceEfforts    []InferenceEffort  `json:"inferenceEfforts,omitempty"`
-	EvaluationVersion   string             `json:"evaluationVersion,omitempty"`
-	License             string             `json:"license,omitempty"`
-	LicenseEvidence     LicenseEvidence    `json:"licenseEvidence,omitempty"`
-	Provenance          ModelProvenance    `json:"provenance,omitempty"`
-	ArtifactDigest      string             `json:"artifactDigest,omitempty"`
-	ApprovalStatus      ApprovalStatus     `json:"approvalStatus"`
-	RiskLevel           string             `json:"riskLevel,omitempty"`
-	DataResidency       string             `json:"dataResidency,omitempty"`
-	CreatedAt           time.Time          `json:"createdAt"`
-	UpdatedAt           time.Time          `json:"updatedAt"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Version           string            `json:"version"`
+	Provider          string            `json:"provider"`
+	Endpoint          string            `json:"endpoint,omitempty"`
+	DeploymentMode    DeploymentMode    `json:"deploymentMode,omitempty"`
+	Lifecycle         ModelLifecycle    `json:"lifecycle"`
+	Capabilities      []string          `json:"capabilities,omitempty"`
+	Pricing           PricingProfile    `json:"pricing,omitempty"`
+	Health            HealthStatus      `json:"health"`
+	HealthCheckedAt   *time.Time        `json:"healthCheckedAt,omitempty"`
+	P95LatencyMS      int64             `json:"p95LatencyMs,omitempty"`
+	ErrorRate         float64           `json:"errorRate,omitempty"`
+	QuotaRemaining    int64             `json:"quotaRemaining,omitempty"`
+	CapacityAvailable int64             `json:"capacityAvailable,omitempty"`
+	QueueDepth        int64             `json:"queueDepth,omitempty"`
+	ServiceTiers      []ServiceTier     `json:"serviceTiers,omitempty"`
+	InferenceEfforts  []InferenceEffort `json:"inferenceEfforts,omitempty"`
+	EvaluationVersion string            `json:"evaluationVersion,omitempty"`
+	License           string            `json:"license,omitempty"`
+	LicenseEvidence   LicenseEvidence   `json:"licenseEvidence,omitempty"`
+	Provenance        ModelProvenance   `json:"provenance,omitempty"`
+	ArtifactDigest    string            `json:"artifactDigest,omitempty"`
+	ApprovalStatus    ApprovalStatus    `json:"approvalStatus"`
+	RiskLevel         string            `json:"riskLevel,omitempty"`
+	DataResidency     string            `json:"dataResidency,omitempty"`
+	CreatedAt         time.Time         `json:"createdAt"`
+	UpdatedAt         time.Time         `json:"updatedAt"`
 }
 
 type PricingProfile struct {
@@ -195,32 +195,32 @@ type RouteCandidate struct {
 }
 
 type RouteDecision struct {
-	ID                string           `json:"id"`
-	TaskID            string           `json:"taskId"`
-	Selected          RouteCandidate   `json:"selected"`
-	Candidates        []RouteCandidate `json:"candidates"`
-	Reason            string           `json:"reason"`
-	FallbackChain     []RouteCandidate `json:"fallbackChain,omitempty"`
-	EvidenceVersion   string           `json:"evidenceVersion,omitempty"`
-	PolicyVersion     string           `json:"policyVersion,omitempty"`
-	CreatedAt         time.Time        `json:"createdAt"`
+	ID              string           `json:"id"`
+	TaskID          string           `json:"taskId"`
+	Selected        RouteCandidate   `json:"selected"`
+	Candidates      []RouteCandidate `json:"candidates"`
+	Reason          string           `json:"reason"`
+	FallbackChain   []RouteCandidate `json:"fallbackChain,omitempty"`
+	EvidenceVersion string           `json:"evidenceVersion,omitempty"`
+	PolicyVersion   string           `json:"policyVersion,omitempty"`
+	CreatedAt       time.Time        `json:"createdAt"`
 }
 
 type CostComponent string
 
 const (
-	CostModelInput   CostComponent = "model-input"
-	CostModelOutput  CostComponent = "model-output"
-	CostModelCache   CostComponent = "model-cache"
-	CostServiceTier  CostComponent = "service-tier"
-	CostTool         CostComponent = "tool"
-	CostWorkflow     CostComponent = "workflow"
-	CostSandbox      CostComponent = "sandbox"
-	CostStorage      CostComponent = "storage"
-	CostNetwork      CostComponent = "network"
-	CostRetry        CostComponent = "retry"
-	CostEvaluation   CostComponent = "evaluation"
-	CostHumanReview  CostComponent = "human-review"
+	CostModelInput  CostComponent = "model-input"
+	CostModelOutput CostComponent = "model-output"
+	CostModelCache  CostComponent = "model-cache"
+	CostServiceTier CostComponent = "service-tier"
+	CostTool        CostComponent = "tool"
+	CostWorkflow    CostComponent = "workflow"
+	CostSandbox     CostComponent = "sandbox"
+	CostStorage     CostComponent = "storage"
+	CostNetwork     CostComponent = "network"
+	CostRetry       CostComponent = "retry"
+	CostEvaluation  CostComponent = "evaluation"
+	CostHumanReview CostComponent = "human-review"
 )
 
 type CostEvent struct {

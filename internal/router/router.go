@@ -11,9 +11,9 @@ import (
 )
 
 type Request struct {
-	TaskID               string
+	TaskID                string
 	RouteClass            domain.RouteClass
-	RequiredCapabilities []string
+	RequiredCapabilities  []string
 	InferenceEffort       domain.InferenceEffort
 	ServiceTier           domain.ServiceTier
 	EstimatedInputTokens  int

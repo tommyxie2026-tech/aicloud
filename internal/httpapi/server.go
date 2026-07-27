@@ -202,29 +202,29 @@ func (s *Server) routeTask(w http.ResponseWriter, r *http.Request, taskID string
 		return
 	}
 	var req struct {
-		RouteClass            domain.RouteClass       `json:"routeClass"`
-		RequiredCapabilities []string                `json:"requiredCapabilities,omitempty"`
-		InferenceEffort       domain.InferenceEffort  `json:"inferenceEffort,omitempty"`
-		ServiceTier           domain.ServiceTier      `json:"serviceTier,omitempty"`
-		EstimatedInputTokens  int                     `json:"estimatedInputTokens,omitempty"`
-		EstimatedOutputTokens int                     `json:"estimatedOutputTokens,omitempty"`
-		Budget                float64                 `json:"budget,omitempty"`
-		Currency              string                  `json:"currency,omitempty"`
-		DataResidency         string                  `json:"dataResidency,omitempty"`
-		EvidenceVersion       string                  `json:"evidenceVersion,omitempty"`
-		PolicyVersion         string                  `json:"policyVersion,omitempty"`
-		AllowDegraded         bool                    `json:"allowDegraded,omitempty"`
-		RequireFreshSignals   bool                    `json:"requireFreshSignals,omitempty"`
-		SignalMaxAgeSeconds   int                     `json:"signalMaxAgeSeconds,omitempty"`
+		RouteClass            domain.RouteClass      `json:"routeClass"`
+		RequiredCapabilities  []string               `json:"requiredCapabilities,omitempty"`
+		InferenceEffort       domain.InferenceEffort `json:"inferenceEffort,omitempty"`
+		ServiceTier           domain.ServiceTier     `json:"serviceTier,omitempty"`
+		EstimatedInputTokens  int                    `json:"estimatedInputTokens,omitempty"`
+		EstimatedOutputTokens int                    `json:"estimatedOutputTokens,omitempty"`
+		Budget                float64                `json:"budget,omitempty"`
+		Currency              string                 `json:"currency,omitempty"`
+		DataResidency         string                 `json:"dataResidency,omitempty"`
+		EvidenceVersion       string                 `json:"evidenceVersion,omitempty"`
+		PolicyVersion         string                 `json:"policyVersion,omitempty"`
+		AllowDegraded         bool                   `json:"allowDegraded,omitempty"`
+		RequireFreshSignals   bool                   `json:"requireFreshSignals,omitempty"`
+		SignalMaxAgeSeconds   int                    `json:"signalMaxAgeSeconds,omitempty"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErrorStatus(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	decision, err := s.control.DecideRoute(r.Context(), router.Request{
-		TaskID:               taskID,
+		TaskID:                taskID,
 		RouteClass:            req.RouteClass,
-		RequiredCapabilities: req.RequiredCapabilities,
+		RequiredCapabilities:  req.RequiredCapabilities,
 		InferenceEffort:       req.InferenceEffort,
 		ServiceTier:           req.ServiceTier,
 		EstimatedInputTokens:  req.EstimatedInputTokens,

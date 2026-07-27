@@ -13,7 +13,9 @@ func New(repo domain.ModelRepository) *Service { return &Service{repo: repo} }
 
 func (s *Service) List(ctx context.Context) ([]domain.Model, error) { return s.repo.List(ctx) }
 
-func (s *Service) Get(ctx context.Context, id string) (domain.Model, error) { return s.repo.Get(ctx, id) }
+func (s *Service) Get(ctx context.Context, id string) (domain.Model, error) {
+	return s.repo.Get(ctx, id)
+}
 
 func (s *Service) Create(ctx context.Context, model domain.Model) (domain.Model, error) {
 	now := time.Now().UTC()

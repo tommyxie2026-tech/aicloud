@@ -12,11 +12,11 @@ import (
 )
 
 type Service struct {
-	models    *modelservice.Service
-	tasks     domain.TaskRepository
-	engine    workflow.Engine
-	router    *router.Router
-	routes    domain.RouteDecisionRepository
+	models     *modelservice.Service
+	tasks      domain.TaskRepository
+	engine     workflow.Engine
+	router     *router.Router
+	routes     domain.RouteDecisionRepository
 	costEvents domain.CostEventRepository
 }
 
