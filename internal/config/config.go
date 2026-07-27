@@ -29,6 +29,8 @@ type ProviderConfig struct {
 	Private          bool
 	Approved         bool
 	LicenseID        string
+	LicenseTextRef   string
+	EvidenceReviewer string
 	DataResidency    string
 	Currency         string
 	InputPerMillion  float64
@@ -57,6 +59,8 @@ func Load() Config {
 			Private:          envBool("AICLOUD_PROVIDER_PRIVATE", false),
 			Approved:         envBool("AICLOUD_PROVIDER_APPROVED", false),
 			LicenseID:        env("AICLOUD_PROVIDER_LICENSE", "commercial-api"),
+			LicenseTextRef:   env("AICLOUD_PROVIDER_LICENSE_TEXT_REF", ""),
+			EvidenceReviewer: env("AICLOUD_PROVIDER_EVIDENCE_REVIEWER", "runtime-configuration"),
 			DataResidency:    env("AICLOUD_PROVIDER_DATA_RESIDENCY", ""),
 			Currency:         env("AICLOUD_PROVIDER_CURRENCY", "USD"),
 			InputPerMillion:  envFloat("AICLOUD_PROVIDER_INPUT_PER_MILLION", 0),
