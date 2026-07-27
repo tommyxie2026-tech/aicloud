@@ -1,30 +1,67 @@
 # PR-037 CI Status Check
 
-## Check Scope
-
-This note records the visible CI status for the PR-037 stabilization work.
-
-Repository:
+## Status
 
 ```text
-tommyxie2026-tech/aicloud
+PR-037: complete
+Real CI run: confirmed
+Workflow conclusion: success
 ```
 
-Default branch:
+## Verification Run
+
+A documentation-only draft pull request was created to trigger the `pull_request` path of the Go workflow.
 
 ```text
-main
+Pull request: #6
+Head commit: 2233ac29902ae2b422378bbdad4934f1d4467f0d
+Workflow: Go Test
+Run ID: 30240968671
+Run number: 231
+Conclusion: success
 ```
 
-Workflow file:
+## Verified Job
+
+```text
+Job: go test
+Job ID: 89897900586
+Status: completed
+Conclusion: success
+```
+
+The following steps completed successfully:
+
+```text
+Checkout
+Setup Go
+Verify module files are tidy
+Check changed Go files are formatted
+Run tests
+Run vet
+Build entrypoints
+```
+
+This confirms that the repository state tested by the pull-request workflow passed:
+
+```bash
+go mod tidy
+git diff --exit-code -- go.mod go.sum
+go test ./...
+go vet ./...
+```
+
+The workflow also completed its entrypoint build checks successfully.
+
+## Workflow Configuration
+
+Current workflow file:
 
 ```text
 .github/workflows/go-test.yml
 ```
 
-## Workflow Trigger
-
-The workflow is configured for:
+Current triggers:
 
 ```yaml
 on:
@@ -37,110 +74,29 @@ on:
   workflow_dispatch:
 ```
 
-This matches the repository default branch and also allows a manual run from the GitHub Actions UI.
+Go module caching is disabled because the current module has no external dependency requirement and no `go.sum`.
 
-## Current Workflow Steps
-
-```text
-1. Checkout
-2. Setup Go 1.22 with cache disabled
-3. go mod tidy
-4. git diff --exit-code -- go.mod go.sum
-5. go test ./...
-```
-
-Go module caching is disabled because the current module has no external dependency requirement and no go.sum. This removes an unnecessary setup variable from CI.
-
-## Latest Visible Status Check
-
-Status checks were queried for PR-037 stabilization commits, including:
+## Dependency State
 
 ```text
-d3aed820c0daa147778248c9a43154cfb1e204f3
-38e8ccac13ad30a83c1bf828cd805af58550a215
-654049bd3533bbfa7677751961b80dd37133057c
-30b5707dcb19b14829913e7b8a5e8cef4841da78
+go.mod: no external dependency requirement
+go.sum: not present and not currently required
+gopkg.in/yaml.v3: deferred
 ```
 
-Visible status result for the latest workflow update commit:
+Do not hand-write `go.sum`. If a future dependency change causes Go tooling to generate it, commit the generated file.
+
+## PR-037 Exit Decision
+
+PR-037 exit criteria are satisfied:
 
 ```text
-statuses: []
+- known infra/api shape mismatches fixed
+- module metadata tidy check passed
+- changed Go file formatting check passed
+- go test ./... passed
+- go vet ./... passed
+- entrypoint builds passed
 ```
 
-Workflow run lookup for the same commit returned:
-
-```text
-workflow_runs: []
-```
-
-Tool limitation note:
-
-```text
-The workflow-run lookup available here is filtered to pull-request-triggered runs, so it may not show push-triggered or workflow_dispatch runs on main.
-```
-
-Interpretation:
-
-```text
-No status check result was visible through the current tool responses.
-This is not a pass.
-This is not a fail.
-This is an unknown CI state.
-```
-
-## Current Dependency State
-
-`gopkg.in/yaml.v3` was temporarily removed during PR-037 stabilization.
-
-Current `go.mod` has no external dependency requirement.
-
-Current `go.sum` state:
-
-```text
-go.sum is not present and is not currently expected while go.mod has no external dependencies.
-```
-
-## Manual Validation Path
-
-The workflow can now be started manually:
-
-```text
-GitHub repository
-  -> Actions
-  -> Go Test
-  -> Run workflow
-  -> Branch: main
-```
-
-A successful manual run must show both of these steps passing:
-
-```text
-Verify module files are tidy
-Run tests
-```
-
-The successful run URL or job result should be recorded before PR-037 is declared complete.
-
-## Important Boundary
-
-Do not claim:
-
-```text
-go test ./... passed
-CI passed
-```
-
-until an actual successful workflow run or local test run is observed.
-
-## Required Local Command Sequence
-
-```bash
-go mod tidy
-go test ./...
-git status --short
-```
-
-If future dependency work generates `go.sum`, commit it.
-
-Do not hand-write `go.sum`.
+PR-038 yamlio writer implementation is now unblocked.
