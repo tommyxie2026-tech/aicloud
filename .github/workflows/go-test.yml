@@ -9,6 +9,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   test:
     name: go test
@@ -17,6 +20,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -29,21 +35,21 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
-      - name: Generate formatting patch
+      - name: Format changed Go files
+        if: github.event_name == 'pull_request'
         run: |
-          gofmt -w $(find . -name '*.go' -not -path './vendor/*')
-          git diff -- '*.go' > gofmt.patch
-
-      - name: Upload formatting patch
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gofmt-patch
-          path: gofmt.patch
-          if-no-files-found: error
-
-      - name: Check formatting
-        run: test ! -s gofmt.patch
+          git fetch origin "${{ github.base_ref }}"
+          changed=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.go')
+          if [ -n "$changed" ]; then
+            gofmt -w $changed
+          fi
+          if ! git diff --quiet -- '*.go'; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add -- '*.go'
+            git commit -m 'gofmt changed Go files'
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
 
       - name: Run tests
         run: go test ./...
