@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tommyxie2026-tech/aicloud/internal/audit"
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 	"github.com/tommyxie2026-tech/aicloud/internal/modelservice"
 	"github.com/tommyxie2026-tech/aicloud/internal/router"
+	"github.com/tommyxie2026-tech/aicloud/internal/toolgateway"
 	"github.com/tommyxie2026-tech/aicloud/internal/workflow"
 )
 
@@ -18,6 +20,8 @@ type Service struct {
 	router     *router.Router
 	routes     domain.RouteDecisionRepository
 	costEvents domain.CostEventRepository
+	tools      *toolgateway.Service
+	audit      audit.Store
 }
 
 func New(models *modelservice.Service, tasks domain.TaskRepository, engine workflow.Engine) *Service {
@@ -30,6 +34,12 @@ func (s *Service) WithGovernance(routes domain.RouteDecisionRepository, costs do
 	if routes != nil {
 		s.router = router.New(s.modelsRepository(), routes)
 	}
+	return s
+}
+
+func (s *Service) WithSecureTools(tools *toolgateway.Service, auditStore audit.Store) *Service {
+	s.tools = tools
+	s.audit = auditStore
 	return s
 }
 
@@ -134,4 +144,34 @@ func (s *Service) ListCostEvents(ctx context.Context, taskID string) ([]domain.C
 		return nil, fmt.Errorf("cost event repository is not configured")
 	}
 	return s.costEvents.ListByTask(ctx, taskID)
+}
+
+func (s *Service) ListTools(ctx context.Context) ([]toolgateway.Definition, error) {
+	if s.tools == nil {
+		return nil, fmt.Errorf("Tool Gateway is not configured")
+	}
+	return s.tools.List(ctx)
+}
+
+func (s *Service) ExecuteTool(ctx context.Context, taskID string, request toolgateway.Request) (toolgateway.Result, error) {
+	if s.tools == nil {
+		return toolgateway.Result{}, fmt.Errorf("Tool Gateway is not configured")
+	}
+	task, err := s.tasks.Get(ctx, taskID)
+	if err != nil {
+		return toolgateway.Result{}, err
+	}
+	request.TaskID = task.ID
+	request.TraceID = task.TraceID
+	if request.AgentID == "" {
+		request.AgentID = task.AgentID
+	}
+	return s.tools.Execute(ctx, request)
+}
+
+func (s *Service) ListToolAudit(ctx context.Context, taskID string) ([]audit.Event, error) {
+	if s.audit == nil {
+		return nil, fmt.Errorf("audit store is not configured")
+	}
+	return s.audit.ListByTask(ctx, taskID)
 }
