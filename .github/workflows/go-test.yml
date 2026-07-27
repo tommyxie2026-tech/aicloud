@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -21,7 +21,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -34,11 +35,20 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
-      - name: Check changed Go files are formatted
+      - name: Format changed Go files
+        if: github.event_name == 'pull_request'
         run: |
-          changed=$(git diff --name-only --diff-filter=ACMR HEAD^ -- '*.go')
+          git fetch origin "${{ github.base_ref }}"
+          changed=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.go')
           if [ -n "$changed" ]; then
-            test -z "$(gofmt -l $changed)"
+            gofmt -w $changed
+          fi
+          if ! git diff --quiet -- '*.go'; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add -- '*.go'
+            git commit -m 'gofmt secure execution changes'
+            git push origin "HEAD:${{ github.head_ref }}"
           fi
 
       - name: Run tests
