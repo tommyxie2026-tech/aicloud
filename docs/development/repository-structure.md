@@ -32,7 +32,43 @@ deploy/
 tests/
 
 docs/
+  architecture/
+  api/
+  design/
+  deployment/
+  development/
+  operations/
+  roadmap/
+
+devdocs/
+  models/
+    kimi-k3/
 ```
+
+## Documentation boundaries
+
+### `docs/`
+
+Stable product and engineering documents:
+
+- architecture decisions;
+- API and data contracts;
+- implementation plans;
+- deployment and operations requirements;
+- accepted security and governance boundaries.
+
+### `devdocs/`
+
+Implementation-oriented external technology research:
+
+- model architecture studies;
+- inference-engine investigations;
+- protocol experiments;
+- deployment feasibility notes;
+- license and supply-chain analysis;
+- technical findings that may later be promoted into an ADR or design document.
+
+A conclusion in `devdocs/` does not become a product commitment until it is reviewed and promoted into the stable `docs/` hierarchy.
 
 ## Engineering Principle
 

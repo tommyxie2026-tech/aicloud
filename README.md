@@ -81,7 +81,8 @@ api/          shared API types
 integrations/ GitHub, GitLab, SSO, observability, knowledge connectors
 eval/         model evaluation cases and reports
 datasets/     synthetic and sanitized model datasets
-docs/         product and technical documents
+docs/         product and stable technical documents
+devdocs/      external model, runtime, protocol, and deployment research
 hack/         development scripts
 ```
 
@@ -203,3 +204,13 @@ Detailed implementation requirements, current progress, module mapping, test gat
 - [`docs/roadmap/AI-Cloud-Module-Implementation-Plan-and-Status.md`](docs/roadmap/AI-Cloud-Module-Implementation-Plan-and-Status.md)
 
 The runnable v0.1 skeleton remains in Draft PR #1 until reviewed and merged. Code is counted as completed only after its acceptance criteria pass on `main`.
+
+## 10. Developer Research Docs
+
+Implementation-oriented external technology research is maintained under [`devdocs/`](devdocs/README.md).
+
+Current study:
+
+- [Kimi K3 technical architecture, training, serving, evaluation, license, and AI Cloud integration](devdocs/models/kimi-k3/README.md)
+
+Research documents are inputs to engineering decisions. They do not become stable product commitments until reviewed and promoted into `docs/`.
