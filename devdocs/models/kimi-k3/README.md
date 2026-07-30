@@ -1,5 +1,7 @@
 # Kimi K3 Technical Architecture Study
 
+**English** | [简体中文](README.zh-CN.md)
+
 **Observation date:** 2026-07-29  
 **Status:** Initial primary-source study  
 **Scope:** Architecture, training disclosures, systems design, serving, evaluation, openness, license, and AI Cloud integration
@@ -31,32 +33,45 @@ The most important architectural observation is that Kimi K3 is not merely a lar
 
 ## Reading order
 
-1. [Research scope, sources, and confidence](00-scope-sources-and-confidence.md)
-2. [Architecture overview](01-architecture-overview.md)
-3. [Hybrid attention and depth mixing](02-attention-and-depth-mixing.md)
-4. [Stable LatentMoE and native multimodality](03-moe-and-native-multimodal.md)
-5. [Pre-training, post-training, and Agentic RL](04-training-posttraining-and-agentic-rl.md)
-6. [Systems, inference, and deployment](05-systems-inference-and-deployment.md)
-7. [Evaluation and limitations](06-evaluation-and-limitations.md)
-8. [License, openness, and supply chain](07-license-openness-and-supply-chain.md)
-9. [AI Cloud integration blueprint](08-aicloud-integration-blueprint.md)
-10. [References](references.md)
+| No. | English | 简体中文 |
+|---:|---|---|
+| 0 | [Research scope, sources, and confidence](00-scope-sources-and-confidence.md) | [研究范围、来源与可信度](00-scope-sources-and-confidence.zh-CN.md) |
+| 1 | [Architecture overview](01-architecture-overview.md) | [总体架构](01-architecture-overview.zh-CN.md) |
+| 2 | [Hybrid attention and depth mixing](02-attention-and-depth-mixing.md) | [混合注意力与深度信息流](02-attention-and-depth-mixing.zh-CN.md) |
+| 3 | [Stable LatentMoE and native multimodality](03-moe-and-native-multimodal.md) | [Stable LatentMoE 与原生多模态](03-moe-and-native-multimodal.zh-CN.md) |
+| 4 | [Pre-training, post-training, and Agentic RL](04-training-posttraining-and-agentic-rl.md) | [预训练、后训练与 Agentic RL](04-training-posttraining-and-agentic-rl.zh-CN.md) |
+| 5 | [Systems, inference, and deployment](05-systems-inference-and-deployment.md) | [系统、推理与部署](05-systems-inference-and-deployment.zh-CN.md) |
+| 6 | [Evaluation and limitations](06-evaluation-and-limitations.md) | [评测与局限](06-evaluation-and-limitations.zh-CN.md) |
+| 7 | [License, openness, and supply chain](07-license-openness-and-supply-chain.md) | [许可证、开放程度与供应链](07-license-openness-and-supply-chain.zh-CN.md) |
+| 8 | [AI Cloud integration blueprint](08-aicloud-integration-blueprint.md) | [AI Cloud 接入蓝图](08-aicloud-integration-blueprint.zh-CN.md) |
+| — | [References](references.md) | [参考资料](references.zh-CN.md) |
 
 ## Directory structure
 
 ```text
 kimi-k3/
 ├── README.md
+├── README.zh-CN.md
 ├── 00-scope-sources-and-confidence.md
+├── 00-scope-sources-and-confidence.zh-CN.md
 ├── 01-architecture-overview.md
+├── 01-architecture-overview.zh-CN.md
 ├── 02-attention-and-depth-mixing.md
+├── 02-attention-and-depth-mixing.zh-CN.md
 ├── 03-moe-and-native-multimodal.md
+├── 03-moe-and-native-multimodal.zh-CN.md
 ├── 04-training-posttraining-and-agentic-rl.md
+├── 04-training-posttraining-and-agentic-rl.zh-CN.md
 ├── 05-systems-inference-and-deployment.md
+├── 05-systems-inference-and-deployment.zh-CN.md
 ├── 06-evaluation-and-limitations.md
+├── 06-evaluation-and-limitations.zh-CN.md
 ├── 07-license-openness-and-supply-chain.md
+├── 07-license-openness-and-supply-chain.zh-CN.md
 ├── 08-aicloud-integration-blueprint.md
-└── references.md
+├── 08-aicloud-integration-blueprint.zh-CN.md
+├── references.md
+└── references.zh-CN.md
 ```
 
 ## What this study does not claim
