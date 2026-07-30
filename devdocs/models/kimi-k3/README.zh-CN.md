@@ -2,9 +2,9 @@
 
 [English](README.md) | **简体中文**
 
-**观察日期：** 2026-07-29  
-**状态：** 初始一手来源研究  
-**范围：** 架构、训练披露、系统设计、推理服务、评测、开放程度、许可证及 AI Cloud 接入
+**观察日期：** 2026-07-30  
+**状态：** 持续更新的一手来源研究  
+**范围：** 架构、训练披露、系统设计、推理服务、评测、开放程度、未公开内容解释、许可证及 AI Cloud 接入
 
 ## 执行摘要
 
@@ -41,8 +41,9 @@ Kimi K3 是一个总参数约 2.8 万亿、每个 Token 激活约 1040 亿参数
 6. [系统、推理与部署](05-systems-inference-and-deployment.zh-CN.md)
 7. [评测与局限](06-evaluation-and-limitations.zh-CN.md)
 8. [许可证、开放程度与供应链](07-license-openness-and-supply-chain.zh-CN.md)
-9. [AI Cloud 接入蓝图](08-aicloud-integration-blueprint.zh-CN.md)
-10. [参考资料](references.zh-CN.md)
+9. [未公开内容及其战略解释](08a-unreleased-content-and-strategic-interpretation.zh-CN.md)
+10. [AI Cloud 接入蓝图](08-aicloud-integration-blueprint.zh-CN.md)
+11. [参考资料](references.zh-CN.md)
 
 ## 双语目录
 
@@ -66,6 +67,8 @@ kimi-k3/
 ├── 06-evaluation-and-limitations.zh-CN.md
 ├── 07-license-openness-and-supply-chain.md
 ├── 07-license-openness-and-supply-chain.zh-CN.md
+├── 08a-unreleased-content-and-strategic-interpretation.md
+├── 08a-unreleased-content-and-strategic-interpretation.zh-CN.md
 ├── 08-aicloud-integration-blueprint.md
 ├── 08-aicloud-integration-blueprint.zh-CN.md
 ├── references.md
@@ -79,6 +82,8 @@ kimi-k3/
 - 厂商报告的 Benchmark 已经得到独立复现；
 - 公开材料足以复现完整预训练；
 - 公开权重意味着不受限制的商业使用；
+- 所有未公开 Artifact 都出于相同原因而被保留；
+- 对商业和地缘影响的分析性解释就是 Moonshot AI 的官方动机；
 - 100 万 Token 上下文保证模型在所有位置都能可靠召回和推理；
 - 模型能力足以证明直接执行基础设施操作是安全的；
 - Kimi K3 已经获得 AI Cloud 生产路由批准。
