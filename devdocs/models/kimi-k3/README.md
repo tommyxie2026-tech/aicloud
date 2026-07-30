@@ -2,9 +2,9 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**Observation date:** 2026-07-29  
-**Status:** Initial primary-source study  
-**Scope:** Architecture, training disclosures, systems design, serving, evaluation, openness, license, and AI Cloud integration
+**Observation date:** 2026-07-30  
+**Status:** Ongoing primary-source study  
+**Scope:** Architecture, training disclosures, systems design, serving, evaluation, openness, unreleased-content interpretation, license, and AI Cloud integration
 
 ## Executive view
 
@@ -43,6 +43,7 @@ The most important architectural observation is that Kimi K3 is not merely a lar
 | 5 | [Systems, inference, and deployment](05-systems-inference-and-deployment.md) | [系统、推理与部署](05-systems-inference-and-deployment.zh-CN.md) |
 | 6 | [Evaluation and limitations](06-evaluation-and-limitations.md) | [评测与局限](06-evaluation-and-limitations.zh-CN.md) |
 | 7 | [License, openness, and supply chain](07-license-openness-and-supply-chain.md) | [许可证、开放程度与供应链](07-license-openness-and-supply-chain.zh-CN.md) |
+| 8a | [Unreleased content and strategic interpretation](08a-unreleased-content-and-strategic-interpretation.md) | [未公开内容及其战略解释](08a-unreleased-content-and-strategic-interpretation.zh-CN.md) |
 | 8 | [AI Cloud integration blueprint](08-aicloud-integration-blueprint.md) | [AI Cloud 接入蓝图](08-aicloud-integration-blueprint.zh-CN.md) |
 | — | [References](references.md) | [参考资料](references.zh-CN.md) |
 
@@ -68,6 +69,8 @@ kimi-k3/
 ├── 06-evaluation-and-limitations.zh-CN.md
 ├── 07-license-openness-and-supply-chain.md
 ├── 07-license-openness-and-supply-chain.zh-CN.md
+├── 08a-unreleased-content-and-strategic-interpretation.md
+├── 08a-unreleased-content-and-strategic-interpretation.zh-CN.md
 ├── 08-aicloud-integration-blueprint.md
 ├── 08-aicloud-integration-blueprint.zh-CN.md
 ├── references.md
@@ -81,6 +84,8 @@ This study does not claim that:
 - vendor-reported benchmarks have been independently reproduced;
 - the released materials are sufficient to reproduce pre-training;
 - public weights imply unrestricted commercial use;
+- every unreleased artifact is withheld for the same reason;
+- analytical interpretations of commercial or geopolitical effects are official Moonshot AI motives;
 - a 1M-token context window guarantees reliable recall over all positions;
 - model capability makes direct infrastructure execution safe;
 - Kimi K3 is already approved for AI Cloud production routing.
