@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tommyxie2026-tech/aicloud/db/migrations"
 	"github.com/tommyxie2026-tech/aicloud/internal/approval"
 	"github.com/tommyxie2026-tech/aicloud/internal/audit"
 	"github.com/tommyxie2026-tech/aicloud/internal/config"
@@ -37,30 +36,41 @@ func main() {
 	log := logging.New(cfg.LogLevel)
 	ctx := context.Background()
 
-	modelRepo, taskRepo, routeRepo, costRepo, closeStore, err := buildRepositories(ctx, cfg)
+	stores, err := buildRuntimeStores(ctx, cfg)
 	if err != nil {
 		log.Error("repository initialization failed", "error", err)
 		os.Exit(1)
 	}
-	defer closeStore()
+	defer stores.close()
 
-	models := modelservice.New(modelRepo)
+	models := modelservice.New(stores.models)
+	var configuredProvider provider.ModelProvider
 	if cfg.Provider.Enabled {
-		adapter, err := providerfactory.BuildOpenAICompatible(cfg.Provider)
+		if err := validateApprovedProviderEvidence(cfg.Provider); err != nil {
+			log.Error("provider evidence configuration failed", "error", err)
+			os.Exit(1)
+		}
+		configuredProvider, err = providerfactory.BuildOpenAICompatible(cfg.Provider)
 		if err != nil {
 			log.Error("provider initialization failed", "error", err)
 			os.Exit(1)
 		}
-		if err := registerConfiguredProvider(ctx, models, adapter, cfg.Provider, log); err != nil {
+		if err := registerConfiguredProvider(ctx, models, configuredProvider, cfg.Provider, log); err != nil {
 			log.Error("provider registration failed", "error", err)
 			os.Exit(1)
 		}
 	}
 
+	admissionService, modelRuntime, err := initializeModelRuntime(ctx, stores, models, cfg, configuredProvider)
+	if err != nil {
+		log.Error("model runtime initialization failed", "error", err)
+		os.Exit(1)
+	}
 	toolService, auditStore := buildSecureTools()
-	control := controlplane.New(models, taskRepo, workflow.NoopEngine{}).
-		WithGovernance(routeRepo, costRepo).
-		WithSecureTools(toolService, auditStore)
+	control := controlplane.New(models, stores.tasks, workflow.NoopEngine{}).
+		WithGovernance(stores.routes, stores.costs).
+		WithSecureTools(toolService, auditStore).
+		WithEvidence(stores.traces, stores.evaluations, admissionService, modelRuntime)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           httpapi.New(control, log).Handler(),
@@ -81,52 +91,6 @@ func main() {
 	defer cancel()
 	_ = server.Shutdown(shutdownCtx)
 	_ = telemetryProvider.Shutdown()
-}
-
-func buildRepositories(ctx context.Context, cfg config.Config) (
-	domain.ModelRepository,
-	domain.TaskRepository,
-	domain.RouteDecisionRepository,
-	domain.CostEventRepository,
-	func(),
-	error,
-) {
-	if strings.EqualFold(cfg.RepositoryMode, "postgres") {
-		repos, err := repository.OpenPostgres(ctx, cfg.DatabaseURL)
-		if err != nil {
-			return nil, nil, nil, nil, func() {}, err
-		}
-		if cfg.RunMigrations {
-			if err := migrations.Run(ctx, repos.DB); err != nil {
-				_ = repos.DB.Close()
-				return nil, nil, nil, nil, func() {}, err
-			}
-		}
-		return repos.Models, repos.Tasks, repos.RouteDecisions, repos.CostEvents, func() { _ = repos.DB.Close() }, nil
-	}
-
-	now := time.Now().UTC()
-	mock := domain.Model{
-		ID:                "mock-model-v1",
-		Name:              "Mock Model",
-		Version:           "v1",
-		Provider:          "mock",
-		DeploymentMode:    domain.DeploymentLocal,
-		Lifecycle:         domain.ModelActive,
-		Capabilities:      []string{"structured-output", "coding"},
-		Pricing:           domain.PricingProfile{Currency: "USD"},
-		Health:            domain.HealthHealthy,
-		HealthCheckedAt:   &now,
-		QuotaRemaining:    -1,
-		CapacityAvailable: -1,
-		ServiceTiers:      []domain.ServiceTier{domain.TierStandard},
-		InferenceEfforts:  []domain.InferenceEffort{domain.EffortLow},
-		License:           "internal",
-		ApprovalStatus:    domain.ApprovalApproved,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
-	return repository.NewMemoryModels(mock), repository.NewMemoryTasks(), repository.NewMemoryRouteDecisions(), repository.NewMemoryCostEvents(), func() {}, nil
 }
 
 func buildSecureTools() (*toolgateway.Service, *audit.MemoryStore) {
@@ -219,9 +183,10 @@ func registerConfiguredProvider(ctx context.Context, models *modelservice.Servic
 		License:           cfg.LicenseID,
 		LicenseEvidence: domain.LicenseEvidence{
 			LicenseID:            cfg.LicenseID,
+			LicenseTextRef:        cfg.LicenseTextRef,
 			CommercialUseAllowed: cfg.Approved,
 			HostedServiceAllowed: cfg.Approved,
-			Reviewer:             "runtime-configuration",
+			Reviewer:             cfg.EvidenceReviewer,
 			ReviewedAt:           reviewedAt(cfg.Approved, now),
 		},
 		Provenance:     domain.ModelProvenance{Source: cfg.Endpoint},
