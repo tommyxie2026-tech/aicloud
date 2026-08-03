@@ -15,6 +15,7 @@ func (s *Server) registerEvidenceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/models/{id}/admission", s.modelAdmission)
 	mux.HandleFunc("POST /api/v1/models/{id}/admission", s.modelAdmission)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/model", s.executeModel)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/execute", s.executeModel)
 	mux.HandleFunc("GET /api/v1/tasks/{id}/trace", s.taskTrace)
 	mux.HandleFunc("GET /api/v1/tasks/{id}/evaluations", s.taskEvaluations)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/evaluations", s.taskEvaluations)
@@ -101,10 +102,10 @@ func (s *Server) taskEvaluations(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
 		var request struct {
-			Config     evaluation.Config      `json:"config"`
-			Metrics    evaluation.Metrics     `json:"metrics"`
-			Thresholds evaluation.Thresholds  `json:"thresholds"`
-			RawOutput  string                 `json:"rawOutput,omitempty"`
+			Config     evaluation.Config     `json:"config"`
+			Metrics    evaluation.Metrics    `json:"metrics"`
+			Thresholds evaluation.Thresholds `json:"thresholds"`
+			RawOutput  string                `json:"rawOutput,omitempty"`
 		}
 		if err := decodeJSON(r, &request); err != nil {
 			writeErrorStatus(w, http.StatusBadRequest, err.Error())
