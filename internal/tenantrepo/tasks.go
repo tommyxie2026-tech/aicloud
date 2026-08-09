@@ -2,59 +2,43 @@ package tenantrepo
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
-	"sort"
-	"sync"
-	"time"
 
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
+	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 	"github.com/tommyxie2026-tech/aicloud/internal/repository"
-	"github.com/tommyxie2026-tech/aicloud/internal/tenant"
 )
 
-type Ownership struct {
-	TaskID    string
-	TenantID  string
-	ProjectID string
-	SubjectID string
-	CreatedAt time.Time
-}
-
-type OwnershipStore interface {
-	Bind(context.Context, Ownership) error
-	Get(context.Context, string) (Ownership, error)
-}
-
+// ScopedTasks enforces the frozen S0 Task identity contract at the repository
+// boundary. Tenant, Project and CreatedBy are persisted on Task itself; the old
+// task_ownership side table is no longer a runtime source of truth.
 type ScopedTasks struct {
-	base      domain.TaskRepository
-	ownership OwnershipStore
+	base domain.TaskRepository
 }
 
-func NewScopedTasks(base domain.TaskRepository, ownership OwnershipStore) *ScopedTasks {
-	return &ScopedTasks{base: base, ownership: ownership}
+func NewScopedTasks(base domain.TaskRepository) *ScopedTasks {
+	return &ScopedTasks{base: base}
 }
 
 func (r *ScopedTasks) List(ctx context.Context) ([]domain.Task, error) {
+	principal, err := identity.RequirePrincipal(ctx)
+	if err != nil {
+		return nil, err
+	}
 	items, err := r.base.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	scope, scoped := tenant.FromContext(ctx)
-	if !scoped {
+	if isAuthorizedSystem(principal) {
 		return items, nil
+	}
+	if _, err := identity.RequireProject(ctx); err != nil {
+		return nil, err
 	}
 	filtered := make([]domain.Task, 0, len(items))
 	for _, task := range items {
-		owner, err := r.ownership.Get(ctx, task.ID)
-		if errors.Is(err, repository.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		if tenant.OwnsTask(scope, owner.TenantID, owner.ProjectID) {
+		if principal.OwnsProject(task.TenantID, task.ProjectID) {
 			filtered = append(filtered, task)
 		}
 	}
@@ -62,180 +46,75 @@ func (r *ScopedTasks) List(ctx context.Context) ([]domain.Task, error) {
 }
 
 func (r *ScopedTasks) Get(ctx context.Context, id string) (domain.Task, error) {
+	principal, err := identity.RequirePrincipal(ctx)
+	if err != nil {
+		return domain.Task{}, err
+	}
 	task, err := r.base.Get(ctx, id)
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if err := r.authorize(ctx, id); err != nil {
-		return domain.Task{}, err
+	if !canAccessTask(principal, task) {
+		return domain.Task{}, repository.ErrNotFound
 	}
 	return task, nil
 }
 
 func (r *ScopedTasks) Create(ctx context.Context, task domain.Task) (domain.Task, error) {
-	created, err := r.base.Create(ctx, task)
+	principal, err := identity.RequireProject(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
-	scope, scoped := tenant.FromContext(ctx)
-	if !scoped {
-		return created, nil
+	if task.TenantID != "" && task.TenantID != principal.TenantID {
+		return domain.Task{}, fmt.Errorf("task tenant identity does not match principal")
 	}
-	if err := r.ownership.Bind(ctx, Ownership{
-		TaskID: created.ID, TenantID: scope.TenantID, ProjectID: scope.ProjectID,
-		SubjectID: scope.SubjectID, CreatedAt: time.Now().UTC(),
-	}); err != nil {
-		return domain.Task{}, fmt.Errorf("bind task tenant ownership: %w", err)
+	if task.ProjectID != "" && task.ProjectID != principal.ProjectID {
+		return domain.Task{}, fmt.Errorf("task project identity does not match principal")
 	}
-	return created, nil
+	if task.CreatedBy != "" && task.CreatedBy != principal.SubjectID {
+		return domain.Task{}, fmt.Errorf("task creator identity does not match principal")
+	}
+	task.TenantID = principal.TenantID
+	task.ProjectID = principal.ProjectID
+	task.CreatedBy = principal.SubjectID
+	return r.base.Create(ctx, task)
 }
 
 func (r *ScopedTasks) Update(ctx context.Context, task domain.Task) (domain.Task, error) {
-	if err := r.authorize(ctx, task.ID); err != nil {
+	principal, err := identity.RequirePrincipal(ctx)
+	if err != nil {
 		return domain.Task{}, err
+	}
+	current, err := r.base.Get(ctx, task.ID)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	if !canAccessTask(principal, current) {
+		return domain.Task{}, repository.ErrNotFound
+	}
+	if task.TenantID != current.TenantID || task.ProjectID != current.ProjectID || task.CreatedBy != current.CreatedBy {
+		return domain.Task{}, fmt.Errorf("task tenant, project and creator identity are immutable")
 	}
 	return r.base.Update(ctx, task)
 }
 
-func (r *ScopedTasks) authorize(ctx context.Context, taskID string) error {
-	scope, scoped := tenant.FromContext(ctx)
-	if !scoped {
-		return nil
+func canAccessTask(principal identity.Principal, task domain.Task) bool {
+	if isAuthorizedSystem(principal) {
+		return true
 	}
-	owner, err := r.ownership.Get(ctx, taskID)
-	if err != nil {
-		return err
-	}
-	if !tenant.OwnsTask(scope, owner.TenantID, owner.ProjectID) {
-		// Deliberately return not-found so callers cannot use authorization
-		// failures to enumerate task identifiers across tenants.
-		return repository.ErrNotFound
-	}
-	return nil
+	return principal.OwnsProject(task.TenantID, task.ProjectID)
 }
 
-type MemoryOwnershipStore struct {
-	mu sync.RWMutex
-	m  map[string]Ownership
+func isAuthorizedSystem(principal identity.Principal) bool {
+	return principal.Type == identity.PrincipalSystem && principal.HasCapability(identity.CapabilityTaskSystemAccess)
 }
 
-func NewMemoryOwnershipStore() *MemoryOwnershipStore {
-	return &MemoryOwnershipStore{m: make(map[string]Ownership)}
-}
-
-func (s *MemoryOwnershipStore) Bind(_ context.Context, ownership Ownership) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if current, ok := s.m[ownership.TaskID]; ok {
-		if current.TenantID == ownership.TenantID && current.ProjectID == ownership.ProjectID {
-			return nil
-		}
-		return fmt.Errorf("task ownership already exists")
-	}
-	s.m[ownership.TaskID] = ownership
-	return nil
-}
-
-func (s *MemoryOwnershipStore) Get(_ context.Context, taskID string) (Ownership, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	ownership, ok := s.m[taskID]
-	if !ok {
-		return Ownership{}, repository.ErrNotFound
-	}
-	return ownership, nil
-}
-
-type PostgresOwnershipStore struct{ db *sql.DB }
-
-func NewPostgresOwnershipStore(db *sql.DB) *PostgresOwnershipStore {
-	return &PostgresOwnershipStore{db: db}
-}
-
-func (s *PostgresOwnershipStore) Bind(ctx context.Context, ownership Ownership) error {
-	return s.withScopedTx(ctx, ownership.TenantID, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO task_ownership (
-			task_id, tenant_id, project_id, subject_id, created_at
-		) VALUES ($1,$2,$3,$4,$5)
-		ON CONFLICT (task_id) DO NOTHING`, ownership.TaskID, ownership.TenantID,
-			ownership.ProjectID, ownership.SubjectID, ownership.CreatedAt)
-		if err != nil {
-			return fmt.Errorf("bind task ownership: %w", err)
-		}
-		var current Ownership
-		err = tx.QueryRowContext(ctx, `SELECT task_id, tenant_id, project_id, subject_id, created_at
-			FROM task_ownership WHERE task_id=$1`, ownership.TaskID).Scan(
-			&current.TaskID, &current.TenantID, &current.ProjectID,
-			&current.SubjectID, &current.CreatedAt,
-		)
-		if errors.Is(err, sql.ErrNoRows) {
-			return repository.ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("verify task ownership: %w", err)
-		}
-		if current.TenantID != ownership.TenantID || current.ProjectID != ownership.ProjectID {
-			return fmt.Errorf("task ownership conflict")
-		}
-		return nil
-	})
-}
-
-func (s *PostgresOwnershipStore) Get(ctx context.Context, taskID string) (Ownership, error) {
-	var ownership Ownership
-	scope, scoped := tenant.FromContext(ctx)
-	tenantID := ""
-	if scoped {
-		tenantID = scope.TenantID
-	}
-	err := s.withScopedTx(ctx, tenantID, func(tx *sql.Tx) error {
-		err := tx.QueryRowContext(ctx, `SELECT task_id, tenant_id, project_id, subject_id, created_at
-			FROM task_ownership WHERE task_id=$1`, taskID).Scan(
-			&ownership.TaskID, &ownership.TenantID, &ownership.ProjectID,
-			&ownership.SubjectID, &ownership.CreatedAt,
-		)
-		if errors.Is(err, sql.ErrNoRows) {
-			return repository.ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("get task ownership: %w", err)
-		}
-		return nil
-	})
-	return ownership, err
-}
-
-func (s *PostgresOwnershipStore) withScopedTx(ctx context.Context, tenantID string, fn func(*sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin ownership transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	systemAccess := "off"
-	if tenantID == "" {
-		systemAccess = "on"
-	}
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('aicloud.tenant_id', $1, true),
-		set_config('aicloud.system_access', $2, true)`, tenantID, systemAccess); err != nil {
-		return fmt.Errorf("set tenant transaction scope: %w", err)
-	}
-	if err := fn(tx); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit ownership transaction: %w", err)
-	}
-	return nil
-}
-
-// SortedTaskIDs is intentionally small and test-oriented; production list
-// paths can later push this filtering into SQL without changing ScopedTasks.
-func SortedTaskIDs(items []Ownership) []string {
-	ids := make([]string, 0, len(items))
-	for _, item := range items {
-		ids = append(ids, item.TaskID)
-	}
-	sort.Strings(ids)
-	return ids
+// IsNotFoundOrIdentityError is useful to callers that deliberately collapse
+// cross-tenant authorization into not-found semantics while retaining explicit
+// authentication errors for missing Principal context.
+func IsNotFoundOrIdentityError(err error) bool {
+	return errors.Is(err, repository.ErrNotFound) ||
+		errors.Is(err, identity.ErrPrincipalRequired) ||
+		errors.Is(err, identity.ErrTenantRequired) ||
+		errors.Is(err, identity.ErrProjectRequired)
 }
