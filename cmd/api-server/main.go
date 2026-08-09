@@ -73,7 +73,7 @@ func main() {
 		WithEvidence(stores.traces, stores.evaluations, admissionService, modelRuntime)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.New(control, log).Handler(),
+		Handler:           httpapi.WithTenantScope(httpapi.New(control, log).FullHandler()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	telemetryProvider := telemetry.NoopProvider{}
