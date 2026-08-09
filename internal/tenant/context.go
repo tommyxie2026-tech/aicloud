@@ -4,31 +4,46 @@ import (
 	"context"
 	"errors"
 	"strings"
+
+	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 )
 
 var ErrScopeRequired = errors.New("tenant scope is required")
 
+// Scope is a compatibility projection of identity.Principal. New production
+// code should consume identity.Principal directly.
 type Scope struct {
 	TenantID  string `json:"tenantId"`
 	ProjectID string `json:"projectId,omitempty"`
 	SubjectID string `json:"subjectId,omitempty"`
 }
 
-type scopeKey struct{}
-
+// WithScope is retained for compatibility with older tests and internal code.
+// It creates an explicit User Principal; it never creates or implies System
+// authority.
 func WithScope(ctx context.Context, scope Scope) context.Context {
-	return context.WithValue(ctx, scopeKey{}, normalize(scope))
+	scope = normalize(scope)
+	principal := identity.Principal{
+		Type:        identity.PrincipalUser,
+		SubjectID:   scope.SubjectID,
+		TenantID:    scope.TenantID,
+		ProjectID:   scope.ProjectID,
+		AuthnMethod: "legacy_scope",
+		Issuer:      "aicloud-compat",
+	}
+	return identity.WithPrincipal(ctx, principal)
 }
 
 func FromContext(ctx context.Context) (Scope, bool) {
-	if ctx == nil {
+	principal, ok := identity.PrincipalFromContext(ctx)
+	if !ok || principal.TenantID == "" {
 		return Scope{}, false
 	}
-	scope, ok := ctx.Value(scopeKey{}).(Scope)
-	if !ok || strings.TrimSpace(scope.TenantID) == "" {
-		return Scope{}, false
-	}
-	return normalize(scope), true
+	return Scope{
+		TenantID:  principal.TenantID,
+		ProjectID: principal.ProjectID,
+		SubjectID: principal.SubjectID,
+	}, true
 }
 
 func Require(ctx context.Context) (Scope, error) {
@@ -40,10 +55,10 @@ func Require(ctx context.Context) (Scope, error) {
 }
 
 func OwnsTask(scope Scope, tenantID, projectID string) bool {
-	if strings.TrimSpace(scope.TenantID) == "" || scope.TenantID != tenantID {
+	if strings.TrimSpace(scope.TenantID) == "" || scope.TenantID != strings.TrimSpace(tenantID) {
 		return false
 	}
-	if scope.ProjectID != "" && projectID != "" && scope.ProjectID != projectID {
+	if strings.TrimSpace(scope.ProjectID) == "" || scope.ProjectID != strings.TrimSpace(projectID) {
 		return false
 	}
 	return true
