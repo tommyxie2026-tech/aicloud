@@ -9,15 +9,15 @@ import (
 )
 
 const (
-	TenantHeader       = "X-AICloud-Tenant-ID"
-	ProjectHeader      = "X-AICloud-Project-ID"
-	SubjectHeader      = "X-AICloud-Subject-ID"
+	TenantHeader        = "X-AICloud-Tenant-ID"
+	ProjectHeader       = "X-AICloud-Project-ID"
+	SubjectHeader       = "X-AICloud-Subject-ID"
 	PrincipalTypeHeader = "X-AICloud-Principal-Type"
-	RolesHeader        = "X-AICloud-Roles"
-	CapabilitiesHeader = "X-AICloud-Capabilities"
-	AuthnMethodHeader  = "X-AICloud-Authn-Method"
-	IssuerHeader       = "X-AICloud-Issuer"
-	SessionHeader      = "X-AICloud-Session-ID"
+	RolesHeader         = "X-AICloud-Roles"
+	CapabilitiesHeader  = "X-AICloud-Capabilities"
+	AuthnMethodHeader   = "X-AICloud-Authn-Method"
+	IssuerHeader        = "X-AICloud-Issuer"
+	SessionHeader       = "X-AICloud-Session-ID"
 )
 
 // WithTrustedIngressPrincipal is the v0.1 authentication compatibility
