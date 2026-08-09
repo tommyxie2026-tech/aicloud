@@ -54,10 +54,10 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 		costs := tenantrepo.NewScopedCostEvents(repos.CostEvents, tasks)
 		return runtimeStores{
 			models: repos.Models, tasks: tasks, routes: routes, costs: costs,
-			traces: repository.NewPostgresTraceStore(repos.DB),
+			traces:      repository.NewPostgresTraceStore(repos.DB),
 			evaluations: repository.NewPostgresEvaluationStore(repos.DB),
-			admissions: repository.NewPostgresAdmissionStore(repos.DB),
-			close: func() { _ = repos.DB.Close() },
+			admissions:  repository.NewPostgresAdmissionStore(repos.DB),
+			close:       func() { _ = repos.DB.Close() },
 		}, nil
 	}
 	ownership := tenantrepo.NewMemoryOwnershipStore()
