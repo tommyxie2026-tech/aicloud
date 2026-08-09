@@ -34,14 +34,20 @@ func WithTenantScope(next http.Handler) http.Handler {
 			SubjectID: strings.TrimSpace(r.Header.Get(SubjectHeader)),
 		}
 		if scope.TenantID == "" || scope.SubjectID == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "authenticated tenant and subject context are required",
-			})
+			writeScopeError(w, http.StatusUnauthorized, "authenticated tenant and subject context are required")
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/tasks") && scope.ProjectID == "" {
+			writeScopeError(w, http.StatusBadRequest, "project context is required for task APIs")
 			return
 		}
 
 		next.ServeHTTP(w, r.WithContext(tenant.WithScope(r.Context(), scope)))
 	})
+}
+
+func writeScopeError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
