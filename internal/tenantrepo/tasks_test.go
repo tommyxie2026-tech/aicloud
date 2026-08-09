@@ -57,7 +57,7 @@ func TestScopedTasksMissingPrincipalFailsClosed(t *testing.T) {
 	}
 }
 
-func TestScopedTasksSystemAccessMustBeExplicit(t *testing.T) {
+func TestScopedTasksSystemAccessMustBeExplicitAndProjectScoped(t *testing.T) {
 	base := repository.NewMemoryTasks()
 	tasks := NewScopedTasks(base)
 	ctx := projectContext("tenant-a", "project-a", "user-a")
@@ -66,13 +66,24 @@ func TestScopedTasksSystemAccessMustBeExplicit(t *testing.T) {
 		t.Fatalf("Create returned error: %v", err)
 	}
 
-	principal, err := identity.NewSystemPrincipal("reconciler", "inspect task evidence", identity.CapabilityTaskSystemAccess)
+	unscoped, err := identity.NewSystemPrincipal("reconciler", "inspect task evidence", identity.CapabilityTaskSystemAccess)
 	if err != nil {
 		t.Fatalf("NewSystemPrincipal returned error: %v", err)
 	}
+	if _, err := tasks.Get(identity.WithPrincipal(context.Background(), unscoped), created.ID); !errors.Is(err, identity.ErrTenantRequired) {
+		t.Fatalf("unscoped system error=%v want ErrTenantRequired", err)
+	}
+
+	principal, err := identity.NewProjectSystemPrincipal(
+		"reconciler", "inspect task evidence", "tenant-a", "project-a",
+		identity.CapabilityTaskSystemAccess,
+	)
+	if err != nil {
+		t.Fatalf("NewProjectSystemPrincipal returned error: %v", err)
+	}
 	systemCtx := identity.WithPrincipal(context.Background(), principal)
 	if _, err := tasks.Get(systemCtx, created.ID); err != nil {
-		t.Fatalf("explicit system Get returned error: %v", err)
+		t.Fatalf("explicit scoped system Get returned error: %v", err)
 	}
 }
 
