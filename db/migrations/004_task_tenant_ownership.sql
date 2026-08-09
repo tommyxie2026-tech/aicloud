@@ -14,10 +14,11 @@ CREATE TABLE IF NOT EXISTS task_ownership (
 CREATE INDEX IF NOT EXISTS task_ownership_tenant_project_idx
     ON task_ownership(tenant_id, project_id, created_at, task_id);
 
--- Defense-in-depth RLS is prepared here. The application repository always
--- applies explicit ownership checks. RLS becomes mandatory once all PostgreSQL
--- access paths use transaction-local aicloud.tenant_id settings.
+-- Defense in depth: even the table owner is subject to RLS. The repository
+-- sets transaction-local aicloud.tenant_id for tenant calls and explicit
+-- aicloud.system_access=on only for trusted internal/system calls.
 ALTER TABLE task_ownership ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_ownership FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS task_ownership_tenant_policy ON task_ownership;
 CREATE POLICY task_ownership_tenant_policy ON task_ownership
