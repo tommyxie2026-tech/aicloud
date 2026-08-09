@@ -19,20 +19,21 @@ import (
 	"github.com/tommyxie2026-tech/aicloud/internal/modelruntime"
 	"github.com/tommyxie2026-tech/aicloud/internal/modelservice"
 	"github.com/tommyxie2026-tech/aicloud/internal/repository"
+	"github.com/tommyxie2026-tech/aicloud/internal/tenantrepo"
 	tracepkg "github.com/tommyxie2026-tech/aicloud/internal/trace"
 	"github.com/tommyxie2026-tech/aicloud/model/mock"
 	"github.com/tommyxie2026-tech/aicloud/model/provider"
 )
 
 type runtimeStores struct {
-	models       domain.ModelRepository
-	tasks        domain.TaskRepository
-	routes       domain.RouteDecisionRepository
-	costs        domain.CostEventRepository
-	traces       tracepkg.Store
-	evaluations  evaluation.Store
-	admissions   admission.Store
-	close        func()
+	models      domain.ModelRepository
+	tasks       domain.TaskRepository
+	routes      domain.RouteDecisionRepository
+	costs       domain.CostEventRepository
+	traces      tracepkg.Store
+	evaluations evaluation.Store
+	admissions  admission.Store
+	close       func()
 }
 
 func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, error) {
@@ -47,16 +48,18 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 				return runtimeStores{}, err
 			}
 		}
+		ownership := tenantrepo.NewPostgresOwnershipStore(repos.DB)
 		return runtimeStores{
-			models: repos.Models, tasks: repos.Tasks, routes: repos.RouteDecisions,
+			models: repos.Models, tasks: tenantrepo.NewScopedTasks(repos.Tasks, ownership), routes: repos.RouteDecisions,
 			costs: repos.CostEvents, traces: repository.NewPostgresTraceStore(repos.DB),
 			evaluations: repository.NewPostgresEvaluationStore(repos.DB),
 			admissions: repository.NewPostgresAdmissionStore(repos.DB),
 			close: func() { _ = repos.DB.Close() },
 		}, nil
 	}
+	ownership := tenantrepo.NewMemoryOwnershipStore()
 	return runtimeStores{
-		models: repository.NewMemoryModels(), tasks: repository.NewMemoryTasks(),
+		models: repository.NewMemoryModels(), tasks: tenantrepo.NewScopedTasks(repository.NewMemoryTasks(), ownership),
 		routes: repository.NewMemoryRouteDecisions(), costs: repository.NewMemoryCostEvents(),
 		traces: tracepkg.NewMemoryStore(), evaluations: evaluation.NewMemoryStore(),
 		admissions: admission.NewMemoryStore(), close: func() {},
