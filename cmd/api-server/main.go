@@ -183,7 +183,7 @@ func registerConfiguredProvider(ctx context.Context, models *modelservice.Servic
 		License:           cfg.LicenseID,
 		LicenseEvidence: domain.LicenseEvidence{
 			LicenseID:            cfg.LicenseID,
-			LicenseTextRef:        cfg.LicenseTextRef,
+			LicenseTextRef:       cfg.LicenseTextRef,
 			CommercialUseAllowed: cfg.Approved,
 			HostedServiceAllowed: cfg.Approved,
 			Reviewer:             cfg.EvidenceReviewer,
