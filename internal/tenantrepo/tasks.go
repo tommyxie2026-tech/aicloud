@@ -22,18 +22,12 @@ func NewScopedTasks(base domain.TaskRepository) *ScopedTasks {
 }
 
 func (r *ScopedTasks) List(ctx context.Context) ([]domain.Task, error) {
-	principal, err := identity.RequirePrincipal(ctx)
+	principal, err := requireProjectPrincipal(ctx)
 	if err != nil {
 		return nil, err
 	}
 	items, err := r.base.List(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if isAuthorizedSystem(principal) {
-		return items, nil
-	}
-	if _, err := identity.RequireProject(ctx); err != nil {
 		return nil, err
 	}
 	filtered := make([]domain.Task, 0, len(items))
@@ -46,7 +40,7 @@ func (r *ScopedTasks) List(ctx context.Context) ([]domain.Task, error) {
 }
 
 func (r *ScopedTasks) Get(ctx context.Context, id string) (domain.Task, error) {
-	principal, err := identity.RequirePrincipal(ctx)
+	principal, err := requireProjectPrincipal(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -54,14 +48,14 @@ func (r *ScopedTasks) Get(ctx context.Context, id string) (domain.Task, error) {
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if !canAccessTask(principal, task) {
+	if !principal.OwnsProject(task.TenantID, task.ProjectID) {
 		return domain.Task{}, repository.ErrNotFound
 	}
 	return task, nil
 }
 
 func (r *ScopedTasks) Create(ctx context.Context, task domain.Task) (domain.Task, error) {
-	principal, err := identity.RequireProject(ctx)
+	principal, err := requireProjectPrincipal(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -81,7 +75,7 @@ func (r *ScopedTasks) Create(ctx context.Context, task domain.Task) (domain.Task
 }
 
 func (r *ScopedTasks) Update(ctx context.Context, task domain.Task) (domain.Task, error) {
-	principal, err := identity.RequirePrincipal(ctx)
+	principal, err := requireProjectPrincipal(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -89,7 +83,7 @@ func (r *ScopedTasks) Update(ctx context.Context, task domain.Task) (domain.Task
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if !canAccessTask(principal, current) {
+	if !principal.OwnsProject(current.TenantID, current.ProjectID) {
 		return domain.Task{}, repository.ErrNotFound
 	}
 	if task.TenantID != current.TenantID || task.ProjectID != current.ProjectID || task.CreatedBy != current.CreatedBy {
@@ -98,15 +92,15 @@ func (r *ScopedTasks) Update(ctx context.Context, task domain.Task) (domain.Task
 	return r.base.Update(ctx, task)
 }
 
-func canAccessTask(principal identity.Principal, task domain.Task) bool {
-	if isAuthorizedSystem(principal) {
-		return true
+func requireProjectPrincipal(ctx context.Context) (identity.Principal, error) {
+	principal, err := identity.RequireProject(ctx)
+	if err != nil {
+		return identity.Principal{}, err
 	}
-	return principal.OwnsProject(task.TenantID, task.ProjectID)
-}
-
-func isAuthorizedSystem(principal identity.Principal) bool {
-	return principal.Type == identity.PrincipalSystem && principal.HasCapability(identity.CapabilityTaskSystemAccess)
+	if principal.Type == identity.PrincipalSystem && !principal.HasCapability(identity.CapabilityTaskSystemAccess) {
+		return identity.Principal{}, fmt.Errorf("%w: %s", identity.ErrCapabilityRequired, identity.CapabilityTaskSystemAccess)
+	}
+	return principal, nil
 }
 
 // IsNotFoundOrIdentityError is useful to callers that deliberately collapse
