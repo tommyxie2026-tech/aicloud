@@ -28,8 +28,8 @@ type OwnershipStore interface {
 }
 
 type ScopedTasks struct {
-	base       domain.TaskRepository
-	ownership  OwnershipStore
+	base      domain.TaskRepository
+	ownership OwnershipStore
 }
 
 func NewScopedTasks(base domain.TaskRepository, ownership OwnershipStore) *ScopedTasks {
@@ -153,38 +153,80 @@ func NewPostgresOwnershipStore(db *sql.DB) *PostgresOwnershipStore {
 }
 
 func (s *PostgresOwnershipStore) Bind(ctx context.Context, ownership Ownership) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO task_ownership (
-		task_id, tenant_id, project_id, subject_id, created_at
-	) VALUES ($1,$2,$3,$4,$5)
-	ON CONFLICT (task_id) DO NOTHING`, ownership.TaskID, ownership.TenantID,
-		ownership.ProjectID, ownership.SubjectID, ownership.CreatedAt)
-	if err != nil {
-		return fmt.Errorf("bind task ownership: %w", err)
-	}
-	current, err := s.Get(ctx, ownership.TaskID)
-	if err != nil {
-		return err
-	}
-	if current.TenantID != ownership.TenantID || current.ProjectID != ownership.ProjectID {
-		return fmt.Errorf("task ownership conflict")
-	}
-	return nil
+	return s.withScopedTx(ctx, ownership.TenantID, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO task_ownership (
+			task_id, tenant_id, project_id, subject_id, created_at
+		) VALUES ($1,$2,$3,$4,$5)
+		ON CONFLICT (task_id) DO NOTHING`, ownership.TaskID, ownership.TenantID,
+			ownership.ProjectID, ownership.SubjectID, ownership.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("bind task ownership: %w", err)
+		}
+		var current Ownership
+		err = tx.QueryRowContext(ctx, `SELECT task_id, tenant_id, project_id, subject_id, created_at
+			FROM task_ownership WHERE task_id=$1`, ownership.TaskID).Scan(
+			&current.TaskID, &current.TenantID, &current.ProjectID,
+			&current.SubjectID, &current.CreatedAt,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return repository.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("verify task ownership: %w", err)
+		}
+		if current.TenantID != ownership.TenantID || current.ProjectID != ownership.ProjectID {
+			return fmt.Errorf("task ownership conflict")
+		}
+		return nil
+	})
 }
 
 func (s *PostgresOwnershipStore) Get(ctx context.Context, taskID string) (Ownership, error) {
 	var ownership Ownership
-	err := s.db.QueryRowContext(ctx, `SELECT task_id, tenant_id, project_id, subject_id, created_at
-		FROM task_ownership WHERE task_id=$1`, taskID).Scan(
-		&ownership.TaskID, &ownership.TenantID, &ownership.ProjectID,
-		&ownership.SubjectID, &ownership.CreatedAt,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Ownership{}, repository.ErrNotFound
+	scope, scoped := tenant.FromContext(ctx)
+	tenantID := ""
+	if scoped {
+		tenantID = scope.TenantID
 	}
+	err := s.withScopedTx(ctx, tenantID, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, `SELECT task_id, tenant_id, project_id, subject_id, created_at
+			FROM task_ownership WHERE task_id=$1`, taskID).Scan(
+			&ownership.TaskID, &ownership.TenantID, &ownership.ProjectID,
+			&ownership.SubjectID, &ownership.CreatedAt,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return repository.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("get task ownership: %w", err)
+		}
+		return nil
+	})
+	return ownership, err
+}
+
+func (s *PostgresOwnershipStore) withScopedTx(ctx context.Context, tenantID string, fn func(*sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Ownership{}, fmt.Errorf("get task ownership: %w", err)
+		return fmt.Errorf("begin ownership transaction: %w", err)
 	}
-	return ownership, nil
+	defer func() { _ = tx.Rollback() }()
+
+	systemAccess := "off"
+	if tenantID == "" {
+		systemAccess = "on"
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('aicloud.tenant_id', $1, true),
+		set_config('aicloud.system_access', $2, true)`, tenantID, systemAccess); err != nil {
+		return fmt.Errorf("set tenant transaction scope: %w", err)
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit ownership transaction: %w", err)
+	}
+	return nil
 }
 
 // SortedTaskIDs is intentionally small and test-oriented; production list
