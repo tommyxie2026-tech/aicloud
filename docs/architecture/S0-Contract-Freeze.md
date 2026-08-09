@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Before additional implementation, freeze the contracts that prevent architectural drift.
+Before additional implementation, freeze the contracts that prevent architectural drift and define the invariants that all v0.1 code must satisfy.
 
 ## Core Principles
 
@@ -16,40 +16,105 @@ Before additional implementation, freeze the contracts that prevent architectura
 8. Every side effect requires evidence.
 9. Every cost belongs to a Task.
 10. Every production model requires admission and evaluation evidence.
+11. Missing identity is unauthenticated, never System access.
+12. Task state and canonical TaskEvent commit atomically.
+13. Unsafe DB/event dual writes are replaced by a transactional Outbox.
+14. Retry layers require stable idempotency identities and bounded attempt budgets.
+15. Historical evidence is immutable and versioned.
 
 ## Runtime Ownership
 
 PostgreSQL:
 - business state;
-- query state;
-- resource ownership.
+- query projection;
+- resource ownership;
+- durable evidence records.
 
 Workflow Engine:
 - execution orchestration;
-- retry and recovery.
+- retry, timers and recovery;
+- durable waits/signals.
 
 Task Events:
 - immutable business history.
 
 Observability:
-- operational reconstruction.
+- operational reconstruction and telemetry.
+
+## Frozen Contract Pack
+
+The S0 contract pack is now:
+
+```text
+S0-Contract-Freeze.md
+resource-scope-matrix.md
+identity-contract.md
+task-aggregate-contract.md
+task-event-contract.md
+workflow-source-of-truth.md
+security-boundary-model.md
+database-rls-model.md
+provider-model-deployment-contract.md
+idempotency-contract.md
+trace-context-contract.md
+policy-routing-boundary.md
+audit-evidence-contract.md
+cost-accounting-contract.md
+evaluation-release-gate-contract.md
+pre-code-architecture-gate.md
+```
+
+Every document has a synchronized `.zh-CN.md` version.
+
+## Review Gate
+
+No Slice may start implementation unless its design answers:
+
+1. Goal
+2. Non-Goals
+3. Domain Changes
+4. API Changes
+5. Data Model Changes
+6. Security Boundary
+7. Runtime Flow
+8. Failure Model
+9. Idempotency Model
+10. Observability
+11. Cost Model
+12. Migration
+13. Tests
+14. Acceptance Criteria
+15. Rollback Strategy
+
+The platform-wide pre-code gate is documented in `pre-code-architecture-gate.md` and currently has all 20 contract categories defined.
+
+## Current Implementation Decision
+
+S0 contract freeze is complete. Implementation may resume only in this remediation order:
+
+```text
+R1 Explicit Principal model
+  -> R2 remove no-scope System behavior
+  -> R3 DB role / RLS hardening
+  -> R4 atomic Task scope persistence
+  -> R5 Task aggregate/state transition
+  -> R6 TaskEvent + Outbox + Idempotency
+  -> R7 OpenAPI / OIDC / RBAC / ABAC convergence
+```
+
+PR #12 remains Draft until R1-R4 are complete.
 
 ## Non-Goals
 
 v0.1 does not attempt:
 
-- microservice decomposition;
+- premature microservice decomposition;
 - autonomous unrestricted agents;
-- provider-specific business logic;
-- direct Agent access to enterprise resources.
+- provider-specific business logic in domain code;
+- direct Agent access to enterprise resources;
+- treating workflow history as the business database;
+- treating missing scope as administrative privilege.
 
-## Review Gate
+## Change Control
 
-No Slice may start implementation unless:
-
-- Domain contract reviewed;
-- API contract reviewed;
-- security boundary reviewed;
-- persistence contract reviewed;
-- test acceptance defined;
-- English and Chinese documentation synchronized.
+A future implementation that conflicts with a frozen invariant requires an architecture issue, bilingual contract/ADR review, migration analysis and explicit approval before code changes are merged.
