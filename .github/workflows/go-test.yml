@@ -41,12 +41,7 @@ jobs:
         run: |
           changed=$(git diff --name-only --diff-filter=ACMR HEAD^ -- '*.go')
           if [ -n "$changed" ]; then
-            unformatted=$(gofmt -l $changed)
-            if [ -n "$unformatted" ]; then
-              echo "Unformatted Go files:"
-              echo "$unformatted"
-              exit 1
-            fi
+            test -z "$(gofmt -l $changed)"
           fi
 
       - name: Run tests
