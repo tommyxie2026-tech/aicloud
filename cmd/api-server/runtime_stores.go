@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tommyxie2026-tech/aicloud/db/migrations"
 	"github.com/tommyxie2026-tech/aicloud/internal/admission"
 	"github.com/tommyxie2026-tech/aicloud/internal/circuitbreaker"
 	"github.com/tommyxie2026-tech/aicloud/internal/config"
@@ -38,15 +37,12 @@ type runtimeStores struct {
 
 func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, error) {
 	if strings.EqualFold(cfg.RepositoryMode, "postgres") {
+		if cfg.RunMigrations {
+			return runtimeStores{}, fmt.Errorf("runtime migrations are disabled; run cmd/migrate with AICLOUD_MIGRATION_DATABASE_URL")
+		}
 		repos, err := repository.OpenPostgres(ctx, cfg.DatabaseURL)
 		if err != nil {
 			return runtimeStores{}, err
-		}
-		if cfg.RunMigrations {
-			if err := migrations.Run(ctx, repos.DB); err != nil {
-				_ = repos.DB.Close()
-				return runtimeStores{}, err
-			}
 		}
 		if err := repository.ValidateRuntimeDatabaseRole(ctx, repos.DB); err != nil {
 			_ = repos.DB.Close()
