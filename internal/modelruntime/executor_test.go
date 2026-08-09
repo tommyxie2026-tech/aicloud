@@ -2,7 +2,6 @@ package modelruntime
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -15,9 +14,9 @@ import (
 )
 
 func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
-	primary := &fakeProvider{err: provider.NewProviderError(provider.ErrProviderUnavailable, "unavailable", true, nil)}
+	primary := &fakeProvider{err: &provider.ProviderError{Code: provider.ErrProviderUnavailable, Message: "unavailable", Retryable: true}}
 	secondary := &fakeProvider{response: &provider.ProviderResponse{
-		RequestID: "request-1", ProviderName: "secondary", Model: "secondary-model",
+		RequestID: "request-1", ProviderName: "secondary", ModelName: "secondary-model",
 		RawText: "ok", TokenUsage: provider.TokenUsage{InputTokens: 100, OutputTokens: 20},
 	}}
 	providers := NewMemoryProviderRegistry()
@@ -37,10 +36,10 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 		traceStore,
 	)
 	decision := domain.RouteDecision{
-		Selected: domain.RouteCandidate{ModelID: "primary", ModelVersion: "v1", RouteClass: domain.RouteFlagship},
+		Selected:      domain.RouteCandidate{ModelID: "primary", ModelVersion: "v1", RouteClass: domain.RouteFlagship},
 		FallbackChain: []domain.RouteCandidate{{ModelID: "secondary", ModelVersion: "v1", RouteClass: domain.RouteEfficient}},
 	}
-	result, err := executor.Execute(context.Background(), "task-1", "trace-1", decision, provider.ProviderRequest{RequestID: "request-1", Prompt: "test", OutputSchemaRef: provider.OutputSchemaRef{Name: "result"}})
+	result, err := executor.Execute(context.Background(), "task-1", "trace-1", decision, provider.ProviderRequest{RequestID: "request-1", Instruction: "test", OutputSchema: provider.OutputSchemaRef{Name: "result"}})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -61,7 +60,7 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 }
 
 func TestExecutorDoesNotFallbackOnNonRetryableFailure(t *testing.T) {
-	primaryErr := provider.NewProviderError(provider.ErrSchemaInvalid, "schema invalid", false, errors.New("bad schema"))
+	primaryErr := &provider.ProviderError{Code: provider.ErrSchemaMismatch, Message: "schema invalid", Retryable: false}
 	primary := &fakeProvider{err: primaryErr}
 	secondary := &fakeProvider{response: &provider.ProviderResponse{RawText: "must not run"}}
 	providers := NewMemoryProviderRegistry()
@@ -75,10 +74,10 @@ func TestExecutorDoesNotFallbackOnNonRetryableFailure(t *testing.T) {
 		tracepkg.NewMemoryStore(),
 	)
 	decision := domain.RouteDecision{
-		Selected: domain.RouteCandidate{ModelID: "primary", ModelVersion: "v1"},
+		Selected:      domain.RouteCandidate{ModelID: "primary", ModelVersion: "v1"},
 		FallbackChain: []domain.RouteCandidate{{ModelID: "secondary", ModelVersion: "v1"}},
 	}
-	result, err := executor.Execute(context.Background(), "task-2", "trace-2", decision, provider.ProviderRequest{RequestID: "request-2", Prompt: "test", OutputSchemaRef: provider.OutputSchemaRef{Name: "result"}})
+	result, err := executor.Execute(context.Background(), "task-2", "trace-2", decision, provider.ProviderRequest{RequestID: "request-2", Instruction: "test", OutputSchema: provider.OutputSchemaRef{Name: "result"}})
 	if err == nil {
 		t.Fatal("expected non-retryable error")
 	}
@@ -95,7 +94,7 @@ type fakeProvider struct {
 
 func (f *fakeProvider) Name() string { return "fake" }
 
-func (f *fakeProvider) Type() provider.ProviderType { return provider.ProviderTypePublic }
+func (f *fakeProvider) Type() provider.ProviderType { return provider.ProviderTypeHosted }
 
 func (f *fakeProvider) Capabilities() provider.ProviderCapabilities {
 	return provider.ProviderCapabilities{SupportsStructuredOutput: true}
@@ -106,8 +105,8 @@ func (f *fakeProvider) Generate(context.Context, provider.ProviderRequest) (*pro
 	return f.response, f.err
 }
 
-func (f *fakeProvider) Health(context.Context) (*provider.HealthStatus, error) {
-	return &provider.HealthStatus{Available: true}, nil
+func (f *fakeProvider) Health(context.Context) (*provider.ProviderHealth, error) {
+	return &provider.ProviderHealth{Available: true}, nil
 }
 
 func runtimeModel(id, providerName string, price float64) domain.Model {
