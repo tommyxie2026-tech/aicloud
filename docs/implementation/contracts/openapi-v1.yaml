@@ -1,0 +1,289 @@
+openapi: 3.1.0
+info:
+  title: AI Cloud API
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /tasks:
+    post:
+      operationId: createTask
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '202':
+          description: Task accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /tasks/{task_id}:
+    get:
+      operationId: getTask
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '200':
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404': { $ref: '#/components/responses/Error' }
+  /tasks/{task_id}:cancel:
+    post:
+      operationId: cancelTask
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202': { description: Cancellation accepted }
+        '409': { $ref: '#/components/responses/Error' }
+  /tasks/{task_id}:approve:
+    post:
+      operationId: approveTask
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+      responses:
+        '202': { description: Approval decision accepted }
+        '409': { $ref: '#/components/responses/Error' }
+  /tasks/{task_id}/events:
+    get:
+      operationId: listTaskEvents
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '200':
+          description: Task events
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TaskEvent' }
+  /tasks/{task_id}/cost:
+    get:
+      operationId: getTaskCost
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '200':
+          description: Cost summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostSummary' }
+  /models:
+    get:
+      operationId: listModels
+      responses:
+        '200':
+          description: Models
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Model' }
+    post:
+      operationId: createModel
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateModelRequest' }
+      responses:
+        '201':
+          description: Model created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Model' }
+  /models/{model_id}/versions:
+    post:
+      operationId: createModelVersion
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateModelVersionRequest' }
+      responses:
+        '201':
+          description: Version created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelVersion' }
+  /model-versions/{version_id}/admission:
+    post:
+      operationId: setModelAdmission
+      parameters:
+        - name: version_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdmissionRequest' }
+      responses:
+        '200': { description: Admission updated }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    TaskID:
+      name: task_id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    CreateTaskRequest:
+      type: object
+      required: [project_id, agent_id, goal]
+      properties:
+        project_id: { type: string }
+        agent_id: { type: string }
+        goal: { type: string, minLength: 1, maxLength: 20000 }
+        inputs: { type: object, additionalProperties: true }
+        constraints:
+          type: object
+          properties:
+            max_cost_usd: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$' }
+            deadline_seconds: { type: integer, minimum: 1, maximum: 86400 }
+            data_classification: { type: string, enum: [public, internal, confidential, restricted] }
+    Task:
+      type: object
+      required: [task_id, trace_id, project_id, status, created_at]
+      properties:
+        task_id: { type: string }
+        trace_id: { type: string }
+        project_id: { type: string }
+        agent_id: { type: string }
+        status:
+          type: string
+          enum: [CREATED, PLANNING, EXECUTING, WAITING_APPROVAL, VALIDATING, COMPLETED, FAILED, CANCELLED]
+        result: { type: object, additionalProperties: true }
+        failure_code: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TaskEvent:
+      type: object
+      required: [event_id, task_id, sequence, event_type, occurred_at]
+      properties:
+        event_id: { type: string }
+        task_id: { type: string }
+        sequence: { type: integer, minimum: 1 }
+        event_type: { type: string }
+        payload: { type: object, additionalProperties: true }
+        occurred_at: { type: string, format: date-time }
+    ApprovalRequest:
+      type: object
+      required: [approval_id, decision]
+      properties:
+        approval_id: { type: string }
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        reason: { type: string, maxLength: 4000 }
+    CostSummary:
+      type: object
+      required: [task_id, currency, total]
+      properties:
+        task_id: { type: string }
+        currency: { type: string, example: USD }
+        total: { type: string }
+        breakdown: { type: object, additionalProperties: true }
+    Model:
+      type: object
+      required: [model_id, name, visibility]
+      properties:
+        model_id: { type: string }
+        name: { type: string }
+        visibility: { type: string, enum: [global, private, restricted] }
+        description: { type: string }
+    CreateModelRequest:
+      type: object
+      required: [name, visibility]
+      properties:
+        name: { type: string }
+        visibility: { type: string, enum: [global, private, restricted] }
+        description: { type: string }
+    CreateModelVersionRequest:
+      type: object
+      required: [provider_id, provider_model_ref, deployment_mode, capabilities]
+      properties:
+        provider_id: { type: string }
+        provider_model_ref: { type: string }
+        version_ref: { type: string }
+        deployment_mode: { type: string, enum: [commercial_api, enterprise_api, private_endpoint, self_hosted, local] }
+        capabilities: { type: object, additionalProperties: true }
+        pricing: { type: object, additionalProperties: true }
+        residency: { type: object, additionalProperties: true }
+        license: { type: object, additionalProperties: true }
+        provenance: { type: object, additionalProperties: true }
+        risk_level: { type: string, enum: [low, medium, high, critical] }
+    ModelVersion:
+      allOf:
+        - $ref: '#/components/schemas/CreateModelVersionRequest'
+        - type: object
+          required: [model_version_id, admission_state, lifecycle_state]
+          properties:
+            model_version_id: { type: string }
+            admission_state: { type: string, enum: [discovered, reviewed, approved, restricted, revoked] }
+            lifecycle_state: { type: string, enum: [draft, active, degraded, deprecated, retired] }
+    AdmissionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [reviewed, approved, restricted, revoked] }
+        reason: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id, trace_id, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string }
+            trace_id: { type: string }
+            retryable: { type: boolean }
+            details: { type: object, additionalProperties: true }
