@@ -48,8 +48,12 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 				return runtimeStores{}, err
 			}
 		}
-		ownership := tenantrepo.NewPostgresOwnershipStore(repos.DB)
-		tasks := tenantrepo.NewScopedTasks(repos.Tasks, ownership)
+		if err := repository.ValidateRuntimeDatabaseRole(ctx, repos.DB); err != nil {
+			_ = repos.DB.Close()
+			return runtimeStores{}, err
+		}
+		postgresTasks := repository.NewScopedPostgresTasks(repos.DB)
+		tasks := tenantrepo.NewScopedTasks(postgresTasks)
 		routes := tenantrepo.NewScopedRouteDecisions(repos.RouteDecisions, tasks)
 		costs := tenantrepo.NewScopedCostEvents(repos.CostEvents, tasks)
 		return runtimeStores{
@@ -60,8 +64,7 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 			close:       func() { _ = repos.DB.Close() },
 		}, nil
 	}
-	ownership := tenantrepo.NewMemoryOwnershipStore()
-	tasks := tenantrepo.NewScopedTasks(repository.NewMemoryTasks(), ownership)
+	tasks := tenantrepo.NewScopedTasks(repository.NewMemoryTasks())
 	routes := tenantrepo.NewScopedRouteDecisions(repository.NewMemoryRouteDecisions(), tasks)
 	costs := tenantrepo.NewScopedCostEvents(repository.NewMemoryCostEvents(), tasks)
 	return runtimeStores{
