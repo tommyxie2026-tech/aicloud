@@ -5,11 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/tommyxie2026-tech/aicloud/internal/tenant"
+	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 )
 
-func TestTenantScopeRejectsUnscopedAPIRequest(t *testing.T) {
-	handler := WithTenantScope(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+func TestTrustedIngressRejectsUnscopedAPIRequest(t *testing.T) {
+	handler := WithTrustedIngressPrincipal(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("unscoped request reached handler")
 	}))
 
@@ -20,14 +20,17 @@ func TestTenantScopeRejectsUnscopedAPIRequest(t *testing.T) {
 	}
 }
 
-func TestTenantScopePropagatesAuthenticatedScope(t *testing.T) {
-	handler := WithTenantScope(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		scope, err := tenant.Require(r.Context())
+func TestTrustedIngressPropagatesPrincipal(t *testing.T) {
+	handler := WithTrustedIngressPrincipal(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal, err := identity.RequireProject(r.Context())
 		if err != nil {
-			t.Fatalf("Require returned error: %v", err)
+			t.Fatalf("RequireProject returned error: %v", err)
 		}
-		if scope.TenantID != "tenant-a" || scope.ProjectID != "project-a" || scope.SubjectID != "user-a" {
-			t.Fatalf("unexpected scope: %+v", scope)
+		if principal.Type != identity.PrincipalServiceAccount || principal.TenantID != "tenant-a" || principal.ProjectID != "project-a" || principal.SubjectID != "svc-a" {
+			t.Fatalf("unexpected principal: %+v", principal)
+		}
+		if !principal.HasCapability("task:create") {
+			t.Fatalf("capabilities not propagated: %+v", principal.Capabilities)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -35,7 +38,9 @@ func TestTenantScopePropagatesAuthenticatedScope(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	request.Header.Set(TenantHeader, "tenant-a")
 	request.Header.Set(ProjectHeader, "project-a")
-	request.Header.Set(SubjectHeader, "user-a")
+	request.Header.Set(SubjectHeader, "svc-a")
+	request.Header.Set(PrincipalTypeHeader, string(identity.PrincipalServiceAccount))
+	request.Header.Set(CapabilitiesHeader, "task:create, task:read")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent {
@@ -43,8 +48,24 @@ func TestTenantScopePropagatesAuthenticatedScope(t *testing.T) {
 	}
 }
 
-func TestTenantScopeDoesNotGateHealthEndpoints(t *testing.T) {
-	handler := WithTenantScope(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func TestTrustedIngressRejectsSystemPrincipalHeader(t *testing.T) {
+	handler := WithTrustedIngressPrincipal(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("external system principal reached handler")
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
+	request.Header.Set(TenantHeader, "tenant-a")
+	request.Header.Set(ProjectHeader, "project-a")
+	request.Header.Set(SubjectHeader, "system-a")
+	request.Header.Set(PrincipalTypeHeader, string(identity.PrincipalSystem))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d want=%d", response.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestTrustedIngressDoesNotGateHealthEndpoints(t *testing.T) {
+	handler := WithTrustedIngressPrincipal(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	response := httptest.NewRecorder()
