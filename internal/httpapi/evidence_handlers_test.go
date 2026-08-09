@@ -31,12 +31,12 @@ func evidenceTestHandler(t *testing.T) http.Handler {
 		ID: "model-1", Name: "Model One", Version: "v1", Provider: "provider-1",
 		DeploymentMode: domain.DeploymentPublicAPI, Lifecycle: domain.ModelActive,
 		Capabilities: []string{"structured-output"},
-		Pricing: domain.PricingProfile{Currency: "USD", InputPerMillion: 1, OutputPerMillion: 2},
-		Health: domain.HealthHealthy, HealthCheckedAt: &now,
+		Pricing:      domain.PricingProfile{Currency: "USD", InputPerMillion: 1, OutputPerMillion: 2},
+		Health:       domain.HealthHealthy, HealthCheckedAt: &now,
 		QuotaRemaining: -1, CapacityAvailable: -1,
-		ServiceTiers: []domain.ServiceTier{domain.TierStandard},
+		ServiceTiers:     []domain.ServiceTier{domain.TierStandard},
 		InferenceEfforts: []domain.InferenceEffort{domain.EffortLow},
-		ApprovalStatus: domain.ApprovalApproved, CreatedAt: now, UpdatedAt: now,
+		ApprovalStatus:   domain.ApprovalApproved, CreatedAt: now, UpdatedAt: now,
 	}
 	models := repository.NewMemoryModels(model)
 	tasks := repository.NewMemoryTasks()
@@ -91,8 +91,8 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 	}
 
 	modelBody, _ := json.Marshal(map[string]any{
-		"requestId": "request-1", "prompt": "produce JSON",
-		"outputSchemaRef": map[string]string{"name": "result", "version": "v1"},
+		"requestId": "request-1", "instruction": "produce JSON",
+		"outputSchema": map[string]string{"name": "result", "version": "v1"},
 	})
 	modelResponse := httptest.NewRecorder()
 	handler.ServeHTTP(modelResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/model", bytes.NewReader(modelBody)))
@@ -100,7 +100,7 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 		t.Fatalf("model status=%d body=%s", modelResponse.Code, modelResponse.Body.String())
 	}
 	var execution struct {
-		Fallback bool `json:"fallback"`
+		Fallback bool  `json:"fallback"`
 		Attempts []any `json:"attempts"`
 	}
 	if err := json.Unmarshal(modelResponse.Body.Bytes(), &execution); err != nil {
@@ -190,19 +190,19 @@ func createEvidenceTask(t *testing.T, handler http.Handler) string {
 
 type httpFakeProvider struct{}
 
-func (*httpFakeProvider) Name() string { return "provider-1" }
-func (*httpFakeProvider) Type() provider.ProviderType { return provider.ProviderTypePublic }
+func (*httpFakeProvider) Name() string                { return "provider-1" }
+func (*httpFakeProvider) Type() provider.ProviderType { return provider.ProviderTypeHosted }
 func (*httpFakeProvider) Capabilities() provider.ProviderCapabilities {
 	return provider.ProviderCapabilities{SupportsStructuredOutput: true}
 }
 func (*httpFakeProvider) Generate(_ context.Context, request provider.ProviderRequest) (*provider.ProviderResponse, error) {
 	return &provider.ProviderResponse{
-		RequestID: request.RequestID, ProviderName: "provider-1", Model: "model-1",
+		RequestID: request.RequestID, ProviderName: "provider-1", ModelName: "model-1",
 		RawText: "{\"ok\":true}", Structured: map[string]any{"ok": true},
-		TokenUsage: provider.TokenUsage{InputTokens: 100, OutputTokens: 20},
-		FinishReason: provider.FinishReasonStop,
+		TokenUsage:   provider.TokenUsage{InputTokens: 100, OutputTokens: 20},
+		FinishReason: "stop",
 	}, nil
 }
-func (*httpFakeProvider) Health(context.Context) (*provider.HealthStatus, error) {
-	return &provider.HealthStatus{Available: true}, nil
+func (*httpFakeProvider) Health(context.Context) (*provider.ProviderHealth, error) {
+	return &provider.ProviderHealth{Available: true}, nil
 }
