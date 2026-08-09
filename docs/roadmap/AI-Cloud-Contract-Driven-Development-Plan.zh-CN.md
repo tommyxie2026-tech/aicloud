@@ -14,16 +14,19 @@ AI Cloud v0.1 继续采用 Go 1.22 Modular Monolith，并保持 API 与 Worker �
 2. API/OpenAPI Contract；
 3. Persistence/Migration Contract；
 4. Runtime/Security Flow；
-5. Tests 与验收证据；
-6. 同一个 PR 中的英文和简体中文文档。
+5. Failure/Idempotency Model；
+6. Observability/Cost Evidence；
+7. Tests 与验收证据；
+8. 同一个 PR 中的英文和简体中文文档。
 
-只有 PR Head 上的 `gofmt`、`go test ./...`、`go vet ./...`、入口程序构建和对应契约测试全部通过，Slice 才算完成。
+只有 PR Head 上的 `gofmt`、`go test ./...`、`go vet ./...`、入口程序构建和对应 Contract Test 全部通过，Slice 才算完成。
 
 ## 2. 关键开发路径
 
 ```text
-S1 Tenant Boundary
- -> S2 API Contract Convergence
+S0 Architecture & Contract Freeze
+ -> S1 Tenant / Identity Boundary
+ -> S2 API + Domain Contract Convergence
  -> S3 Durable Task Workflow
  -> S4 Governed Execution
  -> S5 Trace + Cost + Audit
@@ -32,175 +35,230 @@ S1 Tenant Boundary
  -> S8 End-to-End Developer Scenario
 ```
 
-接入多少 Provider 不是里程碑。能够完整、可恢复、受治理地执行一个 Task 才是里程碑。
+接入多少 Provider 不是里程碑。能够完整、可恢复、受治理、可审计且可核算成本地执行一个 Task 才是里程碑。
 
-## 3. Slice 1 —— Tenant Boundary 与 Task Ownership
+## 3. S0 —— Architecture & Contract Freeze
 
 ### 目标
 
-在继续扩大 Agent 自主执行能力之前，把 Tenant/Project Context 建立为外部 API 的平台不变量，并阻止跨租户 Task 访问。
+在继续 Coding 前消除关键歧义，冻结 Domain、Identity、Tenant Scope、Task、Event、Workflow、RLS、Provider/Model Separation、Idempotency、Trace、Policy/Router、Audit、Cost、Evaluation 等平台不变量。
+
+### Frozen Contract Pack
+
+见 `docs/architecture/S0-Contract-Freeze.zh-CN.md` 与 `pre-code-architecture-gate.zh-CN.md`。
+
+### 退出条件
+
+- 20/20 Architecture Contract Category 已定义；
+- 中英文 Contract Pack 完整；
+- S1 Merge Blocker 明确；
+- Implementation 只能按照批准后的 Remediation Order 恢复。
+
+### S0 后 Remediation Order
+
+```text
+R1 Explicit Principal Model
+ -> R2 Remove No-scope System Behavior
+ -> R3 DB Role / RLS Hardening
+ -> R4 Atomic Task Scope Persistence
+ -> R5 Task Aggregate / State Transition
+ -> R6 TaskEvent + Outbox + Idempotency
+ -> R7 OpenAPI / OIDC / RBAC / ABAC Convergence
+```
+
+R1-R4 必须在当前 S1 PR Ready for Merge 前完成。
+
+## 4. S1 —— Tenant / Identity Boundary 与 Task Ownership
+
+### 目标
+
+在扩大 Agent 自主执行能力之前，把 Verified Principal、Tenant、Project 建立为平台不变量，并阻止 Cross-Tenant/Cross-Project Task Access。
 
 ### 实现内容
 
-- `internal/tenant`：请求 Scope 契约；
-- `internal/httpapi`：Trusted Ingress Tenant Middleware；
-- `internal/tenantrepo`：Tenant Scoped Task Repository Decorator；
-- PostgreSQL `task_ownership` 表，绑定 Tenant/Project/Subject；
-- `task_ownership` 启用 PostgreSQL RLS，并使用 Transaction-local Tenant Setting；
-- Task Subresource Guard，使 Route、Cost、Audit、Trace、Evaluation、Model Execution、Tool Execution 自动继承 Task Ownership；
-- `/healthz` 和 `/readyz` 不进入 Tenant Gate。
+- 显式 `Principal` Contract：User、ServiceAccount、System；
+- Protected API 之前完成 Authentication 与 Principal Resolution；
+- Scoped Task Repository 与 Task Subresource Guard；
+- Task Scope Persistence 原子化；
+- 长期 Task Schema 直接保存 `tenant_id`、`project_id`、`created_by`；
+- PostgreSQL Runtime Role 使用 Transaction-local Tenant/Project Context + RLS；
+- App/Worker DB Role 不具备 Administrative Bypass；
+- Health/Readiness 不进入 Tenant Authorization，但仍遵循 Infrastructure Access Policy。
 
 ### 验收条件
 
-- API 请求缺少已认证 Tenant/Subject Context 时 Fail Closed；
-- Task API 必须具有 Project Context；
-- Tenant A 无法读取或列出 Tenant B 的 Task；
-- 跨租户 Task ID 返回 Not Found，不泄露授权细节；
-- PostgreSQL Ownership 读写使用事务级 RLS Context；
-- Bootstrap 和维护场景保留可信 Internal/System Context。
+- Missing Identity Fail Closed；
+- Missing Tenant 绝不代表 System Access；
+- Project API 必须具有 Project Context；
+- Tenant A 无法访问 Tenant B Task；
+- 同 Tenant 不同 Project 的隔离遵循 Scope Policy；
+- Cross-scope Task ID 在需要时使用 Not Found Semantics；
+- Task Creation + Scope Ownership 原子提交；
+- App/Worker DB Role 无法 Bypass RLS；
+- System Access 必须使用 Explicit System Principal/Capability，并在需要时走独立 Admin DB Path。
 
-### 明确边界
+### Migration Note
 
-v0.1 当前使用由认证 Ingress 注入的 Trusted Identity Headers。客户端自行提供这些 Header 不是生产认证机制。OIDC/JWT Verification 与 RBAC 在 Slice 2 实现。
+当前 Trusted Header 与 `task_ownership` 属于 Compatibility Bridge，在 Merge 前必须逐步收敛到 Frozen Identity/RLS/Task Contract。
 
-## 4. Slice 2 —— API Contract Convergence
+## 5. S2 —— API + Domain Contract Convergence
 
 ### 目标
 
-让运行中的 API 与 `docs/implementation/contracts/openapi-v1.yaml` 收敛，同时保留一个短期兼容窗口。
+让运行 API 与 Persistence Model 同时收敛到 Frozen Task/Identity/Event Contract 以及 `docs/implementation/contracts/openapi-v1.yaml`。
 
 ### 开发包
 
 - OIDC/JWT Verifier Interface 与生产实现；
-- RBAC：Tenant Admin、Project Admin、Developer、Operator、Reviewer、Service Account；
-- 稳定 `ErrorEnvelope`：Request ID、Trace ID、Error Code、Retryable；
+- RBAC + Policy/ABAC Authorization Seam；
+- Stable `ErrorEnvelope`：Request ID、Trace ID、Error Code、Retryable；
 - 所有 Mutating API 强制 `Idempotency-Key`；
-- Task Schema 收敛：Tenant、Project、Agent、Goal/Input、Status、Version；
-- Task 状态机：CREATED -> PLANNING -> EXECUTING -> WAITING_APPROVAL -> VALIDATING -> Terminal State；
-- Pagination 与 Resource Version；
-- OpenAPI Contract Tests。
+- Canonical Task Schema：Tenant、Project、CreatedBy、Agent、Goal/Input、Constraints、Status、Version；
+- Task Transition API / State Machine；
+- Append-only TaskEvent Store；
+- Transactional Outbox；
+- Command Idempotency Record；
+- Optimistic Concurrency / Resource Version；
+- Pagination 与 Executable OpenAPI Contract Test。
 
 ### 退出条件
 
-所有 Public Handler 都不能接受未文档化的请求结构，所有已声明的 v0.1 API 都具备可执行契约测试。
+- Public Handler 只接受 Documented Request Shape；
+- 所有 v0.1 Public Path 有 Executable Contract Test；
+- Task State 不允许任意 Field Mutation；
+- Task Mutation + Canonical Event 原子提交；
+- Duplicate Mutation Request 不重复执行 Business Operation。
 
-## 5. Slice 3 —— Durable Task Workflow
+## 6. S3 —— Durable Task Workflow
 
 ### 目标
 
-使用可恢复执行替换当前 No-op Workflow Seam。
+用 Restart-safe Orchestration 替换 No-op Workflow Seam，同时保证 Workflow Runtime 不成为 Business Database。
 
 ### 开发包
 
-- 在 `workflow.Engine` 后接入 Temporal Client/Worker Adapter；
-- Planning、Routing、Model Call、Policy、Approval、Tool Execution、Validation 的 Deterministic Workflow；
+- Temporal Client/Worker Adapter 隐藏在 `workflow.Engine` 后；
+- Deterministic Planning/Router/Model/Policy/Approval/Tool/Validation Workflow；
+- 必要时使用 Outbox 驱动 Workflow Start/Signal；
 - Durable Retry、Timeout、Cancellation、Resume；
-- 每次状态转换写入 Append-only Task Event；
-- Idempotent Activity 与 Replay Test。
+- Idempotent Activity 与 Replay Test；
+- Task Projection、TaskEvent、Workflow Runtime Reconciliation。
 
 ### 退出条件
 
-API 或 Worker 重启后，同一个 Task 能继续执行，并且不会重复产生外部副作用。
+API/Worker Restart 后 Task 可以继续执行且不重复 External Side Effect；不读取 Workflow History 也能从 PostgreSQL 查询 Business State。
 
-## 6. Slice 4 —— Governed Execution
+## 7. S4 —— Governed Execution
 
 ### 目标
 
-把已有 Tool Gateway 与 Sandbox Planning Foundation 变成受控的真实执行路径。
+把 Tool Gateway 与 Sandbox 变成唯一 Controlled Side-effect Path。
 
 ### 开发包
 
-- Kubernetes Job Create/Watch/Collect/Destroy Executor；
-- Namespace 与 ServiceAccount 隔离；
-- Network Default Deny；
-- Task/Tool 级短期 Credential；
-- OPA Policy Adapter 进入生产路径；
-- Human Approval 与 Durable Workflow Pause/Resume 集成；
+- 先用 Deterministic/Fake Executor 证明业务路径；
+- 再增加 Kubernetes Job Create/Watch/Collect/Destroy Executor；
+- Namespace/ServiceAccount Isolation；
+- Default-deny Network Policy；
+- Task/Tool Scoped Short-lived Credential；
+- OPA Policy Adapter；
+- Human Approval Pause/Resume；
+- Approval 与 Proposal Digest 强绑定；
 - Signed Workspace Input 与 Controlled Artifact Output。
 
 ### 退出条件
 
-Agent 不能绕过 `Tool Gateway -> Policy -> Credential -> Sandbox/Adapter` 直接访问企业资源。
+Agent 不能绕过 `Tool Gateway -> Policy -> Approval when required -> Credential Broker -> Sandbox/Adapter` 直接访问 Enterprise Resource。
 
-## 7. Slice 5 —— Trace、Cost 与 Audit 完整化
+## 8. S5 —— Trace、Cost 与 Audit 完整化
 
 ### 目标
 
-让每一个成功或失败 Task 都可以完整重建，同时能够计算真实经济成本。
+让每个成功或失败 Task 都可以完整重建，并能够核算真实经济成本。
 
 ### 开发包
 
 - OpenTelemetry SDK 与 OTLP Export；
 - Request -> Task -> Workflow -> Agent -> Model/Tool/Sandbox/Evaluation Span Hierarchy；
-- Trace、Audit、Cost Evidence 增加 Tenant/Project Dimension；
-- Model、Tool、Workflow、Sandbox、Storage/Network、Retry、Human Review 的 Immutable Cost Event；
-- Cost Reconciliation 与 `Cost per Successful Task`。
+- Evidence 全部带 Tenant/Project/Task Correlation；
+- Immutable AuditEvent 与 CostEvent；
+- Model/Tool/Workflow/Sandbox/Storage/Network/Retry/Human Review Cost Activity；
+- Pricing Version 与 Reconciliation；
+- `Cost per Successful Task`。
 
 ### 退出条件
 
-只通过 Task ID 或 Trace ID 即可重建 Decision、Action、Failure、Retry 和 Total Cost，无需人工翻应用日志。
+仅通过 Task ID 或 Trace ID 即可重建 Decision、Action、Failure、Retry、Approval、Total Cost，无需人工关联日志。
 
-## 8. Slice 6 —— Reliable Model Routing
+## 9. S6 —— Reliable Model Routing
 
 ### 目标
 
-让 Provider Independence 在真实故障和负载条件下成立。
+让 Provider Independence 在 Outage、Quota Exhaustion、Load 下真实成立，同时保持 Policy Hard Constraint 不被优化逻辑突破。
 
 ### 开发包
 
+- Provider / Model / ModelVersion / Deployment Runtime Mapping；
 - Redis-backed Shared Circuit Breaker；
 - Provider Health/Quota/Capacity Collector；
 - Latency、Queue、Residency、Budget、Evaluation Routing Input；
+- Hard-policy Filter 先于 Soft Scoring；
 - Bounded Retry 与 Fallback；
-- Explainable Selection/Rejection Evidence；
-- Commercial API 与 Private vLLM/SGLang 统一走内部协议。
+- Explainable Eligible/Rejected Candidate；
+- Commercial API 与 Private vLLM/SGLang 统一内部协议。
 
 ### 退出条件
 
-Primary Provider 故障或 Quota Exhaustion 时能够执行 Policy-compliant Fallback，不出现无限重试或跨租户泄露。
+Primary Deployment Failure 或 Quota Exhaustion 时能够执行 Policy-compliant Fallback，不出现无限 Retry、Policy Bypass 或 Cross-tenant Leakage。
 
-## 9. Slice 7 —— Evaluation Release Gates
+## 10. S7 —— Evaluation Release Gates
 
 ### 目标
 
-把已经记录的 Evaluation Evidence 升级为可执行的发布策略。
+把 Evaluation Evidence 变成可执行 Promotion、Routing Eligibility 与 Rollback Policy。
 
 ### 开发包
 
 - Versioned Golden Dataset；
-- Model/Prompt/Workflow Regression Matrix；
+- Model/Prompt/Agent/Workflow Regression Matrix；
+- L1 Offline、L2 Pre-production、L3 Production Evaluation；
 - Quality、Safety、Reliability、Latency、Cost、Human Intervention Threshold；
-- Release Gate 与 Rollback Decision；
-- Production Trace Sampling 进入 Evaluation Candidate。
+- Immutable GateDecision；
+- Production Trace Sampling 遵循 Data Governance；
+- Release Gate 与 Rollback Decision。
 
 ### 退出条件
 
-Model、Prompt 或 Workflow Version 未通过要求的 Regression Gate 时不能进入生产。
+Required Gate 失败时，Version/Configuration 不能被 Promotion 或 Route Eligible，且每个 Decision 都能从存储 Evidence 复现。
 
-## 10. Slice 8 —— Developer End-to-End Scenario
+## 11. S8 —— End-to-End Product Proof
 
-参考场景：
+使用三个 Governance Path：
 
 ```text
-scale dev-gpu-cluster gpu-workers from 3 to 6
+A. Read-only Repository/Cluster Inspection        -> ALLOW
+B. Scale dev-gpu-cluster gpu-workers 3 -> 6       -> REQUIRE APPROVAL
+C. Destructive Production Request                 -> DENY
 ```
 
-必须完整经过：
+Mutation Path 必须经过：
 
 ```text
 API
- -> Authenticated Tenant/Project
- -> Task Persistence
+ -> Authenticated Principal/Tenant/Project
+ -> Idempotent Task Creation
+ -> TaskEvent + Outbox
  -> Durable Workflow
+ -> Policy-eligible Candidate Set
  -> Router
- -> Provider
+ -> Provider/Deployment
  -> Structured ChangePlan
  -> Validator
  -> Policy
  -> Human Approval when required
  -> Tool Gateway
  -> Short-lived Credential
- -> Kubernetes/Fake Adapter
+ -> Sandbox/Kubernetes or Fake Adapter
  -> Read-back Validation
  -> COMPLETED
 ```
@@ -208,8 +266,7 @@ API
 必须产生：
 
 - Task Events；
-- Route Decision；
-- Model Attempts；
+- Route Decision 与 Model Attempts；
 - Policy Decision；
 - Approval Record；
 - Tool Invocation；
@@ -218,8 +275,30 @@ API
 - OpenTelemetry Trace；
 - Evaluation Result。
 
-这个场景作为 AI Cloud v0.1 的 Definition of Done。
+这三个 ALLOW / APPROVE / DENY 路径共同组成 AI Cloud v0.1 Definition of Done。
 
-## 11. Pull Request 规则
+## 12. Slice Review Template
 
-每个 Slice 使用独立 Branch，并以 Draft PR 进入主线评审。实现代码不直接提交到 `main`。只有验收条件和 CI Gate 全部通过后，PR 才进入 Ready 状态。英文文档与 `.zh-CN.md` 必须在同一个 PR 中保持同步。
+每一个 Future Slice 在 Coding 前必须回答：
+
+```text
+1. Goal
+2. Non-Goals
+3. Domain Changes
+4. API Changes
+5. Data Model Changes
+6. Security Boundary
+7. Runtime Flow
+8. Failure Model
+9. Idempotency Model
+10. Observability
+11. Cost Model
+12. Migration
+13. Tests
+14. Acceptance Criteria
+15. Rollback Strategy
+```
+
+## 13. Pull Request 规则
+
+每个 Slice/Remediation Unit 使用独立 Branch 与 Draft PR。Implementation Code 不直接提交到 `main`。只有 Contract Review、Acceptance Criteria 与 CI Gate 全部通过后，PR 才进入 Ready。英文文档与 `.zh-CN.md` 必须在同一个 PR 中同步维护。
