@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	_ "github.com/lib/pq"
 
@@ -150,6 +149,9 @@ func (r *ScopedPostgresTasks) withProjectTx(ctx context.Context, fn func(*sql.Tx
 	if err != nil {
 		return err
 	}
+	if principal.Type == identity.PrincipalSystem && !principal.HasCapability(identity.CapabilityTaskSystemAccess) {
+		return fmt.Errorf("%w: %s", identity.ErrCapabilityRequired, identity.CapabilityTaskSystemAccess)
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin scoped task transaction: %w", err)
@@ -248,6 +250,3 @@ func (r *AdminPostgresTasks) List(ctx context.Context) ([]domain.Task, error) {
 	}
 	return items, rows.Err()
 }
-
-// Compile-time guard that AdminPostgresTasks is read-only by design in S1.
-var _ = time.Time{}
