@@ -129,10 +129,10 @@ func mockRuntimeRecords(now time.Time) (domain.Model, admission.Evidence) {
 		ID: "mock-model-v1", Name: "Mock Model", Version: "v1", Provider: "mock",
 		DeploymentMode: domain.DeploymentLocal, Lifecycle: domain.ModelActive,
 		Capabilities: []string{"structured-output", "json-schema", "chinese", "local-deployment"},
-		Pricing: domain.PricingProfile{Currency: "USD"}, Health: domain.HealthHealthy,
+		Pricing:      domain.PricingProfile{Currency: "USD"}, Health: domain.HealthHealthy,
 		HealthCheckedAt: &now, QuotaRemaining: -1, CapacityAvailable: -1,
-		ServiceTiers: []domain.ServiceTier{domain.TierStandard},
-		InferenceEfforts: []domain.InferenceEffort{domain.EffortLow},
+		ServiceTiers:      []domain.ServiceTier{domain.TierStandard},
+		InferenceEfforts:  []domain.InferenceEffort{domain.EffortLow},
 		EvaluationVersion: "mock-golden-v1", License: "internal",
 		ApprovalStatus: domain.ApprovalApproved, RiskLevel: "low",
 		CreatedAt: now, UpdatedAt: now,
@@ -158,13 +158,13 @@ func configuredProviderEvidence(modelID string, cfg config.ProviderConfig, now t
 		reviewedAt = &now
 	}
 	return admission.Evidence{
-		ID: "admission-" + shortDigest(modelID+"|"+cfg.LicenseID+"|"+cfg.LicenseTextRef),
+		ID:      "admission-" + shortDigest(modelID+"|"+cfg.LicenseID+"|"+cfg.LicenseTextRef),
 		ModelID: modelID, ModelVersion: cfg.ModelVersion, Status: status,
 		LicenseID: cfg.LicenseID, LicenseTextRef: cfg.LicenseTextRef, SourceRef: cfg.Endpoint,
 		CommercialUseAllowed: cfg.Approved, HostedServiceAllowed: cfg.Approved,
 		Reviewer: cfg.EvidenceReviewer, ReviewedAt: reviewedAt,
 		EvidenceDigest: evidenceDigest(modelID, cfg.ModelVersion, cfg.LicenseID, cfg.LicenseTextRef),
-		CreatedAt: now,
+		CreatedAt:      now,
 	}
 }
 
