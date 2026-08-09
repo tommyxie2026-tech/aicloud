@@ -49,18 +49,23 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 			}
 		}
 		ownership := tenantrepo.NewPostgresOwnershipStore(repos.DB)
+		tasks := tenantrepo.NewScopedTasks(repos.Tasks, ownership)
+		routes := tenantrepo.NewScopedRouteDecisions(repos.RouteDecisions, tasks)
+		costs := tenantrepo.NewScopedCostEvents(repos.CostEvents, tasks)
 		return runtimeStores{
-			models: repos.Models, tasks: tenantrepo.NewScopedTasks(repos.Tasks, ownership), routes: repos.RouteDecisions,
-			costs: repos.CostEvents, traces: repository.NewPostgresTraceStore(repos.DB),
+			models: repos.Models, tasks: tasks, routes: routes, costs: costs,
+			traces: repository.NewPostgresTraceStore(repos.DB),
 			evaluations: repository.NewPostgresEvaluationStore(repos.DB),
 			admissions: repository.NewPostgresAdmissionStore(repos.DB),
 			close: func() { _ = repos.DB.Close() },
 		}, nil
 	}
 	ownership := tenantrepo.NewMemoryOwnershipStore()
+	tasks := tenantrepo.NewScopedTasks(repository.NewMemoryTasks(), ownership)
+	routes := tenantrepo.NewScopedRouteDecisions(repository.NewMemoryRouteDecisions(), tasks)
+	costs := tenantrepo.NewScopedCostEvents(repository.NewMemoryCostEvents(), tasks)
 	return runtimeStores{
-		models: repository.NewMemoryModels(), tasks: tenantrepo.NewScopedTasks(repository.NewMemoryTasks(), ownership),
-		routes: repository.NewMemoryRouteDecisions(), costs: repository.NewMemoryCostEvents(),
+		models: repository.NewMemoryModels(), tasks: tasks, routes: routes, costs: costs,
 		traces: tracepkg.NewMemoryStore(), evaluations: evaluation.NewMemoryStore(),
 		admissions: admission.NewMemoryStore(), close: func() {},
 	}, nil
