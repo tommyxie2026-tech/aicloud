@@ -5,7 +5,13 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tenant_id TEXT;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id TEXT;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by TEXT;
 
--- Backfill rows created by the S1 prototype from the bridge table.
+-- Migration runs under the migration role, not the runtime app/worker role.
+-- Temporarily disable the prototype bridge RLS so previously scoped rows can be
+-- backfilled even though migration 004 used a session-flag policy that no
+-- longer exists in the frozen production model.
+ALTER TABLE task_ownership NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE task_ownership DISABLE ROW LEVEL SECURITY;
+
 UPDATE tasks AS t
 SET tenant_id = o.tenant_id,
     project_id = o.project_id,
@@ -52,8 +58,6 @@ CREATE POLICY tasks_tenant_project_policy ON tasks
     );
 
 -- Remove the prototype session-flag privilege bypass from the bridge table.
--- If the bridge table is queried during migration support, it is still strictly
--- tenant/project scoped.
 DROP POLICY IF EXISTS task_ownership_tenant_policy ON task_ownership;
 CREATE POLICY task_ownership_tenant_policy ON task_ownership
     USING (
@@ -64,3 +68,6 @@ CREATE POLICY task_ownership_tenant_policy ON task_ownership
         tenant_id = current_setting('aicloud.tenant_id', true)
         AND project_id = current_setting('aicloud.project_id', true)
     );
+
+ALTER TABLE task_ownership ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_ownership FORCE ROW LEVEL SECURITY;
