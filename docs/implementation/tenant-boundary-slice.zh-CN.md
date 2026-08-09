@@ -2,90 +2,139 @@
 
 ## 状态
 
-已在 `agent/tenant-contract-slice` 实现，等待 CI 与评审。
+`agent/tenant-contract-slice` 已完成 S0 后的 R1-R4 合规改造，等待最终 CI、Security Review 与 Domain Review。
 
 ## 契约映射
 
-本 Slice 落地 ADR-0020 与 v0.1 Implementation Contract 中第一组可强制执行的约束：
+本 Slice 落地 ADR-0020、Identity Contract、Database RLS Model 与 Task Aggregate Contract 的第一组可强制执行约束：
 
 ```text
-Authenticated Request
-  -> Tenant Scope
-  -> Task API 的 Project Scope
-  -> Scoped Task Repository
-  -> Task-owned Route / Cost / Evidence
+Trusted Authenticated Ingress
+  -> Explicit Principal
+  -> Tenant / Project Scope
+  -> Task Identity
+  -> Scoped Repository
+  -> PostgreSQL RLS
+  -> Task-owned Evidence
 ```
 
-## 外部身份契约
+## R1：显式 Principal
 
-v0.1 由认证 Ingress 注入并覆盖以下 Header：
+Runtime Context 统一使用 `identity.Principal`：
 
 ```text
-X-AICloud-Tenant-ID
-X-AICloud-Project-ID
-X-AICloud-Subject-ID
+Principal
+  ├─ User
+  ├─ ServiceAccount
+  └─ System
 ```
 
-`/api/*` 必须具有 Tenant 和 Subject；`/api/v1/tasks*` 还必须具有 Project。Health 与 Readiness Endpoint 明确不进入该边界。
+Trusted Ingress Header 只负责构造经过验证的 Principal，Domain/Repository 不直接解析 Header。
 
-这些 Header 是 Trusted Ingress 的兼容机制，不是最终用户认证方案。生产 OIDC/JWT Verification 在下一个契约 Slice 实现。
+外部 API 可以接受 User 或 ServiceAccount，但拒绝客户端/Ingress Header 声明的 System Principal。System Principal 只能由内部代码显式创建，并需要明确 Capability 与 Purpose。
 
-## Repository 契约
+## R2：缺少身份 Fail Closed
 
-`tenantrepo.ScopedTasks` 包装已有 `domain.TaskRepository`，不把 Provider 或 Storage 实现细节泄漏到 Domain Layer。
-
-规则：
-
-- 外部创建 Task 时绑定 Task -> Tenant/Project/Subject；
-- Scoped Get/Update 必须匹配 Ownership；
-- Scoped List 过滤其他 Tenant 的 Task；
-- Foreign Task ID 返回 `repository.ErrNotFound`；
-- 无 Scope Context 只保留给可信 Bootstrap/System Work。
-
-Route Decision 与 Cost Event 同样通过 Task Ownership Wrapper 访问，因此直接 Service Call 也不能绕过 Task Boundary。
-
-## PostgreSQL 契约
-
-Migration `004_task_tenant_ownership.sql` 新增：
+以下旧行为已移除：
 
 ```text
-task_ownership(
-  task_id,
-  tenant_id,
-  project_id,
-  subject_id,
-  created_at
-)
+missing tenant / missing scope
+        -> trusted system access
 ```
 
-RLS 已启用并 FORCE。PostgreSQL Ownership Operation 使用 Transaction-local：
+现在：
 
 ```text
-aicloud.tenant_id
-aicloud.system_access
+missing Principal
+        -> unauthenticated
 ```
 
-Tenant Call 使用 `system_access=off`；可信内部调用必须显式使用 `system_access=on`。
+Task Repository 对缺少 Principal 的访问一律失败。系统级 Task 访问必须使用显式 `PrincipalSystem` 和 `task:system-access` Capability。
 
-## 安全不变量
+## R3：PostgreSQL RLS 与数据库角色
 
-1. Task Resource Dispatch 之前必须建立 Tenant Identity；
-2. Task API 必须具有 Project Identity；
-3. Route、Cost、Audit、Trace、Evaluation、Model Execution、Tool Execution 之前必须检查 Task Ownership；
-4. Cross-tenant Authorization Failure 对外表现为 Not Found，降低 Resource Enumeration 风险；
-5. 本 Slice 中 Model Provider 仍属于全局平台资产；Tenant Model Access Policy 由 Routing/Policy Layer 实现，而不是为每个 Tenant 复制 Model Record。
+生产 Runtime 使用 `ScopedPostgresTasks`：
 
-## 验收测试
+```text
+RequireProject Principal
+  -> BeginTx
+  -> set_config(aicloud.tenant_id, ..., true)
+  -> set_config(aicloud.project_id, ..., true)
+  -> SQL
+  -> Commit/Rollback
+```
 
-必须覆盖：
+Runtime 启动会校验当前 PostgreSQL Role：
 
-- Unscoped API Request 被拒绝；
-- Tenant Scope 正确传播；
-- Health Endpoint 不受 Tenant Gate 影响；
-- Cross-tenant Task Get/List 被拒绝；
-- Trusted System Context；
-- Route 与 Cost Evidence 继承 Task Ownership。
+- 不允许 Superuser；
+- 不允许 `BYPASSRLS`。
 
-## 下一 Slice
+原 Prototype 中 `aicloud.system_access=on` Session Flag 不再用于生产访问。
 
-Slice 2 将运行 API 与 OpenAPI 收敛：增加 OIDC/JWT Verification、RBAC、Idempotency、Stable Error Envelope、Task Schema/State Machine 收敛，以及可执行 OpenAPI Contract Test。
+管理员访问采用独立 `AdminPostgresTasks` 入口：
+
+- 独立 Admin DB Credential；
+- DB Role 必须具备受控 RLS Bypass；
+- Application Context 必须是显式 System Principal；
+- 必须具备 `database:admin` Capability；
+- 不通过 API Runtime 自动暴露该入口。
+
+## R4：Task Ownership 原子化
+
+Migration `005_task_scope_identity.sql` 将：
+
+```text
+tenant_id
+project_id
+created_by
+```
+
+直接加入 `tasks` 表，并从旧 `task_ownership` Bridge 回填。
+
+Migration 在发现任何无法确定 Ownership 的 Task 时直接失败，不会生成虚假 Tenant/Project。
+
+新 Task 创建路径：
+
+```text
+Verified Principal
+  -> ScopedTasks binds Task identity
+  -> single Task INSERT
+```
+
+因此不再存在：
+
+```text
+INSERT task
+  -> INSERT task_ownership 失败
+  -> orphan task
+```
+
+`task_ownership` 只保留为 Migration Bridge，不再是 Runtime Source of Truth。
+
+## Repository 安全不变量
+
+1. Task 的 `tenant_id`、`project_id`、`created_by` 创建后不可通过普通 Update 修改；
+2. Cross-Tenant/Cross-Project Task 访问对外表现为 Not Found；
+3. RouteDecision 与 CostEvent 继续通过 Task Repository 继承 Task Scope；
+4. PostgreSQL RLS 是 Application Authorization 的第二层防御；
+5. Global Model/Provider 资产不因为 Tenant Task 隔离而复制；Model Access 仍由 Policy/Router 控制。
+
+## 当前验收测试
+
+已增加/调整测试覆盖：
+
+- Missing Principal Fail Closed；
+- Trusted Ingress -> Principal Resolution；
+- External System Principal Header 被拒绝；
+- User/ServiceAccount Scope 传播；
+- Task Tenant/Project/CreatedBy 原子绑定；
+- Cross-Tenant Task Get/List 被拒绝；
+- Task Identity Mutation 被拒绝；
+- Explicit System Principal + Capability；
+- Route/Cost Evidence 继承 Task Ownership；
+- Migration 不包含 `aicloud.system_access` Bypass；
+- Migration 强制 Task RLS 与 Tenant/Project Context。
+
+## 下一步
+
+R1-R4 通过 CI 与 Review 后，PR #12 才能从 Draft 进入 Ready。之后进入 R5-R7：Task Aggregate State Transition、TaskEvent/Outbox/Idempotency，以及 OpenAPI + OIDC/JWT + RBAC/ABAC 收敛。
