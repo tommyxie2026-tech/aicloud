@@ -13,9 +13,9 @@ import (
 )
 
 func main() {
-	dsn := os.Getenv("AICLOUD_DATABASE_URL")
+	dsn := os.Getenv("AICLOUD_MIGRATION_DATABASE_URL")
 	if dsn == "" {
-		log.Fatal("AICLOUD_DATABASE_URL is required")
+		log.Fatal("AICLOUD_MIGRATION_DATABASE_URL is required")
 	}
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {

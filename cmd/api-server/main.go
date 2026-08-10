@@ -73,7 +73,7 @@ func main() {
 		WithEvidence(stores.traces, stores.evaluations, admissionService, modelRuntime)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.New(control, log).Handler(),
+		Handler:           httpapi.WithTenantScope(httpapi.New(control, log).FullHandler()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	telemetryProvider := telemetry.NoopProvider{}
@@ -183,7 +183,7 @@ func registerConfiguredProvider(ctx context.Context, models *modelservice.Servic
 		License:           cfg.LicenseID,
 		LicenseEvidence: domain.LicenseEvidence{
 			LicenseID:            cfg.LicenseID,
-			LicenseTextRef:        cfg.LicenseTextRef,
+			LicenseTextRef:       cfg.LicenseTextRef,
 			CommercialUseAllowed: cfg.Approved,
 			HostedServiceAllowed: cfg.Approved,
 			Reviewer:             cfg.EvidenceReviewer,

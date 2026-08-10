@@ -160,6 +160,9 @@ const (
 
 type Task struct {
 	ID              string     `json:"id"`
+	TenantID        string     `json:"tenantId"`
+	ProjectID       string     `json:"projectId"`
+	CreatedBy       string     `json:"createdBy"`
 	AgentID         string     `json:"agentId"`
 	Input           string     `json:"input"`
 	Status          TaskStatus `json:"status"`

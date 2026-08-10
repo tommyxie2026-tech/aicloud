@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tommyxie2026-tech/aicloud/db/migrations"
 	"github.com/tommyxie2026-tech/aicloud/internal/admission"
 	"github.com/tommyxie2026-tech/aicloud/internal/circuitbreaker"
 	"github.com/tommyxie2026-tech/aicloud/internal/config"
@@ -19,45 +18,53 @@ import (
 	"github.com/tommyxie2026-tech/aicloud/internal/modelruntime"
 	"github.com/tommyxie2026-tech/aicloud/internal/modelservice"
 	"github.com/tommyxie2026-tech/aicloud/internal/repository"
+	"github.com/tommyxie2026-tech/aicloud/internal/tenantrepo"
 	tracepkg "github.com/tommyxie2026-tech/aicloud/internal/trace"
 	"github.com/tommyxie2026-tech/aicloud/model/mock"
 	"github.com/tommyxie2026-tech/aicloud/model/provider"
 )
 
 type runtimeStores struct {
-	models       domain.ModelRepository
-	tasks        domain.TaskRepository
-	routes       domain.RouteDecisionRepository
-	costs        domain.CostEventRepository
-	traces       tracepkg.Store
-	evaluations  evaluation.Store
-	admissions   admission.Store
-	close        func()
+	models      domain.ModelRepository
+	tasks       domain.TaskRepository
+	routes      domain.RouteDecisionRepository
+	costs       domain.CostEventRepository
+	traces      tracepkg.Store
+	evaluations evaluation.Store
+	admissions  admission.Store
+	close       func()
 }
 
 func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, error) {
 	if strings.EqualFold(cfg.RepositoryMode, "postgres") {
+		if cfg.RunMigrations {
+			return runtimeStores{}, fmt.Errorf("runtime migrations are disabled; run cmd/migrate with AICLOUD_MIGRATION_DATABASE_URL")
+		}
 		repos, err := repository.OpenPostgres(ctx, cfg.DatabaseURL)
 		if err != nil {
 			return runtimeStores{}, err
 		}
-		if cfg.RunMigrations {
-			if err := migrations.Run(ctx, repos.DB); err != nil {
-				_ = repos.DB.Close()
-				return runtimeStores{}, err
-			}
+		if err := repository.ValidateRuntimeDatabaseRole(ctx, repos.DB); err != nil {
+			_ = repos.DB.Close()
+			return runtimeStores{}, err
 		}
+		postgresTasks := repository.NewScopedPostgresTasks(repos.DB)
+		tasks := tenantrepo.NewScopedTasks(postgresTasks)
+		routes := tenantrepo.NewScopedRouteDecisions(repos.RouteDecisions, tasks)
+		costs := tenantrepo.NewScopedCostEvents(repos.CostEvents, tasks)
 		return runtimeStores{
-			models: repos.Models, tasks: repos.Tasks, routes: repos.RouteDecisions,
-			costs: repos.CostEvents, traces: repository.NewPostgresTraceStore(repos.DB),
+			models: repos.Models, tasks: tasks, routes: routes, costs: costs,
+			traces:      repository.NewPostgresTraceStore(repos.DB),
 			evaluations: repository.NewPostgresEvaluationStore(repos.DB),
-			admissions: repository.NewPostgresAdmissionStore(repos.DB),
-			close: func() { _ = repos.DB.Close() },
+			admissions:  repository.NewPostgresAdmissionStore(repos.DB),
+			close:       func() { _ = repos.DB.Close() },
 		}, nil
 	}
+	tasks := tenantrepo.NewScopedTasks(repository.NewMemoryTasks())
+	routes := tenantrepo.NewScopedRouteDecisions(repository.NewMemoryRouteDecisions(), tasks)
+	costs := tenantrepo.NewScopedCostEvents(repository.NewMemoryCostEvents(), tasks)
 	return runtimeStores{
-		models: repository.NewMemoryModels(), tasks: repository.NewMemoryTasks(),
-		routes: repository.NewMemoryRouteDecisions(), costs: repository.NewMemoryCostEvents(),
+		models: repository.NewMemoryModels(), tasks: tasks, routes: routes, costs: costs,
 		traces: tracepkg.NewMemoryStore(), evaluations: evaluation.NewMemoryStore(),
 		admissions: admission.NewMemoryStore(), close: func() {},
 	}, nil
@@ -121,10 +128,10 @@ func mockRuntimeRecords(now time.Time) (domain.Model, admission.Evidence) {
 		ID: "mock-model-v1", Name: "Mock Model", Version: "v1", Provider: "mock",
 		DeploymentMode: domain.DeploymentLocal, Lifecycle: domain.ModelActive,
 		Capabilities: []string{"structured-output", "json-schema", "chinese", "local-deployment"},
-		Pricing: domain.PricingProfile{Currency: "USD"}, Health: domain.HealthHealthy,
+		Pricing:      domain.PricingProfile{Currency: "USD"}, Health: domain.HealthHealthy,
 		HealthCheckedAt: &now, QuotaRemaining: -1, CapacityAvailable: -1,
-		ServiceTiers: []domain.ServiceTier{domain.TierStandard},
-		InferenceEfforts: []domain.InferenceEffort{domain.EffortLow},
+		ServiceTiers:      []domain.ServiceTier{domain.TierStandard},
+		InferenceEfforts:  []domain.InferenceEffort{domain.EffortLow},
 		EvaluationVersion: "mock-golden-v1", License: "internal",
 		ApprovalStatus: domain.ApprovalApproved, RiskLevel: "low",
 		CreatedAt: now, UpdatedAt: now,
@@ -150,13 +157,13 @@ func configuredProviderEvidence(modelID string, cfg config.ProviderConfig, now t
 		reviewedAt = &now
 	}
 	return admission.Evidence{
-		ID: "admission-" + shortDigest(modelID+"|"+cfg.LicenseID+"|"+cfg.LicenseTextRef),
+		ID:      "admission-" + shortDigest(modelID+"|"+cfg.LicenseID+"|"+cfg.LicenseTextRef),
 		ModelID: modelID, ModelVersion: cfg.ModelVersion, Status: status,
 		LicenseID: cfg.LicenseID, LicenseTextRef: cfg.LicenseTextRef, SourceRef: cfg.Endpoint,
 		CommercialUseAllowed: cfg.Approved, HostedServiceAllowed: cfg.Approved,
 		Reviewer: cfg.EvidenceReviewer, ReviewedAt: reviewedAt,
 		EvidenceDigest: evidenceDigest(modelID, cfg.ModelVersion, cfg.LicenseID, cfg.LicenseTextRef),
-		CreatedAt: now,
+		CreatedAt:      now,
 	}
 }
 
