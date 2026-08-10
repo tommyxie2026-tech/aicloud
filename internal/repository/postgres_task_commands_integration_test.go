@@ -55,8 +55,8 @@ func TestScopedPostgresTaskCommandsAtomicCommitReplayAndRollback(t *testing.T) {
 		},
 		Event: domain.TaskEvent{
 			EventID: "event-1", EventType: "TaskPlanningStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
-			Payload: json.RawMessage(`{"from":"CREATED","to":"PLANNING"}`),
+			Actor:     domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Payload:   json.RawMessage(`{"from":"CREATED","to":"PLANNING"}`),
 			RequestID: "request-1", SchemaVersion: 1,
 		},
 		Outbox: []domain.OutboxMessage{{
@@ -69,7 +69,7 @@ func TestScopedPostgresTaskCommandsAtomicCommitReplayAndRollback(t *testing.T) {
 			RequestDigest: "sha256:plan", Status: domain.IdempotencyCompleted,
 			ResponseCode: 200, ResponseDigest: "sha256:response-plan",
 			ResponsePayload: json.RawMessage(`{"taskId":"task-1","status":"PLANNING"}`),
-			CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour),
+			CreatedAt:       now, ExpiresAt: now.Add(24 * time.Hour),
 		},
 	}
 
@@ -109,7 +109,7 @@ func TestScopedPostgresTaskCommandsAtomicCommitReplayAndRollback(t *testing.T) {
 		},
 		Event: domain.TaskEvent{
 			EventID: "event-rollback", EventType: "TaskRoutingStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: json.RawMessage(`{"to":"ROUTING"}`), SchemaVersion: 1,
 		},
 		Outbox: []domain.OutboxMessage{{
@@ -264,8 +264,8 @@ func assertTaskCommandFixture(t *testing.T, ctx context.Context, db *sql.DB, sta
 		t.Fatalf("task projection status=%s version=%d want status=%s version=%d", gotStatus, gotVersion, status, version)
 	}
 	for table, want := range map[string]int{
-		"task_events": eventCount,
-		"outbox_messages": outboxCount,
+		"task_events":         eventCount,
+		"outbox_messages":     outboxCount,
 		"idempotency_records": idempotencyCount,
 	} {
 		var got int
