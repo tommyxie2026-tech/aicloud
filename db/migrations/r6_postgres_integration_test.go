@@ -82,13 +82,12 @@ func TestTaskEventOutboxIdempotencyMigrationPostgres(t *testing.T) {
 		"user", "user-a", `{"status":"CREATED"}`, "trace-a", 1, now, now); err != nil {
 		t.Fatalf("insert TaskEvent: %v", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO task_events(
+
+	expectConstraintError(t, ctx, tx, "duplicate task event sequence", `INSERT INTO task_events(
 		event_id, tenant_id, project_id, task_id, sequence, event_type,
 		actor_principal_type, actor_subject_id, payload, trace_id, schema_version,
 		occurred_at, created_at
-	) VALUES ('event-2','tenant-a','project-a','task-a',1,'TaskPlanningStarted','user','user-a','{}'::jsonb,'trace-a',1,NOW(),NOW())`); err == nil {
-		t.Fatal("duplicate (task_id, sequence) must be rejected")
-	}
+	) VALUES ('event-2','tenant-a','project-a','task-a',1,'TaskPlanningStarted','user','user-a','{}'::jsonb,'trace-a',1,NOW(),NOW())`)
 
 	result, err := tx.ExecContext(ctx, `UPDATE task_events SET event_type='rewritten' WHERE event_id='event-1'`)
 	if err != nil {
@@ -111,12 +110,10 @@ func TestTaskEventOutboxIdempotencyMigrationPostgres(t *testing.T) {
 	) VALUES ('outbox-1','tenant-a','project-a','task-a','Task','task-a','TaskCreated','{}'::jsonb,'temporal','delivery-1','pending',NOW(),NOW())`); err != nil {
 		t.Fatalf("insert outbox message: %v", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO outbox_messages(
+	expectConstraintError(t, ctx, tx, "duplicate outbox idempotency key", `INSERT INTO outbox_messages(
 		outbox_id, tenant_id, project_id, task_id, aggregate_type, aggregate_id,
 		event_type, payload, destination, idempotency_key, status, available_at, created_at
-	) VALUES ('outbox-2','tenant-a','project-a','task-a','Task','task-a','TaskCreated','{}'::jsonb,'temporal','delivery-1','pending',NOW(),NOW())`); err == nil {
-		t.Fatal("duplicate outbox delivery idempotency key must be rejected")
-	}
+	) VALUES ('outbox-2','tenant-a','project-a','task-a','Task','task-a','TaskCreated','{}'::jsonb,'temporal','delivery-1','pending',NOW(),NOW())`)
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_records(
 		tenant_id, project_id, operation, idempotency_key, request_digest, status,
@@ -124,12 +121,10 @@ func TestTaskEventOutboxIdempotencyMigrationPostgres(t *testing.T) {
 	) VALUES ('tenant-a','project-a','POST /tasks','command-1','sha256:a','in_progress',NOW(),NOW()+INTERVAL '1 hour')`); err != nil {
 		t.Fatalf("insert idempotency record: %v", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_records(
+	expectConstraintError(t, ctx, tx, "duplicate command idempotency scope", `INSERT INTO idempotency_records(
 		tenant_id, project_id, operation, idempotency_key, request_digest, status,
 		created_at, expires_at
-	) VALUES ('tenant-a','project-a','POST /tasks','command-1','sha256:a','in_progress',NOW(),NOW()+INTERVAL '1 hour')`); err == nil {
-		t.Fatal("duplicate command idempotency scope must be rejected")
-	}
+	) VALUES ('tenant-a','project-a','POST /tasks','command-1','sha256:a','in_progress',NOW(),NOW()+INTERVAL '1 hour')`)
 
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('aicloud.project_id','project-b',true)`); err != nil {
 		t.Fatalf("switch R6 project scope: %v", err)
@@ -140,6 +135,23 @@ func TestTaskEventOutboxIdempotencyMigrationPostgres(t *testing.T) {
 	}
 	if visible != 0 {
 		t.Fatalf("cross-project scope must not see TaskEvents, got %d", visible)
+	}
+}
+
+func expectConstraintError(t *testing.T, ctx context.Context, tx *sql.Tx, name, statement string) {
+	t.Helper()
+	if _, err := tx.ExecContext(ctx, `SAVEPOINT r6_expected_error`); err != nil {
+		t.Fatalf("%s: create savepoint: %v", name, err)
+	}
+	_, execErr := tx.ExecContext(ctx, statement)
+	if _, err := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT r6_expected_error`); err != nil {
+		t.Fatalf("%s: rollback savepoint: %v", name, err)
+	}
+	if _, err := tx.ExecContext(ctx, `RELEASE SAVEPOINT r6_expected_error`); err != nil {
+		t.Fatalf("%s: release savepoint: %v", name, err)
+	}
+	if execErr == nil {
+		t.Fatalf("%s must be rejected", name)
 	}
 }
 
