@@ -131,10 +131,10 @@ func (m OutboxMessage) Validate() error {
 type IdempotencyStatus string
 
 const (
-	IdempotencyInProgress       IdempotencyStatus = "in_progress"
-	IdempotencyCompleted        IdempotencyStatus = "completed"
-	IdempotencyFailedRetryable  IdempotencyStatus = "failed_retryable"
-	IdempotencyFailedFinal      IdempotencyStatus = "failed_final"
+	IdempotencyInProgress      IdempotencyStatus = "in_progress"
+	IdempotencyCompleted       IdempotencyStatus = "completed"
+	IdempotencyFailedRetryable IdempotencyStatus = "failed_retryable"
+	IdempotencyFailedFinal     IdempotencyStatus = "failed_final"
 )
 
 type IdempotencyRecord struct {
