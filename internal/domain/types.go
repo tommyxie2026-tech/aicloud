@@ -152,10 +152,22 @@ type Policy struct {
 type TaskStatus string
 
 const (
-	TaskPending  TaskStatus = "PENDING"
-	TaskRunning  TaskStatus = "RUNNING"
-	TaskComplete TaskStatus = "COMPLETED"
-	TaskFailed   TaskStatus = "FAILED"
+	TaskCreated         TaskStatus = "CREATED"
+	TaskPlanning        TaskStatus = "PLANNING"
+	TaskRouting         TaskStatus = "ROUTING"
+	TaskExecuting       TaskStatus = "EXECUTING"
+	TaskWaitingApproval TaskStatus = "WAITING_APPROVAL"
+	TaskValidating      TaskStatus = "VALIDATING"
+	TaskCompleted       TaskStatus = "COMPLETED"
+	TaskFailed          TaskStatus = "FAILED"
+	TaskCancelled       TaskStatus = "CANCELLED"
+	TaskExpired         TaskStatus = "EXPIRED"
+
+	// Deprecated compatibility aliases. New code must use the canonical
+	// aggregate states above.
+	TaskPending  TaskStatus = TaskCreated
+	TaskRunning  TaskStatus = TaskExecuting
+	TaskComplete TaskStatus = TaskCompleted
 )
 
 type Task struct {
@@ -166,6 +178,7 @@ type Task struct {
 	AgentID         string     `json:"agentId"`
 	Input           string     `json:"input"`
 	Status          TaskStatus `json:"status"`
+	Version         int64      `json:"version"`
 	Result          string     `json:"result,omitempty"`
 	Cost            float64    `json:"cost,omitempty"`
 	EstimatedCost   float64    `json:"estimatedCost,omitempty"`
@@ -175,6 +188,7 @@ type Task struct {
 	TraceID         string     `json:"traceId"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
+	CompletedAt     *time.Time `json:"completedAt,omitempty"`
 }
 
 type RouteClass string

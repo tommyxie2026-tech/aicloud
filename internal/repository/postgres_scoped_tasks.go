@@ -13,8 +13,8 @@ import (
 )
 
 const scopedTaskColumns = `id, tenant_id, project_id, created_by, agent_id, input, status,
-	result, cost, estimated_cost, actual_cost, currency, route_decision_id, trace_id,
-	created_at, updated_at`
+	version, result, cost, estimated_cost, actual_cost, currency, route_decision_id, trace_id,
+	created_at, updated_at, completed_at`
 
 // ValidateRuntimeDatabaseRole prevents API/Worker processes from starting with
 // PostgreSQL credentials that can bypass RLS. Administrative and migration
@@ -88,19 +88,25 @@ func (r *ScopedPostgresTasks) Get(ctx context.Context, id string) (domain.Task, 
 }
 
 func (r *ScopedPostgresTasks) Create(ctx context.Context, task domain.Task) (domain.Task, error) {
+	if task.Version == 0 {
+		task.Version = 1
+	}
+	if task.Status == "" {
+		task.Status = domain.TaskCreated
+	}
 	err := r.withProjectTx(ctx, func(tx *sql.Tx, principal identity.Principal) error {
 		if task.TenantID != principal.TenantID || task.ProjectID != principal.ProjectID || task.CreatedBy != principal.SubjectID {
 			return fmt.Errorf("task identity must match authenticated principal")
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO tasks (
-			id, tenant_id, project_id, created_by, agent_id, input, status, result,
-			cost, estimated_cost, actual_cost, currency, route_decision_id, trace_id,
-			created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+			id, tenant_id, project_id, created_by, agent_id, input, status, version,
+			result, cost, estimated_cost, actual_cost, currency, route_decision_id,
+			trace_id, created_at, updated_at, completed_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
 			task.ID, task.TenantID, task.ProjectID, task.CreatedBy, task.AgentID,
-			task.Input, task.Status, task.Result, task.Cost, task.EstimatedCost,
-			task.ActualCost, task.Currency, task.RouteDecisionID, task.TraceID,
-			task.CreatedAt, task.UpdatedAt)
+			task.Input, task.Status, task.Version, task.Result, task.Cost,
+			task.EstimatedCost, task.ActualCost, task.Currency, task.RouteDecisionID,
+			task.TraceID, task.CreatedAt, task.UpdatedAt, task.CompletedAt)
 		if err != nil {
 			return fmt.Errorf("create scoped task: %w", err)
 		}
@@ -114,7 +120,7 @@ func (r *ScopedPostgresTasks) Create(ctx context.Context, task domain.Task) (dom
 
 func (r *ScopedPostgresTasks) Update(ctx context.Context, task domain.Task) (domain.Task, error) {
 	err := r.withProjectTx(ctx, func(tx *sql.Tx, principal identity.Principal) error {
-		current, err := scanScopedTask(tx.QueryRowContext(ctx, `SELECT `+scopedTaskColumns+` FROM tasks WHERE id=$1 FOR UPDATE`, task.ID))
+		current, err := scanScopedTask(tx.QueryRowContext(ctx, `SELECT `+scopedTaskColumns+` FROM tasks WHERE id=$1`, task.ID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -127,16 +133,28 @@ func (r *ScopedPostgresTasks) Update(ctx context.Context, task domain.Task) (dom
 		if !principal.OwnsProject(current.TenantID, current.ProjectID) {
 			return ErrNotFound
 		}
-		result, err := tx.ExecContext(ctx, `UPDATE tasks SET agent_id=$2, input=$3,
+		if task.Version != current.Version {
+			return ErrVersionConflict
+		}
+
+		var nextVersion int64
+		err = tx.QueryRowContext(ctx, `UPDATE tasks SET agent_id=$2, input=$3,
 			status=$4, result=$5, cost=$6, estimated_cost=$7, actual_cost=$8,
-			currency=$9, route_decision_id=$10, trace_id=$11, updated_at=$12 WHERE id=$1`,
+			currency=$9, route_decision_id=$10, trace_id=$11, updated_at=$12,
+			completed_at=$13, version=version+1
+			WHERE id=$1 AND version=$14
+			RETURNING version`,
 			task.ID, task.AgentID, task.Input, task.Status, task.Result, task.Cost,
 			task.EstimatedCost, task.ActualCost, task.Currency, task.RouteDecisionID,
-			task.TraceID, task.UpdatedAt)
+			task.TraceID, task.UpdatedAt, task.CompletedAt, task.Version).Scan(&nextVersion)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrVersionConflict
+		}
 		if err != nil {
 			return fmt.Errorf("update scoped task: %w", err)
 		}
-		return requireAffected(result)
+		task.Version = nextVersion
+		return nil
 	})
 	if err != nil {
 		return domain.Task{}, err
@@ -175,9 +193,10 @@ func scanScopedTask(row scanner) (domain.Task, error) {
 	var task domain.Task
 	if err := row.Scan(
 		&task.ID, &task.TenantID, &task.ProjectID, &task.CreatedBy,
-		&task.AgentID, &task.Input, &task.Status, &task.Result, &task.Cost,
-		&task.EstimatedCost, &task.ActualCost, &task.Currency,
+		&task.AgentID, &task.Input, &task.Status, &task.Version, &task.Result,
+		&task.Cost, &task.EstimatedCost, &task.ActualCost, &task.Currency,
 		&task.RouteDecisionID, &task.TraceID, &task.CreatedAt, &task.UpdatedAt,
+		&task.CompletedAt,
 	); err != nil {
 		return domain.Task{}, err
 	}

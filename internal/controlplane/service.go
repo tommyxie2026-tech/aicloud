@@ -11,6 +11,7 @@ import (
 	"github.com/tommyxie2026-tech/aicloud/internal/cost"
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 	"github.com/tommyxie2026-tech/aicloud/internal/evaluation"
+	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 	"github.com/tommyxie2026-tech/aicloud/internal/modelruntime"
 	"github.com/tommyxie2026-tech/aicloud/internal/modelservice"
 	"github.com/tommyxie2026-tech/aicloud/internal/router"
@@ -155,15 +156,16 @@ func (s *Service) GetTask(ctx context.Context, id string) (domain.Task, error) {
 
 func (s *Service) CreateTask(ctx context.Context, input, agentID string) (domain.Task, error) {
 	now := time.Now().UTC()
-	task := domain.Task{
-		ID:        fmt.Sprintf("task-%d", now.UnixNano()),
-		AgentID:   agentID,
-		Input:     input,
-		Status:    domain.TaskPending,
-		Currency:  "USD",
-		TraceID:   fmt.Sprintf("trace-%d", now.UnixNano()),
-		CreatedAt: now,
-		UpdatedAt: now,
+	task, err := domain.NewTask(domain.NewTaskParams{
+		ID:       fmt.Sprintf("task-%d", now.UnixNano()),
+		AgentID:  agentID,
+		Input:    input,
+		TraceID:  fmt.Sprintf("trace-%d", now.UnixNano()),
+		Currency: "USD",
+		Now:      now,
+	})
+	if err != nil {
+		return domain.Task{}, err
 	}
 	created, err := s.tasks.Create(ctx, task)
 	if err != nil {
@@ -172,8 +174,10 @@ func (s *Service) CreateTask(ctx context.Context, input, agentID string) (domain
 	s.appendTrace(ctx, tracepkg.Event{
 		ID: tracepkg.NewID("trace-event"), TraceID: created.TraceID, TaskID: created.ID,
 		SpanID: tracepkg.NewID("span"), Name: "task.created", Kind: "TASK",
-		Status: tracepkg.StatusOK, Attributes: map[string]string{"agent.id": agentID},
-		StartedAt: now, EndedAt: timePointer(now),
+		Status: tracepkg.StatusOK, Attributes: map[string]string{
+			"agent.id": agentID, "task.status": string(created.Status),
+			"task.version": fmt.Sprintf("%d", created.Version),
+		}, StartedAt: now, EndedAt: timePointer(now),
 	})
 	if s.engine != nil {
 		_ = s.engine.Start(ctx, created.ID)
@@ -189,6 +193,24 @@ func (s *Service) DecideRoute(ctx context.Context, request router.Request) (doma
 	if err != nil {
 		return domain.RouteDecision{}, err
 	}
+
+	switch task.Status {
+	case domain.TaskCreated:
+		task, err = s.transitionTask(ctx, task, domain.TaskPlanning, "prepare task plan")
+		if err == nil {
+			task, err = s.transitionTask(ctx, task, domain.TaskRouting, "request model route")
+		}
+	case domain.TaskPlanning:
+		task, err = s.transitionTask(ctx, task, domain.TaskRouting, "request model route")
+	case domain.TaskRouting:
+		// A routing retry may reuse the current ROUTING state.
+	default:
+		err = fmt.Errorf("%w: cannot route task from %s", domain.ErrInvalidTaskTransition, task.Status)
+	}
+	if err != nil {
+		return domain.RouteDecision{}, err
+	}
+
 	decision, err := s.router.Decide(ctx, request)
 	if err != nil {
 		s.appendTrace(ctx, tracepkg.Event{
@@ -201,7 +223,8 @@ func (s *Service) DecideRoute(ctx context.Context, request router.Request) (doma
 	task.RouteDecisionID = decision.ID
 	task.EstimatedCost = decision.Selected.EstimatedCost
 	task.UpdatedAt = time.Now().UTC()
-	if _, err := s.tasks.Update(ctx, task); err != nil {
+	task, err = s.tasks.Update(ctx, task)
+	if err != nil {
 		return domain.RouteDecision{}, err
 	}
 	now := time.Now().UTC()
@@ -212,6 +235,7 @@ func (s *Service) DecideRoute(ctx context.Context, request router.Request) (doma
 			"route.id": decision.ID, "route.class": string(decision.Selected.RouteClass),
 			"model.id": decision.Selected.ModelID, "model.version": decision.Selected.ModelVersion,
 			"evidence.version": decision.EvidenceVersion, "policy.version": decision.PolicyVersion,
+			"task.version": fmt.Sprintf("%d", task.Version),
 		}, StartedAt: now, EndedAt: timePointer(now),
 	})
 	return decision, nil
@@ -235,16 +259,24 @@ func (s *Service) ExecuteModel(ctx context.Context, taskID string, request provi
 	if request.RequestID == "" {
 		request.RequestID = task.ID
 	}
-	task.Status = domain.TaskRunning
-	task.UpdatedAt = time.Now().UTC()
-	_, _ = s.tasks.Update(ctx, task)
+
+	switch task.Status {
+	case domain.TaskRouting:
+		task, err = s.transitionTask(ctx, task, domain.TaskExecuting, "execute selected model deployment")
+	case domain.TaskExecuting:
+		// Execution retries may resume an already executing task. Durable retry
+		// semantics move to R6/S3; R5 only prevents invalid lifecycle jumps.
+	default:
+		err = fmt.Errorf("%w: cannot execute model from %s", domain.ErrInvalidTaskTransition, task.Status)
+	}
+	if err != nil {
+		return modelruntime.Result{}, err
+	}
+
 	result, executeErr := s.modelRuntime.Execute(ctx, task.ID, task.TraceID, decision, request)
-	task.UpdatedAt = time.Now().UTC()
 	if executeErr != nil {
-		task.Status = domain.TaskFailed
 		task.Result = executeErr.Error()
 	} else {
-		task.Status = domain.TaskComplete
 		task.Result = encodeProviderResult(result.Response)
 	}
 	if s.costLedger != nil {
@@ -256,10 +288,22 @@ func (s *Service) ExecuteModel(ctx context.Context, taskID string, request provi
 			}
 		}
 	}
-	if _, updateErr := s.tasks.Update(ctx, task); updateErr != nil && executeErr == nil {
-		return result, updateErr
+
+	if executeErr != nil {
+		if _, transitionErr := s.transitionTask(ctx, task, domain.TaskFailed, "model execution failed"); transitionErr != nil {
+			return result, transitionErr
+		}
+		return result, executeErr
 	}
-	return result, executeErr
+
+	task, err = s.transitionTask(ctx, task, domain.TaskValidating, "validate model execution result")
+	if err != nil {
+		return result, err
+	}
+	if _, err = s.transitionTask(ctx, task, domain.TaskCompleted, "model execution result accepted"); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func (s *Service) ListRouteDecisions(ctx context.Context, taskID string) ([]domain.RouteDecision, error) {
@@ -349,7 +393,7 @@ func (s *Service) CreateEvaluation(ctx context.Context, taskID string, config ev
 		Status: status, Attributes: map[string]string{
 			"evaluation.id": run.ID, "evaluation.config_digest": run.ConfigDigest,
 			"evaluation.gate_passed": fmt.Sprintf("%t", run.Gate.Passed),
-			"dataset.version": run.Config.DatasetVersion, "evaluator.version": run.Config.EvaluatorVersion,
+			"dataset.version":        run.Config.DatasetVersion, "evaluator.version": run.Config.EvaluatorVersion,
 		}, StartedAt: now, EndedAt: timePointer(now),
 	})
 	return run, nil
@@ -370,6 +414,39 @@ func (s *Service) ListTrace(ctx context.Context, taskID string) ([]tracepkg.Even
 		return nil, err
 	}
 	return s.traces.ListByTask(ctx, taskID)
+}
+
+func (s *Service) transitionTask(ctx context.Context, task domain.Task, target domain.TaskStatus, cause string) (domain.Task, error) {
+	now := time.Now().UTC()
+	transition, err := task.Transition(domain.TaskTransitionCommand{
+		To: target, Actor: transitionActor(ctx), Cause: cause, At: now,
+	})
+	if err != nil {
+		return domain.Task{}, err
+	}
+	updated, err := s.tasks.Update(ctx, task)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	s.appendTrace(ctx, tracepkg.Event{
+		ID: tracepkg.NewID("trace-event"), TraceID: updated.TraceID, TaskID: updated.ID,
+		SpanID: tracepkg.NewID("span"), Name: "task.transition", Kind: "TASK",
+		Status: tracepkg.StatusOK, Attributes: map[string]string{
+			"task.from": string(transition.From), "task.to": string(transition.To),
+			"task.actor": transition.Actor, "task.cause": transition.Cause,
+			"task.version": fmt.Sprintf("%d", updated.Version),
+		}, StartedAt: now, EndedAt: timePointer(now),
+	})
+	return updated, nil
+}
+
+func transitionActor(ctx context.Context) string {
+	if principal, ok := identity.PrincipalFromContext(ctx); ok {
+		return fmt.Sprintf("%s:%s", principal.Type, principal.SubjectID)
+	}
+	// This fallback is evidence metadata only; it does not grant authorization.
+	// Scoped repositories still require an explicit Principal for protected data.
+	return "controlplane"
 }
 
 func (s *Service) appendTrace(ctx context.Context, event tracepkg.Event) {

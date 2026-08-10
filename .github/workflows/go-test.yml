@@ -55,16 +55,27 @@ jobs:
         run: |
           changed=$(git diff --name-only --diff-filter=ACMR HEAD^ -- '*.go')
           if [ -n "$changed" ]; then
-            test -z "$(gofmt -l $changed)"
+            unformatted=$(gofmt -l $changed)
+            if [ -n "$unformatted" ]; then
+              echo "Unformatted Go files:"
+              echo "$unformatted"
+              gofmt -d $unformatted || true
+              exit 1
+            fi
           fi
 
       - name: Run tests
         run: go test ./...
 
-      - name: Run PostgreSQL RLS contract integration test
+      - name: Run PostgreSQL migration contract integration tests
         env:
           AICLOUD_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/aicloud_test?sslmode=disable
-        run: go test -tags=integration ./db/migrations -run TestTaskScopeMigrationPostgres -v
+        run: go test -tags=integration ./db/migrations -v
+
+      - name: Run PostgreSQL Task repository integration tests
+        env:
+          AICLOUD_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/aicloud_test?sslmode=disable
+        run: go test -tags=integration ./internal/repository -v
 
       - name: Run vet
         run: go vet ./...
