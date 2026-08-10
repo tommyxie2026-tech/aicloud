@@ -36,7 +36,7 @@ func TestTaskEventValidation(t *testing.T) {
 	event := TaskEvent{
 		EventID: "event-1", TenantID: "tenant-a", ProjectID: "project-a", TaskID: "task-a",
 		Sequence: 1, EventType: "TaskCreated",
-		Actor: TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+		Actor:   TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 		Payload: json.RawMessage(`{"status":"CREATED"}`), TraceID: "trace-a",
 		SchemaVersion: 1, OccurredAt: now, CreatedAt: now,
 	}
