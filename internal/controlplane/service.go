@@ -15,8 +15,8 @@ import (
 	"github.com/tommyxie2026-tech/aicloud/internal/modelruntime"
 	"github.com/tommyxie2026-tech/aicloud/internal/modelservice"
 	"github.com/tommyxie2026-tech/aicloud/internal/router"
-	tracepkg "github.com/tommyxie2026-tech/aicloud/internal/trace"
 	"github.com/tommyxie2026-tech/aicloud/internal/toolgateway"
+	tracepkg "github.com/tommyxie2026-tech/aicloud/internal/trace"
 	"github.com/tommyxie2026-tech/aicloud/internal/workflow"
 	"github.com/tommyxie2026-tech/aicloud/model/provider"
 )
@@ -393,7 +393,7 @@ func (s *Service) CreateEvaluation(ctx context.Context, taskID string, config ev
 		Status: status, Attributes: map[string]string{
 			"evaluation.id": run.ID, "evaluation.config_digest": run.ConfigDigest,
 			"evaluation.gate_passed": fmt.Sprintf("%t", run.Gate.Passed),
-			"dataset.version": run.Config.DatasetVersion, "evaluator.version": run.Config.EvaluatorVersion,
+			"dataset.version":        run.Config.DatasetVersion, "evaluator.version": run.Config.EvaluatorVersion,
 		}, StartedAt: now, EndedAt: timePointer(now),
 	})
 	return run, nil
