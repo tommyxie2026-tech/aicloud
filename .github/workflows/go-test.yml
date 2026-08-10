@@ -59,6 +59,7 @@ jobs:
             if [ -n "$unformatted" ]; then
               echo "Unformatted Go files:"
               echo "$unformatted"
+              gofmt -d $unformatted || true
               exit 1
             fi
           fi
