@@ -4,11 +4,12 @@ import "context"
 
 // TaskCommandStore is the R6 transaction-level persistence contract used by
 // the Control Plane. Implementations must preserve the atomicity guarantees of
-// Task projection + TaskEvent + Outbox + Idempotency described by the frozen
-// contracts.
+// Task projection + TaskEvent + adjacent business records + Outbox +
+// Idempotency described by the frozen contracts.
 type TaskCommandStore interface {
 	CreateTask(context.Context, TaskCreateCommit) (TaskCommandCommitResult, error)
 	CommitTransition(context.Context, TaskCommandCommit) (TaskCommandCommitResult, error)
+	CommitRouteTransition(context.Context, RouteTaskCommandCommit) (RouteTaskCommandResult, error)
 }
 
 // TaskCommandStoreProvider lets a scoped Task repository expose an optional
