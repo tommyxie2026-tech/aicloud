@@ -70,8 +70,8 @@ func (s *Service) CreateTaskIdempotent(ctx context.Context, input, agentID strin
 	}
 
 	payload, err := json.Marshal(map[string]any{
-		"taskId": task.ID,
-		"status": task.Status,
+		"taskId":  task.ID,
+		"status":  task.Status,
 		"agentId": task.AgentID,
 	})
 	if err != nil {
