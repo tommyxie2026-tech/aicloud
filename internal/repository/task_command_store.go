@@ -1,6 +1,18 @@
 package repository
 
-import "context"
+import (
+	"context"
+
+	"github.com/tommyxie2026-tech/aicloud/internal/domain"
+)
+
+type IdempotencyLookup struct {
+	TenantID      string
+	ProjectID     string
+	Operation     string
+	Key           string
+	RequestDigest string
+}
 
 // TaskCommandStore is the R6 transaction-level persistence contract used by
 // the Control Plane. Implementations must preserve the atomicity guarantees of
@@ -10,6 +22,7 @@ type TaskCommandStore interface {
 	CreateTask(context.Context, TaskCreateCommit) (TaskCommandCommitResult, error)
 	CommitTransition(context.Context, TaskCommandCommit) (TaskCommandCommitResult, error)
 	CommitRouteTransition(context.Context, RouteTaskCommandCommit) (RouteTaskCommandResult, error)
+	ResolveIdempotency(context.Context, IdempotencyLookup) (domain.IdempotencyRecord, bool, error)
 }
 
 // TaskCommandStoreProvider lets a scoped Task repository expose an optional
