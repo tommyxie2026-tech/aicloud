@@ -27,3 +27,26 @@ func TestTaskScopeIdentityMigrationRemovesSessionPrivilegeBypass(t *testing.T) {
 		t.Fatal("migration must not retain application-controlled system_access bypass")
 	}
 }
+
+func TestTaskAggregateMigrationDefinesCanonicalStatesAndVersion(t *testing.T) {
+	body, err := migrationFiles.ReadFile("006_task_aggregate_state.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(body)
+	for _, required := range []string{
+		"ALTER TABLE tasks ADD COLUMN IF NOT EXISTS version BIGINT",
+		"WHEN 'PENDING' THEN 'CREATED'",
+		"WHEN 'RUNNING' THEN 'EXECUTING'",
+		"ALTER TABLE tasks ALTER COLUMN version SET NOT NULL",
+		"CHECK (version >= 1)",
+		"WAITING_APPROVAL",
+		"VALIDATING",
+		"CANCELLED",
+		"EXPIRED",
+	} {
+		if !strings.Contains(sql, required) {
+			t.Fatalf("task aggregate migration missing invariant %q", required)
+		}
+	}
+}
