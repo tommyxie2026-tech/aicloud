@@ -13,26 +13,12 @@ import (
 )
 
 func TestTaskScopeMigrationPostgres(t *testing.T) {
-	dsn := os.Getenv("AICLOUD_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("AICLOUD_TEST_DATABASE_URL is not configured")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Fatalf("open PostgreSQL: %v", err)
-	}
+	db, ctx := openIntegrationDB(t)
 	defer db.Close()
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("ping PostgreSQL: %v", err)
-	}
-
 	cleanupTaskScopeFixture(t, ctx, db)
 	defer cleanupTaskScopeFixture(t, context.Background(), db)
 
-	_, err = db.ExecContext(ctx, `
+	_, err := db.ExecContext(ctx, `
 		CREATE TABLE tasks (
 			id TEXT PRIMARY KEY,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -121,6 +107,89 @@ func TestTaskScopeMigrationPostgres(t *testing.T) {
 	if visible != 0 {
 		t.Fatalf("project-c must not see tasks from other projects, got %d", visible)
 	}
+}
+
+func TestTaskAggregateMigrationPostgres(t *testing.T) {
+	db, ctx := openIntegrationDB(t)
+	defer db.Close()
+	cleanupTaskScopeFixture(t, ctx, db)
+	defer cleanupTaskScopeFixture(t, context.Background(), db)
+
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE tasks (
+			id TEXT PRIMARY KEY,
+			tenant_id TEXT NOT NULL,
+			project_id TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			status TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		INSERT INTO tasks(id, tenant_id, project_id, created_by, status) VALUES
+			('task-pending', 'tenant-a', 'project-a', 'user-a', 'PENDING'),
+			('task-running', 'tenant-a', 'project-a', 'user-a', 'RUNNING'),
+			('task-completed', 'tenant-a', 'project-a', 'user-a', 'COMPLETED');
+	`)
+	if err != nil {
+		t.Fatalf("create aggregate migration fixture: %v", err)
+	}
+
+	body, err := migrationFiles.ReadFile("006_task_aggregate_state.sql")
+	if err != nil {
+		t.Fatalf("read migration 006: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, string(body)); err != nil {
+		t.Fatalf("execute migration 006: %v", err)
+	}
+
+	var status string
+	var version int64
+	if err := db.QueryRowContext(ctx, `SELECT status, version FROM tasks WHERE id='task-pending'`).Scan(&status, &version); err != nil {
+		t.Fatalf("read pending migration: %v", err)
+	}
+	if status != "CREATED" || version != 1 {
+		t.Fatalf("pending mapping status=%q version=%d", status, version)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT status, version FROM tasks WHERE id='task-running'`).Scan(&status, &version); err != nil {
+		t.Fatalf("read running migration: %v", err)
+	}
+	if status != "EXECUTING" || version != 1 {
+		t.Fatalf("running mapping status=%q version=%d", status, version)
+	}
+
+	var completedAt sql.NullTime
+	if err := db.QueryRowContext(ctx, `SELECT completed_at FROM tasks WHERE id='task-completed'`).Scan(&completedAt); err != nil {
+		t.Fatalf("read completed_at: %v", err)
+	}
+	if !completedAt.Valid {
+		t.Fatal("terminal task must receive completed_at during migration")
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE tasks SET status='BOGUS' WHERE id='task-pending'`); err == nil {
+		t.Fatal("canonical status constraint must reject unknown state")
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE tasks SET version=0 WHERE id='task-pending'`); err == nil {
+		t.Fatal("version constraint must reject non-positive version")
+	}
+}
+
+func openIntegrationDB(t *testing.T) (*sql.DB, context.Context) {
+	t.Helper()
+	dsn := os.Getenv("AICLOUD_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("AICLOUD_TEST_DATABASE_URL is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("open PostgreSQL: %v", err)
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		t.Fatalf("ping PostgreSQL: %v", err)
+	}
+	return db, ctx
 }
 
 func cleanupTaskScopeFixture(t *testing.T, ctx context.Context, db *sql.DB) {
