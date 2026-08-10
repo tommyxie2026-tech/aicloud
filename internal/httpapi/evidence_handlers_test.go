@@ -177,7 +177,9 @@ func createEvidenceTask(t *testing.T, handler http.Handler) string {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"input": "evaluate model", "agentId": "agent-1"})
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/tasks", bytes.NewReader(body)))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", bytes.NewReader(body))
+	request.Header.Set(idempotencyKeyHeader, "evidence-task-create")
+	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("task status=%d body=%s", response.Code, response.Body.String())
 	}
