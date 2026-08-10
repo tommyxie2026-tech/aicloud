@@ -9,7 +9,10 @@ import (
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 )
 
-var ErrNotFound = errors.New("resource not found")
+var (
+	ErrNotFound        = errors.New("resource not found")
+	ErrVersionConflict = errors.New("resource version conflict")
+)
 
 type MemoryModels struct {
 	mu sync.RWMutex
@@ -99,6 +102,12 @@ func (r *MemoryTasks) Create(_ context.Context, task domain.Task) (domain.Task, 
 	if _, ok := r.m[task.ID]; ok {
 		return domain.Task{}, errors.New("task already exists")
 	}
+	if task.Version == 0 {
+		task.Version = 1
+	}
+	if task.Status == "" {
+		task.Status = domain.TaskCreated
+	}
 	r.m[task.ID] = task
 	return task, nil
 }
@@ -106,9 +115,14 @@ func (r *MemoryTasks) Create(_ context.Context, task domain.Task) (domain.Task, 
 func (r *MemoryTasks) Update(_ context.Context, task domain.Task) (domain.Task, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.m[task.ID]; !ok {
+	current, ok := r.m[task.ID]
+	if !ok {
 		return domain.Task{}, ErrNotFound
 	}
+	if task.Version != current.Version {
+		return domain.Task{}, ErrVersionConflict
+	}
+	task.Version++
 	r.m[task.ID] = task
 	return task, nil
 }
