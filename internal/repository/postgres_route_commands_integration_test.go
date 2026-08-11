@@ -69,7 +69,7 @@ func TestScopedPostgresRouteCommandAtomicCommitReplayConflictAndRollback(t *test
 		},
 		Event: domain.TaskEvent{
 			EventID: "event-plan", EventType: "TaskPlanningStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: json.RawMessage(`{"to":"PLANNING"}`), SchemaVersion: 1,
 		},
 		Idempotency: domain.IdempotencyRecord{
@@ -91,7 +91,7 @@ func TestScopedPostgresRouteCommandAtomicCommitReplayConflictAndRollback(t *test
 			ModelID: "model-a", ModelVersion: "v1", RouteClass: domain.RouteEfficient, EstimatedCost: 0.01,
 		},
 		Candidates: []domain.RouteCandidate{{ModelID: "model-a", ModelVersion: "v1"}},
-		Reason: "best eligible model", EvidenceVersion: "evidence-v1", PolicyVersion: "policy-v1",
+		Reason:     "best eligible model", EvidenceVersion: "evidence-v1", PolicyVersion: "policy-v1",
 		CreatedAt: routingTask.UpdatedAt,
 	}
 	command := RouteTaskCommandCommit{
@@ -103,7 +103,7 @@ func TestScopedPostgresRouteCommandAtomicCommitReplayConflictAndRollback(t *test
 		Decision: decision,
 		Event: domain.TaskEvent{
 			EventID: "event-route", EventType: "TaskRoutingStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: json.RawMessage(`{"routeDecisionId":"route-1"}`), SchemaVersion: 1,
 		},
 		Idempotency: domain.IdempotencyRecord{
