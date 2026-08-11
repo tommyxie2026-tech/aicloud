@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/tommyxie2026-tech/aicloud/internal/admission"
+	"github.com/tommyxie2026-tech/aicloud/internal/controlplane"
+	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 	"github.com/tommyxie2026-tech/aicloud/internal/evaluation"
 	"github.com/tommyxie2026-tech/aicloud/internal/repository"
 	"github.com/tommyxie2026-tech/aicloud/model/provider"
@@ -62,17 +64,48 @@ func (s *Server) executeModel(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, http.StatusBadRequest, "task id is required")
 		return
 	}
+	key := strings.TrimSpace(r.Header.Get(idempotencyKeyHeader))
+	if key == "" {
+		writeErrorStatus(w, http.StatusBadRequest, "Idempotency-Key is required")
+		return
+	}
 	var request provider.ProviderRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeErrorStatus(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	result, err := s.control.ExecuteModel(r.Context(), taskID, request)
+	businessRequest := request
+	businessRequest.RequestID = ""
+	digest, err := canonicalRequestDigest(struct {
+		TaskID  string                   `json:"taskId"`
+		Request provider.ProviderRequest `json:"request"`
+	}{TaskID: taskID, Request: businessRequest})
 	if err != nil {
-		writeModelExecutionError(w, err)
+		writeErrorStatus(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	result, err := s.control.ExecuteModelIdempotent(r.Context(), taskID, request, controlplane.CommandMetadata{
+		IdempotencyKey: key,
+		RequestDigest:  digest,
+		RequestID:      strings.TrimSpace(r.Header.Get("X-Request-ID")),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrIdempotencyConflict):
+			writeErrorStatus(w, http.StatusConflict, "IDEMPOTENCY_CONFLICT")
+		case errors.Is(err, repository.ErrIdempotencyInProgress):
+			writeErrorStatus(w, http.StatusConflict, "IDEMPOTENCY_IN_PROGRESS")
+		case errors.Is(err, domain.ErrInvalidTaskTransition):
+			writeErrorStatus(w, http.StatusConflict, err.Error())
+		default:
+			writeModelExecutionError(w, err)
+		}
+		return
+	}
+	if result.Replayed {
+		w.Header().Set("Idempotency-Replayed", "true")
+	}
+	writeJSON(w, http.StatusOK, result.Result)
 }
 
 func (s *Server) taskTrace(w http.ResponseWriter, r *http.Request) {
@@ -101,10 +134,10 @@ func (s *Server) taskEvaluations(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
 		var request struct {
-			Config     evaluation.Config      `json:"config"`
-			Metrics    evaluation.Metrics     `json:"metrics"`
-			Thresholds evaluation.Thresholds  `json:"thresholds"`
-			RawOutput  string                 `json:"rawOutput,omitempty"`
+			Config     evaluation.Config     `json:"config"`
+			Metrics    evaluation.Metrics    `json:"metrics"`
+			Thresholds evaluation.Thresholds `json:"thresholds"`
+			RawOutput  string                `json:"rawOutput,omitempty"`
 		}
 		if err := decodeJSON(r, &request); err != nil {
 			writeErrorStatus(w, http.StatusBadRequest, err.Error())
