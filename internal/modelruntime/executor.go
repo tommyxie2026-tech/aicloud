@@ -2,6 +2,8 @@ package modelruntime
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -118,7 +120,7 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 	}
 	attempt := Attempt{
 		OperationID: operationID,
-		AttemptID:   fmt.Sprintf("%s:attempt:%d", operationID, attemptNumber),
+		AttemptID:   newPhysicalAttemptID(operationID, attemptNumber, started),
 		ModelID:     candidate.ModelID, ModelVersion: candidate.ModelVersion,
 		Status: "STARTED", StartedAt: started,
 	}
@@ -184,6 +186,14 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 	}
 	e.appendTrace(ctx, taskID, traceID, candidate, attempt, "")
 	return attempt, response, false, nil
+}
+
+func newPhysicalAttemptID(operationID string, attemptNumber int, started time.Time) string {
+	var entropy [12]byte
+	if _, err := rand.Read(entropy[:]); err == nil {
+		return operationID + ":attempt:" + hex.EncodeToString(entropy[:])
+	}
+	return fmt.Sprintf("%s:attempt:%d:%d", operationID, started.UnixNano(), attemptNumber)
 }
 
 func classify(err error) (provider.ProviderErrorCode, bool) {
