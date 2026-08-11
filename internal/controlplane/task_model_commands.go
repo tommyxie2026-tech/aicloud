@@ -99,10 +99,10 @@ func (s *Service) ExecuteModelIdempotent(ctx context.Context, taskID string, req
 			return ModelCommandResult{}, transitionErr
 		}
 		payload, payloadErr := json.Marshal(map[string]any{
-			"operationId": request.RequestID,
+			"operationId":     request.RequestID,
 			"routeDecisionId": decision.ID,
-			"modelId": decision.Selected.ModelID,
-			"modelVersion": decision.Selected.ModelVersion,
+			"modelId":         decision.Selected.ModelID,
+			"modelVersion":    decision.Selected.ModelVersion,
 		})
 		if payloadErr != nil {
 			return ModelCommandResult{}, fmt.Errorf("encode model execution start event: %w", payloadErr)
@@ -163,7 +163,7 @@ func (s *Service) ExecuteModelIdempotent(ctx context.Context, taskID string, req
 		}
 		payload, payloadErr := json.Marshal(map[string]any{
 			"operationId": request.RequestID,
-			"error": executeErr.Error(),
+			"error":       executeErr.Error(),
 		})
 		if payloadErr != nil {
 			return ModelCommandResult{Result: result}, payloadErr
@@ -220,10 +220,10 @@ func (s *Service) ExecuteModelIdempotent(ctx context.Context, taskID string, req
 	}
 	validationPayload, _ := json.Marshal(map[string]any{"operationId": request.RequestID})
 	completedPayload, _ := json.Marshal(map[string]any{
-		"operationId": request.RequestID,
-		"modelId": result.Candidate.ModelID,
+		"operationId":  request.RequestID,
+		"modelId":      result.Candidate.ModelID,
 		"modelVersion": result.Candidate.ModelVersion,
-		"fallback": result.Fallback,
+		"fallback":     result.Fallback,
 	})
 	stored, err := encodeStoredModelResponse(result, nil)
 	if err != nil {
@@ -354,7 +354,7 @@ func (s *Service) appendTaskTransitionTrace(ctx context.Context, task domain.Tas
 		Status: tracepkg.StatusOK, Attributes: map[string]string{
 			"task.from": string(transition.From), "task.to": string(transition.To),
 			"task.actor": transition.Actor, "task.cause": transition.Cause,
-			"task.version": fmt.Sprintf("%d", task.Version),
+			"task.version":       fmt.Sprintf("%d", task.Version),
 			"command.idempotent": idempotent,
 		}, StartedAt: now, EndedAt: timePointer(now),
 	})
