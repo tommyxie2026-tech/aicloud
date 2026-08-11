@@ -77,6 +77,11 @@ jobs:
           AICLOUD_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/aicloud_test?sslmode=disable
         run: go test -tags=integration ./internal/repository -v
 
+      - name: Run PostgreSQL Outbox crash recovery integration tests
+        env:
+          AICLOUD_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/aicloud_test?sslmode=disable
+        run: go test -tags=integration ./internal/outbox -v
+
       - name: Run vet
         run: go vet ./...
 
