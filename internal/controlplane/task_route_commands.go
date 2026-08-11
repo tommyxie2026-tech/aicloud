@@ -88,10 +88,10 @@ func (s *Service) DecideRouteIdempotent(ctx context.Context, request router.Requ
 	task.EstimatedCost = decision.Selected.EstimatedCost
 
 	eventPayload, err := json.Marshal(map[string]any{
-		"from": transition.From,
-		"to": transition.To,
-		"routeDecisionId": decision.ID,
-		"selectedModelId": decision.Selected.ModelID,
+		"from":                 transition.From,
+		"to":                   transition.To,
+		"routeDecisionId":      decision.ID,
+		"selectedModelId":      decision.Selected.ModelID,
 		"selectedModelVersion": decision.Selected.ModelVersion,
 	})
 	if err != nil {
@@ -133,13 +133,13 @@ func (s *Service) DecideRouteIdempotent(ctx context.Context, request router.Requ
 			ID: tracepkg.NewID("trace-event"), TraceID: result.Task.TraceID, TaskID: result.Task.ID,
 			SpanID: tracepkg.NewID("span"), Name: "route.decision", Kind: "ROUTING",
 			Status: tracepkg.StatusOK, Attributes: map[string]string{
-				"route.id": result.Decision.ID,
-				"route.class": string(result.Decision.Selected.RouteClass),
-				"model.id": result.Decision.Selected.ModelID,
-				"model.version": result.Decision.Selected.ModelVersion,
-				"evidence.version": result.Decision.EvidenceVersion,
-				"policy.version": result.Decision.PolicyVersion,
-				"task.version": fmt.Sprintf("%d", result.Task.Version),
+				"route.id":           result.Decision.ID,
+				"route.class":        string(result.Decision.Selected.RouteClass),
+				"model.id":           result.Decision.Selected.ModelID,
+				"model.version":      result.Decision.Selected.ModelVersion,
+				"evidence.version":   result.Decision.EvidenceVersion,
+				"policy.version":     result.Decision.PolicyVersion,
+				"task.version":       fmt.Sprintf("%d", result.Task.Version),
 				"command.idempotent": "true",
 			}, StartedAt: now, EndedAt: timePointer(now),
 		})
@@ -156,8 +156,8 @@ func (s *Service) commitPlanningForRoute(ctx context.Context, commands repositor
 		return domain.Task{}, err
 	}
 	payload, err := json.Marshal(map[string]any{
-		"from": transition.From,
-		"to": transition.To,
+		"from":  transition.From,
+		"to":    transition.To,
 		"cause": transition.Cause,
 	})
 	if err != nil {
