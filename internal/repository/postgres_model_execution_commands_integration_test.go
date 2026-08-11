@@ -36,7 +36,7 @@ func TestScopedPostgresModelExecutionRetryAndSuccessFinalization(t *testing.T) {
 		Transition: &started,
 		Event: &domain.TaskEvent{
 			EventID: "event-execution-start", EventType: "TaskExecutionStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: json.RawMessage(`{"operationId":"model-op-1"}`), SchemaVersion: 1,
 		},
 		Idempotency: modelExecutionIdempotency(now, domain.IdempotencyInProgress),
@@ -104,12 +104,12 @@ func TestScopedPostgresModelExecutionRetryAndSuccessFinalization(t *testing.T) {
 		Events: []domain.TaskEvent{
 			{
 				EventID: "event-validation", EventType: "TaskValidationStarted",
-				Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+				Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 				Payload: json.RawMessage(`{"operationId":"model-op-1"}`), SchemaVersion: 1,
 			},
 			{
 				EventID: "event-completed", EventType: "TaskCompleted",
-				Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+				Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 				Payload: json.RawMessage(`{"operationId":"model-op-1"}`), SchemaVersion: 1,
 			},
 		},
@@ -152,7 +152,7 @@ func TestScopedPostgresModelExecutionFinalFailure(t *testing.T) {
 		Transition: &started,
 		Event: &domain.TaskEvent{
 			EventID: "event-execution-start", EventType: "TaskExecutionStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: json.RawMessage(`{"operationId":"model-op-fail"}`), SchemaVersion: 1,
 		},
 		Idempotency: modelExecutionIdempotency(now, domain.IdempotencyInProgress),
@@ -178,7 +178,7 @@ func TestScopedPostgresModelExecutionFinalFailure(t *testing.T) {
 		Transitions: []domain.TaskTransition{failed},
 		Events: []domain.TaskEvent{{
 			EventID: "event-failed", EventType: "TaskFailed",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: json.RawMessage(`{"error":"schema mismatch"}`), SchemaVersion: 1,
 		}},
 		Idempotency: failedIdempotency,
