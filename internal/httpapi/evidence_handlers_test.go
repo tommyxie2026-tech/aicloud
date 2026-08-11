@@ -85,7 +85,9 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 		"requireFreshSignals": true, "signalMaxAgeSeconds": 300,
 	})
 	routeResponse := httptest.NewRecorder()
-	handler.ServeHTTP(routeResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/route", bytes.NewReader(routeBody)))
+	routeRequest := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/route", bytes.NewReader(routeBody))
+	routeRequest.Header.Set(idempotencyKeyHeader, "evidence-task-route")
+	handler.ServeHTTP(routeResponse, routeRequest)
 	if routeResponse.Code != http.StatusCreated {
 		t.Fatalf("route status=%d body=%s", routeResponse.Code, routeResponse.Body.String())
 	}
