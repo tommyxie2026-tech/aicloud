@@ -89,6 +89,9 @@ func (s *Server) executeModel(w http.ResponseWriter, r *http.Request) {
 		RequestDigest:  digest,
 		RequestID:      strings.TrimSpace(r.Header.Get("X-Request-ID")),
 	})
+	if result.Replayed {
+		w.Header().Set("Idempotency-Replayed", "true")
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrIdempotencyConflict):
@@ -101,9 +104,6 @@ func (s *Server) executeModel(w http.ResponseWriter, r *http.Request) {
 			writeModelExecutionError(w, err)
 		}
 		return
-	}
-	if result.Replayed {
-		w.Header().Set("Idempotency-Replayed", "true")
 	}
 	writeJSON(w, http.StatusOK, result.Result)
 }
