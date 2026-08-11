@@ -67,7 +67,7 @@ func TestTaskEventSequenceRemainsContiguousUnderConcurrentCommands(t *testing.T)
 			go func(contender int) {
 				defer wg.Done()
 				candidate := base
-				at := now.Add(time.Duration(100+round)*time.Millisecond)
+				at := now.Add(time.Duration(100+round) * time.Millisecond)
 				transition, transitionErr := candidate.Transition(domain.TaskTransitionCommand{
 					To: target, Actor: "user:user-a",
 					Cause: fmt.Sprintf("concurrency round %d", round), At: at,
@@ -79,11 +79,11 @@ func TestTaskEventSequenceRemainsContiguousUnderConcurrentCommands(t *testing.T)
 				eventType, _ := domain.CanonicalTaskStateEvent(target)
 				payload, _ := json.Marshal(map[string]any{"round": round, "contender": contender})
 				result, commitErr := repo.CommitTransition(projectCtx, TaskCommandCommit{
-					Task: candidate,
+					Task:       candidate,
 					Transition: transition,
 					Event: domain.TaskEvent{
 						EventID: fmt.Sprintf("event-round-%d-%d", round, contender), EventType: eventType,
-						Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+						Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 						Payload: payload, SchemaVersion: 1,
 					},
 					Idempotency: domain.IdempotencyRecord{
@@ -159,7 +159,7 @@ func commitStressTransition(t *testing.T, ctx context.Context, repo *ScopedPostg
 		Task: task, Transition: transition,
 		Event: domain.TaskEvent{
 			EventID: "event-" + key, EventType: eventType,
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: payload, SchemaVersion: 1,
 		},
 		Idempotency: domain.IdempotencyRecord{
