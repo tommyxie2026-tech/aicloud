@@ -97,7 +97,9 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 		"outputSchema": map[string]string{"name": "result", "version": "v1"},
 	})
 	modelResponse := httptest.NewRecorder()
-	handler.ServeHTTP(modelResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/model", bytes.NewReader(modelBody)))
+	modelRequest := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/model", bytes.NewReader(modelBody))
+	modelRequest.Header.Set(idempotencyKeyHeader, "evidence-task-model")
+	handler.ServeHTTP(modelResponse, modelRequest)
 	if modelResponse.Code != http.StatusOK {
 		t.Fatalf("model status=%d body=%s", modelResponse.Code, modelResponse.Body.String())
 	}
