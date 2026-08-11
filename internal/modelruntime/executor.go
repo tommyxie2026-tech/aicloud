@@ -49,6 +49,8 @@ func (r *MemoryProviderRegistry) Put(_ context.Context, modelID string, item pro
 }
 
 type Attempt struct {
+	OperationID   string                     `json:"operationId"`
+	AttemptID     string                     `json:"attemptId"`
 	ModelID       string                     `json:"modelId"`
 	ModelVersion  string                     `json:"modelVersion"`
 	Status        string                     `json:"status"`
@@ -62,10 +64,10 @@ type Attempt struct {
 }
 
 type Result struct {
-	Candidate domain.RouteCandidate     `json:"candidate"`
+	Candidate domain.RouteCandidate      `json:"candidate"`
 	Response  *provider.ProviderResponse `json:"response,omitempty"`
-	Attempts  []Attempt                 `json:"attempts"`
-	Fallback  bool                      `json:"fallback"`
+	Attempts  []Attempt                  `json:"attempts"`
+	Fallback  bool                       `json:"fallback"`
 }
 
 type Executor struct {
@@ -110,7 +112,16 @@ func (e *Executor) Execute(ctx context.Context, taskID, traceID string, decision
 
 func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string, candidate domain.RouteCandidate, request provider.ProviderRequest, attemptNumber int) (Attempt, *provider.ProviderResponse, bool, error) {
 	started := e.now().UTC()
-	attempt := Attempt{ModelID: candidate.ModelID, ModelVersion: candidate.ModelVersion, Status: "STARTED", StartedAt: started}
+	operationID := request.RequestID
+	if operationID == "" {
+		operationID = taskID
+	}
+	attempt := Attempt{
+		OperationID: operationID,
+		AttemptID: fmt.Sprintf("%s:attempt:%d", operationID, attemptNumber),
+		ModelID: candidate.ModelID, ModelVersion: candidate.ModelVersion,
+		Status: "STARTED", StartedAt: started,
+	}
 	key := candidate.ModelID + "@" + candidate.ModelVersion
 	allowed, snapshot, err := e.breaker.Allow(ctx, key)
 	if err != nil {
@@ -202,6 +213,7 @@ func (e *Executor) appendTrace(ctx context.Context, taskID, traceID string, cand
 		SpanID: tracepkg.NewID("span"), Name: "model.generate", Kind: "MODEL_CALL",
 		Status: status, Message: message,
 		Attributes: map[string]string{
+			"model.operation_id": attempt.OperationID, "model.attempt_id": attempt.AttemptID,
 			"model.id": candidate.ModelID, "model.version": candidate.ModelVersion,
 			"route.class": string(candidate.RouteClass), "service.tier": string(candidate.ServiceTier),
 			"inference.effort": string(candidate.InferenceEffort), "attempt.status": attempt.Status,
