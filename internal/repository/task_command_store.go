@@ -2,9 +2,12 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 )
+
+var ErrDurableTaskCommandRequired = errors.New("durable task mutation requires the R6 TaskCommandStore")
 
 type IdempotencyLookup struct {
 	TenantID      string
