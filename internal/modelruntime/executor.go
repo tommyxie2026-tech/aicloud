@@ -49,18 +49,18 @@ func (r *MemoryProviderRegistry) Put(_ context.Context, modelID string, item pro
 }
 
 type Attempt struct {
-	OperationID   string                     `json:"operationId"`
-	AttemptID     string                     `json:"attemptId"`
-	ModelID       string                     `json:"modelId"`
-	ModelVersion  string                     `json:"modelVersion"`
-	Status        string                     `json:"status"`
-	ErrorCode     provider.ProviderErrorCode `json:"errorCode,omitempty"`
-	ErrorMessage  string                     `json:"errorMessage,omitempty"`
-	Retryable     bool                       `json:"retryable"`
-	CircuitState  circuitbreaker.State       `json:"circuitState"`
-	LatencyMS     int64                      `json:"latencyMs"`
-	StartedAt     time.Time                  `json:"startedAt"`
-	CompletedAt   time.Time                  `json:"completedAt"`
+	OperationID  string                     `json:"operationId"`
+	AttemptID    string                     `json:"attemptId"`
+	ModelID      string                     `json:"modelId"`
+	ModelVersion string                     `json:"modelVersion"`
+	Status       string                     `json:"status"`
+	ErrorCode    provider.ProviderErrorCode `json:"errorCode,omitempty"`
+	ErrorMessage string                     `json:"errorMessage,omitempty"`
+	Retryable    bool                       `json:"retryable"`
+	CircuitState circuitbreaker.State       `json:"circuitState"`
+	LatencyMS    int64                      `json:"latencyMs"`
+	StartedAt    time.Time                  `json:"startedAt"`
+	CompletedAt  time.Time                  `json:"completedAt"`
 }
 
 type Result struct {
@@ -118,8 +118,8 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 	}
 	attempt := Attempt{
 		OperationID: operationID,
-		AttemptID: fmt.Sprintf("%s:attempt:%d", operationID, attemptNumber),
-		ModelID: candidate.ModelID, ModelVersion: candidate.ModelVersion,
+		AttemptID:   fmt.Sprintf("%s:attempt:%d", operationID, attemptNumber),
+		ModelID:     candidate.ModelID, ModelVersion: candidate.ModelVersion,
 		Status: "STARTED", StartedAt: started,
 	}
 	key := candidate.ModelID + "@" + candidate.ModelVersion
