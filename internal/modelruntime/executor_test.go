@@ -46,6 +46,12 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 	if !result.Fallback || result.Candidate.ModelID != "secondary" || len(result.Attempts) != 2 {
 		t.Fatalf("unexpected fallback result: %#v", result)
 	}
+	if result.Attempts[0].OperationID != "request-1" || result.Attempts[1].OperationID != "request-1" {
+		t.Fatalf("logical operation identity changed across attempts: %#v", result.Attempts)
+	}
+	if result.Attempts[0].AttemptID != "request-1:attempt:1" || result.Attempts[1].AttemptID != "request-1:attempt:2" {
+		t.Fatalf("unexpected physical attempt identities: %#v", result.Attempts)
+	}
 	if primary.calls != 1 || secondary.calls != 1 {
 		t.Fatalf("provider calls primary=%d secondary=%d", primary.calls, secondary.calls)
 	}
@@ -56,6 +62,9 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 	traces, _ := traceStore.ListByTask(context.Background(), "task-1")
 	if len(traces) != 2 || traces[0].Status != tracepkg.StatusError || traces[1].Status != tracepkg.StatusOK {
 		t.Fatalf("unexpected trace evidence: %#v", traces)
+	}
+	if traces[0].Attributes["model.operation_id"] != "request-1" || traces[1].Attributes["model.attempt_id"] != "request-1:attempt:2" {
+		t.Fatalf("trace did not retain operation/attempt identity: %#v", traces)
 	}
 }
 
