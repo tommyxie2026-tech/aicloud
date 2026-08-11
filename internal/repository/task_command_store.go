@@ -22,6 +22,9 @@ type TaskCommandStore interface {
 	CreateTask(context.Context, TaskCreateCommit) (TaskCommandCommitResult, error)
 	CommitTransition(context.Context, TaskCommandCommit) (TaskCommandCommitResult, error)
 	CommitRouteTransition(context.Context, RouteTaskCommandCommit) (RouteTaskCommandResult, error)
+	BeginModelExecution(context.Context, ModelExecutionBeginCommit) (ModelExecutionBeginResult, error)
+	FinalizeModelExecution(context.Context, ModelExecutionFinalizeCommit) (ModelExecutionFinalizeResult, error)
+	MarkModelExecutionRetryable(context.Context, domain.IdempotencyRecord) error
 	ResolveIdempotency(context.Context, IdempotencyLookup) (domain.IdempotencyRecord, bool, error)
 }
 
