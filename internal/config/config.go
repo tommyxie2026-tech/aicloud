@@ -12,6 +12,7 @@ type Config struct {
 	LogLevel       string
 	RepositoryMode string
 	RunMigrations  bool
+	Auth           AuthConfig
 	Provider       ProviderConfig
 }
 
@@ -45,6 +46,7 @@ func Load() Config {
 		LogLevel:       env("AICLOUD_LOG_LEVEL", "INFO"),
 		RepositoryMode: env("AICLOUD_REPOSITORY_MODE", "memory"),
 		RunMigrations:  envBool("AICLOUD_RUN_MIGRATIONS", false),
+		Auth:           loadAuthConfig(),
 		Provider: ProviderConfig{
 			Enabled:          envBool("AICLOUD_PROVIDER_ENABLED", false),
 			Name:             env("AICLOUD_PROVIDER_NAME", "openai-compatible"),

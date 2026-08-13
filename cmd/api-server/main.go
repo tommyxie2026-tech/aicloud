@@ -71,14 +71,22 @@ func main() {
 		WithGovernance(stores.routes, stores.costs).
 		WithSecureTools(toolService, auditStore).
 		WithEvidence(stores.traces, stores.evaluations, admissionService, modelRuntime)
+	principalVerifier, err := buildPrincipalVerifier(ctx, cfg.Auth)
+	if err != nil {
+		log.Error("authentication initialization failed", "error", err)
+		os.Exit(1)
+	}
+	apiHandler := httpapi.WithRequestMetadata(
+		httpapi.WithPrincipalVerifier(principalVerifier, httpapi.New(control, log).FullHandler()),
+	)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.WithTenantScope(httpapi.New(control, log).FullHandler()),
+		Handler:           apiHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	telemetryProvider := telemetry.NoopProvider{}
 	go func() {
-		log.Info("api server started", "addr", cfg.HTTPAddr, "repositoryMode", cfg.RepositoryMode)
+		log.Info("api server started", "addr", cfg.HTTPAddr, "repositoryMode", cfg.RepositoryMode, "authMode", cfg.Auth.Mode)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server stopped", "error", err)
 			os.Exit(1)
