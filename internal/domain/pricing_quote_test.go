@@ -13,11 +13,11 @@ func TestQuotePricingAppliesContextCacheAndRoutingFactors(t *testing.T) {
 	policy := PricingPolicy{
 		ID: "policy-1", Version: "v2", DeploymentID: "deployment-1", Currency: "USD",
 		InputPerMillion: 2, OutputPerMillion: 10, CacheHitPerMillion: 0.5,
-		ContextBands: []PricingContextBand{{MinTokens: 128000, InputPerMillion: &inputBand, OutputPerMillion: &outputBand}},
-		BatchFactor: 0.5,
-		ServiceTierFactors: map[ServiceTier]float64{TierPriority: 1.2},
+		ContextBands:           []PricingContextBand{{MinTokens: 128000, InputPerMillion: &inputBand, OutputPerMillion: &outputBand}},
+		BatchFactor:            0.5,
+		ServiceTierFactors:     map[ServiceTier]float64{TierPriority: 1.2},
 		InferenceEffortFactors: map[InferenceEffort]float64{EffortHigh: 1.5},
-		EffectiveFrom: now.Add(-time.Hour), CreatedAt: now.Add(-time.Hour),
+		EffectiveFrom:          now.Add(-time.Hour), CreatedAt: now.Add(-time.Hour),
 	}
 	quote, err := QuotePricing(policy, PricingUsageEstimate{
 		InputTokens: 1_000_000, OutputTokens: 100_000, CacheHitInputTokens: 400_000,
@@ -34,7 +34,7 @@ func TestQuotePricingAppliesContextCacheAndRoutingFactors(t *testing.T) {
 	}
 }
 
-func TestQuotePricingRejectsExpiredPolicy(t *testing.T) {
+func TestQuotePricingRejectsPolicyOutsideWindow(t *testing.T) {
 	now := time.Now().UTC()
 	end := now.Add(-time.Minute)
 	policy := PricingPolicy{
@@ -42,6 +42,6 @@ func TestQuotePricingRejectsExpiredPolicy(t *testing.T) {
 		EffectiveFrom: now.Add(-time.Hour), EffectiveTo: &end,
 	}
 	if _, err := QuotePricing(policy, PricingUsageEstimate{}, now); err == nil {
-		t.Fatal("expected expired pricing policy to be rejected")
+		t.Fatal("expected policy outside effective window to be rejected")
 	}
 }
