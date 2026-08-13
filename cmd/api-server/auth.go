@@ -15,7 +15,7 @@ func buildPrincipalVerifier(ctx context.Context, cfg config.AuthConfig) (httpapi
 	case config.AuthModeTrustedIngress:
 		return httpapi.TrustedIngressVerifier{}, nil
 	case config.AuthModeOIDC:
-		return authn.NewOIDCVerifier(ctx, authn.OIDCConfig{
+		verifier, err := authn.NewOIDCVerifier(ctx, authn.OIDCConfig{
 			Issuer:             cfg.Issuer,
 			Audience:           cfg.Audience,
 			JWKSURL:            cfg.JWKSURL,
@@ -29,6 +29,10 @@ func buildPrincipalVerifier(ctx context.Context, cfg config.AuthConfig) (httpapi
 			ClockSkew:          time.Duration(cfg.ClockSkewSeconds) * time.Second,
 			JWKSCacheTTL:       time.Duration(cfg.JWKSCacheTTLSeconds) * time.Second,
 		}, nil)
+		if err != nil {
+			return nil, err
+		}
+		return verifier, nil
 	default:
 		return nil, fmt.Errorf("unsupported authentication mode %q", cfg.Mode)
 	}
