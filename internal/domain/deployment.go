@@ -29,7 +29,7 @@ type Deployment struct {
 	Quantization      string              `json:"quantization,omitempty"`
 	PricingPolicyRef  string              `json:"pricingPolicyRef,omitempty"`
 	Health            HealthStatus        `json:"health"`
-	HealthCheckedAt   *time.Time           `json:"healthCheckedAt,omitempty"`
+	HealthCheckedAt   *time.Time          `json:"healthCheckedAt,omitempty"`
 	P95LatencyMS      int64               `json:"p95LatencyMs,omitempty"`
 	ErrorRate         float64             `json:"errorRate,omitempty"`
 	QuotaRemaining    int64               `json:"quotaRemaining,omitempty"`
