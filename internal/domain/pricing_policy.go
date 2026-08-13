@@ -7,12 +7,12 @@ import (
 )
 
 type PricingContextBand struct {
-	MinTokens            int64    `json:"minTokens"`
-	MaxTokens            int64    `json:"maxTokens,omitempty"`
-	InputPerMillion      *float64 `json:"inputPerMillion,omitempty"`
-	OutputPerMillion     *float64 `json:"outputPerMillion,omitempty"`
-	CacheHitPerMillion   *float64 `json:"cacheHitPerMillion,omitempty"`
-	CacheMissPerMillion  *float64 `json:"cacheMissPerMillion,omitempty"`
+	MinTokens           int64    `json:"minTokens"`
+	MaxTokens           int64    `json:"maxTokens,omitempty"`
+	InputPerMillion     *float64 `json:"inputPerMillion,omitempty"`
+	OutputPerMillion    *float64 `json:"outputPerMillion,omitempty"`
+	CacheHitPerMillion  *float64 `json:"cacheHitPerMillion,omitempty"`
+	CacheMissPerMillion *float64 `json:"cacheMissPerMillion,omitempty"`
 }
 
 type CapacityPricing struct {

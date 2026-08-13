@@ -48,7 +48,9 @@ func (r *PostgresPricingPolicies) Create(ctx context.Context, item domain.Pricin
 }
 
 func (r *PostgresPricingPolicies) Get(ctx context.Context, id, version string) (domain.PricingPolicy, error) {
-	item, err := scanPricingPolicy(r.db.QueryRowContext(ctx, `SELECT `+pricingPolicyColumns+` FROM pricing_policies WHERE id=$1 AND version=$2`, id, version))
+	item, err := scanPricingPolicy(r.db.QueryRowContext(ctx,
+		`SELECT `+pricingPolicyColumns+` FROM pricing_policies WHERE id=$1 AND version=$2`, id, version,
+	))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.PricingPolicy{}, ErrNotFound
 	}
@@ -75,7 +77,8 @@ func (r *PostgresPricingPolicies) ListByDeployment(ctx context.Context, deployme
 func (r *PostgresPricingPolicies) Resolve(ctx context.Context, deploymentID string, at time.Time) (domain.PricingPolicy, error) {
 	item, err := scanPricingPolicy(r.db.QueryRowContext(ctx, `SELECT `+pricingPolicyColumns+` FROM pricing_policies
 		WHERE deployment_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
-		ORDER BY effective_from DESC, created_at DESC, version DESC LIMIT 1`, deploymentID, at))
+		ORDER BY effective_from DESC, created_at DESC, version DESC LIMIT 1`, deploymentID, at,
+	))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.PricingPolicy{}, ErrNotFound
 	}
