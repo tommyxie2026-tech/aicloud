@@ -6,3 +6,10 @@ func (r *PostgresRepositories) DeploymentRepository() *PostgresDeployments {
 	}
 	return &PostgresDeployments{db: r.DB}
 }
+
+func (r *PostgresRepositories) DeploymentLifecycleEvents() *PostgresDeploymentLifecycleEvents {
+	if r == nil || r.DB == nil {
+		return nil
+	}
+	return NewPostgresDeploymentLifecycleEvents(r.DB)
+}
