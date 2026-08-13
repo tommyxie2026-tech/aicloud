@@ -24,6 +24,7 @@ type ModelUsage struct {
 	Provider     string
 	ModelID      string
 	ModelVersion string
+	DeploymentID string
 	Pricing      domain.PricingProfile
 	Usage        provider.TokenUsage
 	Attempt      int
@@ -54,6 +55,7 @@ func (l *Ledger) RecordModelUsage(ctx context.Context, usage ModelUsage) ([]doma
 			Provider:     usage.Provider,
 			ModelID:      usage.ModelID,
 			ModelVersion: usage.ModelVersion,
+			DeploymentID: usage.DeploymentID,
 			Quantity:     1,
 			Unit:         string(usage.ServiceTier),
 			UnitPrice:    premium,
@@ -107,6 +109,7 @@ func newEvent(now time.Time, usage ModelUsage, component domain.CostComponent, q
 		Provider:     usage.Provider,
 		ModelID:      usage.ModelID,
 		ModelVersion: usage.ModelVersion,
+		DeploymentID: usage.DeploymentID,
 		Quantity:     quantity,
 		Unit:         unit,
 		UnitPrice:    unitPrice,
