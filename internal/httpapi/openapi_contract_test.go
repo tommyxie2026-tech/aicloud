@@ -54,7 +54,9 @@ func TestOpenAPICoreRequestsAreClosed(t *testing.T) {
 func readOpenAPI(t *testing.T) string {
 	t.Helper()
 	body, err := os.ReadFile("../../docs/implementation/contracts/openapi-v1.yaml")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return string(body)
 }
 
@@ -66,29 +68,45 @@ func parseOperations(t *testing.T, body string) []string {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line == "paths:" { inPaths = true; continue }
-		if inPaths && line == "components:" { break }
-		if !inPaths { continue }
+		if line == "paths:" {
+			inPaths = true
+			continue
+		}
+		if inPaths && line == "components:" {
+			break
+		}
+		if !inPaths {
+			continue
+		}
 		if strings.HasPrefix(line, "  /") && strings.HasSuffix(line, ":") {
 			path = strings.TrimSuffix(strings.TrimSpace(line), ":")
 			continue
 		}
-		if path == "" || !strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "      ") { continue }
+		if path == "" || !strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "      ") {
+			continue
+		}
 		method := strings.TrimSuffix(strings.TrimSpace(line), ":")
 		switch method {
-		case "get", "post", "put", "patch", "delete": operations = append(operations, strings.ToUpper(method)+" "+path)
+		case "get", "post", "put", "patch", "delete":
+			operations = append(operations, strings.ToUpper(method)+" "+path)
 		}
 	}
-	if err := scanner.Err(); err != nil { t.Fatal(err) }
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
 	return operations
 }
 
 func pathSection(t *testing.T, body, marker string) string {
 	t.Helper()
 	start := strings.Index(body, marker)
-	if start < 0 { t.Fatalf("path %s not found", marker) }
+	if start < 0 {
+		t.Fatalf("path %s not found", marker)
+	}
 	rest := body[start+len(marker):]
-	if next := strings.Index(rest, "\n  /"); next >= 0 { rest = rest[:next] }
+	if next := strings.Index(rest, "\n  /"); next >= 0 {
+		rest = rest[:next]
+	}
 	return rest
 }
 
@@ -96,8 +114,12 @@ func schemaSection(t *testing.T, body, name string) string {
 	t.Helper()
 	marker := "    " + name
 	start := strings.Index(body, marker)
-	if start < 0 { t.Fatalf("schema %s not found", name) }
+	if start < 0 {
+		t.Fatalf("schema %s not found", name)
+	}
 	rest := body[start+len(marker):]
-	if next := strings.Index(rest, "\n    "); next >= 0 { rest = rest[:next] }
+	if next := strings.Index(rest, "\n    "); next >= 0 {
+		rest = rest[:next]
+	}
 	return rest
 }
