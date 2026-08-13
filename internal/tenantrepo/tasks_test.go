@@ -99,3 +99,24 @@ func TestScopedTasksRejectsIdentityMutation(t *testing.T) {
 		t.Fatal("expected immutable identity update to fail")
 	}
 }
+
+func TestScopedTasksBlocksLegacyWritesWhenDurableCommandKernelExists(t *testing.T) {
+	base := durableTaskRepository{TaskRepository: repository.NewMemoryTasks()}
+	tasks := NewScopedTasks(base)
+	ctx := projectContext("tenant-a", "project-a", "user-a")
+	task := domain.Task{ID: "task-1", Status: domain.TaskCreated}
+	if _, err := tasks.Create(ctx, task); !errors.Is(err, repository.ErrDurableTaskCommandRequired) {
+		t.Fatalf("Create error=%v want ErrDurableTaskCommandRequired", err)
+	}
+	if _, err := tasks.Update(ctx, task); !errors.Is(err, repository.ErrDurableTaskCommandRequired) {
+		t.Fatalf("Update error=%v want ErrDurableTaskCommandRequired", err)
+	}
+}
+
+type durableTaskRepository struct {
+	domain.TaskRepository
+}
+
+func (durableTaskRepository) TaskCommands() repository.TaskCommandStore {
+	return repository.NewScopedPostgresTaskCommands(nil)
+}

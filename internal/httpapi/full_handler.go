@@ -5,10 +5,12 @@ import "net/http"
 // FullHandler adds method-aware evidence and execution routes while retaining
 // the existing resource handler as the compatibility fallback. Task resources
 // are resolved through the scoped Task repository before any subresource store
-// is accessed.
+// is accessed. Public Task creation and routing are intercepted here so they
+// carry the R6 command-idempotency contract.
 func (s *Server) FullHandler() http.Handler {
 	mux := http.NewServeMux()
 	s.registerEvidenceRoutes(mux)
+	mux.HandleFunc("/api/v1/tasks", s.taskCollectionCommandAware)
 	mux.Handle("/", s.Handler())
-	return s.taskScopeGuard(mux)
+	return s.taskScopeGuard(s.commandAwareTaskMutations(mux))
 }

@@ -2,6 +2,8 @@ package modelruntime
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -49,23 +51,25 @@ func (r *MemoryProviderRegistry) Put(_ context.Context, modelID string, item pro
 }
 
 type Attempt struct {
-	ModelID       string                     `json:"modelId"`
-	ModelVersion  string                     `json:"modelVersion"`
-	Status        string                     `json:"status"`
-	ErrorCode     provider.ProviderErrorCode `json:"errorCode,omitempty"`
-	ErrorMessage  string                     `json:"errorMessage,omitempty"`
-	Retryable     bool                       `json:"retryable"`
-	CircuitState  circuitbreaker.State       `json:"circuitState"`
-	LatencyMS     int64                      `json:"latencyMs"`
-	StartedAt     time.Time                  `json:"startedAt"`
-	CompletedAt   time.Time                  `json:"completedAt"`
+	OperationID  string                     `json:"operationId"`
+	AttemptID    string                     `json:"attemptId"`
+	ModelID      string                     `json:"modelId"`
+	ModelVersion string                     `json:"modelVersion"`
+	Status       string                     `json:"status"`
+	ErrorCode    provider.ProviderErrorCode `json:"errorCode,omitempty"`
+	ErrorMessage string                     `json:"errorMessage,omitempty"`
+	Retryable    bool                       `json:"retryable"`
+	CircuitState circuitbreaker.State       `json:"circuitState"`
+	LatencyMS    int64                      `json:"latencyMs"`
+	StartedAt    time.Time                  `json:"startedAt"`
+	CompletedAt  time.Time                  `json:"completedAt"`
 }
 
 type Result struct {
-	Candidate domain.RouteCandidate     `json:"candidate"`
+	Candidate domain.RouteCandidate      `json:"candidate"`
 	Response  *provider.ProviderResponse `json:"response,omitempty"`
-	Attempts  []Attempt                 `json:"attempts"`
-	Fallback  bool                      `json:"fallback"`
+	Attempts  []Attempt                  `json:"attempts"`
+	Fallback  bool                       `json:"fallback"`
 }
 
 type Executor struct {
@@ -110,7 +114,16 @@ func (e *Executor) Execute(ctx context.Context, taskID, traceID string, decision
 
 func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string, candidate domain.RouteCandidate, request provider.ProviderRequest, attemptNumber int) (Attempt, *provider.ProviderResponse, bool, error) {
 	started := e.now().UTC()
-	attempt := Attempt{ModelID: candidate.ModelID, ModelVersion: candidate.ModelVersion, Status: "STARTED", StartedAt: started}
+	operationID := request.RequestID
+	if operationID == "" {
+		operationID = taskID
+	}
+	attempt := Attempt{
+		OperationID: operationID,
+		AttemptID:   newPhysicalAttemptID(operationID, attemptNumber, started),
+		ModelID:     candidate.ModelID, ModelVersion: candidate.ModelVersion,
+		Status: "STARTED", StartedAt: started,
+	}
 	key := candidate.ModelID + "@" + candidate.ModelVersion
 	allowed, snapshot, err := e.breaker.Allow(ctx, key)
 	if err != nil {
@@ -175,6 +188,14 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 	return attempt, response, false, nil
 }
 
+func newPhysicalAttemptID(operationID string, attemptNumber int, started time.Time) string {
+	var entropy [12]byte
+	if _, err := rand.Read(entropy[:]); err == nil {
+		return operationID + ":attempt:" + hex.EncodeToString(entropy[:])
+	}
+	return fmt.Sprintf("%s:attempt:%d:%d", operationID, started.UnixNano(), attemptNumber)
+}
+
 func classify(err error) (provider.ProviderErrorCode, bool) {
 	var providerErr *provider.ProviderError
 	if errors.As(err, &providerErr) {
@@ -202,6 +223,7 @@ func (e *Executor) appendTrace(ctx context.Context, taskID, traceID string, cand
 		SpanID: tracepkg.NewID("span"), Name: "model.generate", Kind: "MODEL_CALL",
 		Status: status, Message: message,
 		Attributes: map[string]string{
+			"model.operation_id": attempt.OperationID, "model.attempt_id": attempt.AttemptID,
 			"model.id": candidate.ModelID, "model.version": candidate.ModelVersion,
 			"route.class": string(candidate.RouteClass), "service.tier": string(candidate.ServiceTier),
 			"inference.effort": string(candidate.InferenceEffort), "attempt.status": attempt.Status,

@@ -55,6 +55,9 @@ func (r *ScopedTasks) Get(ctx context.Context, id string) (domain.Task, error) {
 }
 
 func (r *ScopedTasks) Create(ctx context.Context, task domain.Task) (domain.Task, error) {
+	if r.requiresDurableCommands() {
+		return domain.Task{}, repository.ErrDurableTaskCommandRequired
+	}
 	principal, err := requireProjectPrincipal(ctx)
 	if err != nil {
 		return domain.Task{}, err
@@ -75,6 +78,9 @@ func (r *ScopedTasks) Create(ctx context.Context, task domain.Task) (domain.Task
 }
 
 func (r *ScopedTasks) Update(ctx context.Context, task domain.Task) (domain.Task, error) {
+	if r.requiresDurableCommands() {
+		return domain.Task{}, repository.ErrDurableTaskCommandRequired
+	}
 	principal, err := requireProjectPrincipal(ctx)
 	if err != nil {
 		return domain.Task{}, err
@@ -90,6 +96,14 @@ func (r *ScopedTasks) Update(ctx context.Context, task domain.Task) (domain.Task
 		return domain.Task{}, fmt.Errorf("task tenant, project and creator identity are immutable")
 	}
 	return r.base.Update(ctx, task)
+}
+
+func (r *ScopedTasks) requiresDurableCommands() bool {
+	if r == nil || r.base == nil {
+		return false
+	}
+	provider, ok := r.base.(repository.TaskCommandStoreProvider)
+	return ok && provider.TaskCommands() != nil
 }
 
 func requireProjectPrincipal(ctx context.Context) (identity.Principal, error) {

@@ -2,6 +2,7 @@ package modelruntime
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,15 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 	if !result.Fallback || result.Candidate.ModelID != "secondary" || len(result.Attempts) != 2 {
 		t.Fatalf("unexpected fallback result: %#v", result)
 	}
+	if result.Attempts[0].OperationID != "request-1" || result.Attempts[1].OperationID != "request-1" {
+		t.Fatalf("logical operation identity changed across attempts: %#v", result.Attempts)
+	}
+	if result.Attempts[0].AttemptID == "" || result.Attempts[1].AttemptID == "" || result.Attempts[0].AttemptID == result.Attempts[1].AttemptID {
+		t.Fatalf("physical attempt identities are not unique: %#v", result.Attempts)
+	}
+	if !strings.HasPrefix(result.Attempts[0].AttemptID, "request-1:attempt:") || !strings.HasPrefix(result.Attempts[1].AttemptID, "request-1:attempt:") {
+		t.Fatalf("attempt identity is not tied to the logical operation: %#v", result.Attempts)
+	}
 	if primary.calls != 1 || secondary.calls != 1 {
 		t.Fatalf("provider calls primary=%d secondary=%d", primary.calls, secondary.calls)
 	}
@@ -56,6 +66,44 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 	traces, _ := traceStore.ListByTask(context.Background(), "task-1")
 	if len(traces) != 2 || traces[0].Status != tracepkg.StatusError || traces[1].Status != tracepkg.StatusOK {
 		t.Fatalf("unexpected trace evidence: %#v", traces)
+	}
+	if traces[0].Attributes["model.operation_id"] != "request-1" || traces[1].Attributes["model.attempt_id"] != result.Attempts[1].AttemptID {
+		t.Fatalf("trace did not retain operation/attempt identity: %#v", traces)
+	}
+}
+
+func TestExecutorUsesNewPhysicalAttemptIDForSameLogicalOperationAcrossCalls(t *testing.T) {
+	adapter := &fakeProvider{response: &provider.ProviderResponse{
+		RequestID: "logical-op-1", ProviderName: "provider", ModelName: "model",
+		RawText: "ok", TokenUsage: provider.TokenUsage{InputTokens: 1, OutputTokens: 1},
+	}}
+	providers := NewMemoryProviderRegistry()
+	_ = providers.Put(context.Background(), "model", adapter)
+	executor := NewExecutor(
+		providers,
+		repository.NewMemoryModels(runtimeModel("model", "provider", 1)),
+		circuitbreaker.New(circuitbreaker.NewMemoryStore(), 2, time.Minute),
+		nil,
+		nil,
+	)
+	decision := domain.RouteDecision{Selected: domain.RouteCandidate{ModelID: "model", ModelVersion: "v1"}}
+	request := provider.ProviderRequest{RequestID: "logical-op-1", Instruction: "test", OutputSchema: provider.OutputSchemaRef{Name: "result"}}
+	first, err := executor.Execute(context.Background(), "task-1", "trace-1", decision, request)
+	if err != nil {
+		t.Fatalf("first Execute: %v", err)
+	}
+	second, err := executor.Execute(context.Background(), "task-1", "trace-1", decision, request)
+	if err != nil {
+		t.Fatalf("second Execute: %v", err)
+	}
+	if len(first.Attempts) != 1 || len(second.Attempts) != 1 {
+		t.Fatalf("unexpected attempts first=%#v second=%#v", first.Attempts, second.Attempts)
+	}
+	if first.Attempts[0].OperationID != second.Attempts[0].OperationID || first.Attempts[0].OperationID != "logical-op-1" {
+		t.Fatalf("logical operation identity changed across explicit retries")
+	}
+	if first.Attempts[0].AttemptID == second.Attempts[0].AttemptID {
+		t.Fatalf("physical attempt ID was reused across explicit retries: %q", first.Attempts[0].AttemptID)
 	}
 }
 

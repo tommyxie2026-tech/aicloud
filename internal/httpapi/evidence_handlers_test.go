@@ -85,7 +85,9 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 		"requireFreshSignals": true, "signalMaxAgeSeconds": 300,
 	})
 	routeResponse := httptest.NewRecorder()
-	handler.ServeHTTP(routeResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/route", bytes.NewReader(routeBody)))
+	routeRequest := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/route", bytes.NewReader(routeBody))
+	routeRequest.Header.Set(idempotencyKeyHeader, "evidence-task-route")
+	handler.ServeHTTP(routeResponse, routeRequest)
 	if routeResponse.Code != http.StatusCreated {
 		t.Fatalf("route status=%d body=%s", routeResponse.Code, routeResponse.Body.String())
 	}
@@ -95,7 +97,9 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 		"outputSchema": map[string]string{"name": "result", "version": "v1"},
 	})
 	modelResponse := httptest.NewRecorder()
-	handler.ServeHTTP(modelResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/model", bytes.NewReader(modelBody)))
+	modelRequest := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/model", bytes.NewReader(modelBody))
+	modelRequest.Header.Set(idempotencyKeyHeader, "evidence-task-model")
+	handler.ServeHTTP(modelResponse, modelRequest)
 	if modelResponse.Code != http.StatusOK {
 		t.Fatalf("model status=%d body=%s", modelResponse.Code, modelResponse.Body.String())
 	}
@@ -177,7 +181,9 @@ func createEvidenceTask(t *testing.T, handler http.Handler) string {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"input": "evaluate model", "agentId": "agent-1"})
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/tasks", bytes.NewReader(body)))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", bytes.NewReader(body))
+	request.Header.Set(idempotencyKeyHeader, "evidence-task-create")
+	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("task status=%d body=%s", response.Code, response.Body.String())
 	}
