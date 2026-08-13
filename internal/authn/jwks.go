@@ -60,15 +60,11 @@ func (s *remoteKeySet) verify(ctx context.Context, alg, kid string, signingInput
 	if err != nil {
 		return ErrTokenInvalid
 	}
-	if err := s.verifyOnce(ctx, alg, kid, signingInput, signature, false); err == nil {
-		return nil
-	}
-	// Refresh once to handle normal key rotation. A second failure is final.
-	return s.verifyOnce(ctx, alg, kid, signingInput, signature, true)
-}
-
-func (s *remoteKeySet) verifyOnce(ctx context.Context, alg, kid string, signingInput, signature []byte, forceRefresh bool) error {
-	key, err := s.keyFor(ctx, kid, forceRefresh)
+	// keyFor refreshes when the requested kid is absent or the cache expired.
+	// A signature failure for a known, fresh key does not force another remote
+	// fetch, preventing invalid-token traffic from turning into a JWKS fetch
+	// amplification path.
+	key, err := s.keyFor(ctx, kid, false)
 	if err != nil {
 		return err
 	}
