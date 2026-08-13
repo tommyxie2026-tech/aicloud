@@ -203,6 +203,7 @@ const (
 type RouteCandidate struct {
 	ModelID          string          `json:"modelId,omitempty"`
 	ModelVersion     string          `json:"modelVersion,omitempty"`
+	DeploymentID     string          `json:"deploymentId,omitempty"`
 	RouteClass       RouteClass      `json:"routeClass"`
 	InferenceEffort  InferenceEffort `json:"inferenceEffort,omitempty"`
 	ServiceTier      ServiceTier     `json:"serviceTier,omitempty"`
@@ -248,6 +249,7 @@ type CostEvent struct {
 	Provider     string            `json:"provider,omitempty"`
 	ModelID      string            `json:"modelId,omitempty"`
 	ModelVersion string            `json:"modelVersion,omitempty"`
+	DeploymentID string            `json:"deploymentId,omitempty"`
 	Quantity     float64           `json:"quantity"`
 	Unit         string            `json:"unit"`
 	UnitPrice    float64           `json:"unitPrice"`
