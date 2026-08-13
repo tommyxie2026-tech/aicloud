@@ -76,8 +76,12 @@ func main() {
 		log.Error("authentication initialization failed", "error", err)
 		os.Exit(1)
 	}
+	apiAuthorizer := buildAPIAuthorizer()
 	apiHandler := httpapi.WithRequestMetadata(
-		httpapi.WithPrincipalVerifier(principalVerifier, httpapi.New(control, log).FullHandler()),
+		httpapi.WithPrincipalVerifier(
+			principalVerifier,
+			httpapi.WithAuthorization(apiAuthorizer, httpapi.New(control, log).FullHandler()),
+		),
 	)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
