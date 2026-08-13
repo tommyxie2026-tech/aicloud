@@ -56,7 +56,11 @@ func DeploymentCandidate(model domain.Model, deployment domain.Deployment, req R
 		reject("service tier is unsupported")
 	}
 
-	candidate.EstimatedCost = estimateCost(model.Pricing, req.EstimatedInputTokens, req.EstimatedOutputTokens)
+	pricing := deployment.Pricing
+	if pricing.Currency == "" && pricing.InputPerMillion == 0 && pricing.OutputPerMillion == 0 && pricing.CachedPerMillion == 0 && pricing.ServiceTierFactor == 0 {
+		pricing = model.Pricing
+	}
+	candidate.EstimatedCost = estimateCost(pricing, req.EstimatedInputTokens, req.EstimatedOutputTokens)
 	if req.Budget > 0 && candidate.EstimatedCost > req.Budget {
 		reject("estimated cost exceeds budget")
 	}
