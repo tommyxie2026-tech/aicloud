@@ -2,29 +2,39 @@
 
 ## Status
 
-Implementation slice: R7B authentication verifier core.
+Implementation slice: R7B authentication verification and server wiring.
 
-This document extends the R7A `PrincipalVerifier` boundary with a production-oriented OpenID Connect / JWT verifier. It does **not** yet declare the API server wiring or RBAC/ABAC layer complete.
+This document extends the R7A `PrincipalVerifier` boundary with a production-oriented OpenID Connect / JWT verifier and explicit runtime verifier selection. RBAC/ABAC remains a separate R7C authorization boundary.
 
 ## Goal
 
 Convert an external bearer token into a verified `identity.Principal` without allowing business handlers to parse or trust unverified claims.
 
 ```text
-Authorization: Bearer <JWT>
-        |
-        v
-OIDCVerifier
-        |
-        +-- HTTPS issuer discovery (optional)
-        +-- HTTPS JWKS retrieval and cache
-        +-- signing algorithm allow-list
-        +-- RSA signature verification
-        +-- issuer / audience validation
-        +-- exp / nbf / iat validation
-        +-- verified claim mapping
-        v
-identity.Principal
+HTTP Request
+    |
+    v
+Request / Trace Metadata
+    |
+    v
+PrincipalVerifier
+    |
+    +-- trusted_ingress  (explicit compatibility mode)
+    |
+    `-- oidc
+          |
+          +-- HTTPS issuer discovery (optional)
+          +-- HTTPS JWKS retrieval and cache
+          +-- signing algorithm allow-list
+          +-- RSA signature verification
+          +-- issuer / audience validation
+          +-- exp / nbf / iat validation
+          +-- verified claim mapping
+          v
+    identity.Principal
+          |
+          v
+Tenant / Project scoped API
 ```
 
 ## Security invariants
@@ -42,6 +52,35 @@ identity.Principal
 11. Tenant/project/role/capability values are consumed only after signature and registered-claim validation succeeds.
 12. Tokens are read only from one `Authorization: Bearer ...` header. Query-string or cookie token fallback is intentionally unsupported.
 13. Bearer tokens are size bounded and must never be logged.
+14. Authentication mode is explicit. An unknown mode prevents API-server startup.
+15. In OIDC mode, incomplete or unreachable identity configuration prevents API-server startup instead of silently falling back to trusted headers.
+16. Request/trace metadata wraps authentication so authentication failures can use the same correlation contract as authenticated requests.
+
+## Runtime configuration
+
+`AICLOUD_AUTH_MODE` selects the verifier:
+
+- `trusted_ingress`: explicit v0.1 compatibility mode;
+- `oidc`: cryptographic bearer-token verification.
+
+OIDC configuration:
+
+| Environment variable | Default |
+|---|---|
+| `AICLOUD_OIDC_ISSUER` | none |
+| `AICLOUD_OIDC_AUDIENCE` | none |
+| `AICLOUD_OIDC_JWKS_URL` | discovery when omitted |
+| `AICLOUD_OIDC_ALLOWED_ALGORITHMS` | `RS256` |
+| `AICLOUD_OIDC_TENANT_CLAIM` | `tenant_id` |
+| `AICLOUD_OIDC_PROJECT_CLAIM` | `project_id` |
+| `AICLOUD_OIDC_ROLES_CLAIM` | `roles` |
+| `AICLOUD_OIDC_CAPABILITIES_CLAIM` | `capabilities` |
+| `AICLOUD_OIDC_PRINCIPAL_TYPE_CLAIM` | `principal_type` |
+| `AICLOUD_OIDC_SESSION_CLAIM` | `sid` |
+| `AICLOUD_OIDC_CLOCK_SKEW_SECONDS` | `60` |
+| `AICLOUD_OIDC_JWKS_CACHE_TTL_SECONDS` | `300` |
+
+The compatibility default is currently `trusted_ingress` so existing v0.1 deployments do not change authentication mode implicitly. Production environments should set the mode explicitly and use `oidc` unless a separately authenticated ingress is deliberately providing identity.
 
 ## Default claim mapping
 
@@ -65,9 +104,30 @@ The verifier fetches JWKS at construction time so startup/configuration validati
 
 This provides safe normal key rotation without accepting arbitrary keys from the token itself.
 
+## Server wiring
+
+The running API server constructs one verifier during startup and injects it into the R7A boundary:
+
+```text
+config.Load()
+    |
+    v
+buildPrincipalVerifier()
+    |
+    v
+WithRequestMetadata(
+    WithPrincipalVerifier(
+        verifier,
+        FullHandler,
+    ),
+)
+```
+
+The startup path therefore fails closed on unsupported authentication modes or invalid OIDC initialization.
+
 ## Failure model
 
-Authentication failures are returned to the R7A API boundary as verifier errors and must become the stable `UNAUTHENTICATED` error envelope. Provider metadata/JWKS configuration failures are startup/configuration failures, not per-request authorization decisions.
+Authentication failures are returned to the R7A API boundary as verifier errors and become the stable `UNAUTHENTICATED` error envelope. OIDC metadata/JWKS configuration failures are startup/configuration failures, not per-request authorization decisions.
 
 ## Tests
 
@@ -80,14 +140,15 @@ The R7B core tests use an in-process TLS OIDC/JWKS server and real 2048-bit RSA 
 - JWKS key rotation refresh;
 - missing and duplicate Authorization-header rejection.
 
-## Remaining R7B work
+Configuration and server-selection tests additionally cover:
 
-Before R7B can be declared complete:
+- explicit trusted-ingress compatibility mode;
+- OIDC environment mapping and defaults;
+- unsupported authentication mode rejection;
+- incomplete OIDC configuration fail-closed behavior.
 
-1. wire verifier selection into `cmd/api-server` configuration;
-2. retain trusted-ingress mode only as an explicit compatibility mode;
-3. ensure request/trace metadata wraps authentication so 401 responses are correlated;
-4. add configuration and server-wiring tests;
-5. run full CI and boundary review.
+## Completion gate
+
+R7B code and wiring are complete when full repository CI passes and the authentication-boundary review confirms the invariants above. Until that verification completes, the R7B PR remains Draft.
 
 RBAC/ABAC remains R7C and OpenAPI/domain convergence remains R7D.
