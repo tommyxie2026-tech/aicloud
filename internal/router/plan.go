@@ -15,6 +15,12 @@ func (r *Router) Plan(ctx context.Context, req Request) (domain.RouteDecision, e
 		return domain.RouteDecision{}, fmt.Errorf("router is required")
 	}
 	if deployments := r.deploymentRepository(); deployments != nil {
+		if versions := r.modelVersionRepository(); versions != nil {
+			planner := *r
+			planner.models = modelVersionAdapter{repo: versions}
+			planner.decisions = nil
+			return planner.PlanWithDeployments(ctx, req, deployments)
+		}
 		return r.PlanWithDeployments(ctx, req, deployments)
 	}
 	planner := *r
