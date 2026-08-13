@@ -1,12 +1,23 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/tommyxie2026-tech/aicloud/internal/authorization"
 	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 )
+
+type authorizationDecisionKey struct{}
+
+func AuthorizationDecisionFromContext(ctx context.Context) (authorization.Decision, bool) {
+	if ctx == nil {
+		return authorization.Decision{}, false
+	}
+	decision, ok := ctx.Value(authorizationDecisionKey{}).(authorization.Decision)
+	return decision, ok
+}
 
 func WithAuthorization(authorizer authorization.Authorizer, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +53,7 @@ func WithAuthorization(authorizer authorization.Authorizer, next http.Handler) h
 			writeAPIError(w, http.StatusForbidden, "FORBIDDEN", "request is not authorized", false, nil)
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), authorizationDecisionKey{}, decision)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
