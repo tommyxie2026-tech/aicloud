@@ -88,11 +88,16 @@ func (s *Service) DecideRouteIdempotent(ctx context.Context, request router.Requ
 	task.EstimatedCost = decision.Selected.EstimatedCost
 
 	eventPayload, err := json.Marshal(map[string]any{
-		"from":                 transition.From,
-		"to":                   transition.To,
-		"routeDecisionId":      decision.ID,
-		"selectedModelId":      decision.Selected.ModelID,
-		"selectedModelVersion": decision.Selected.ModelVersion,
+		"from":                  transition.From,
+		"to":                    transition.To,
+		"routeDecisionId":       decision.ID,
+		"selectedModelId":       decision.Selected.ModelID,
+		"selectedModelVersion":  decision.Selected.ModelVersion,
+		"selectedDeploymentId":  decision.Selected.DeploymentID,
+		"estimatedInputTokens":  request.EstimatedInputTokens,
+		"estimatedOutputTokens": request.EstimatedOutputTokens,
+		"serviceTier":           request.ServiceTier,
+		"inferenceEffort":       request.InferenceEffort,
 	})
 	if err != nil {
 		return RouteCommandResult{}, fmt.Errorf("encode route TaskEvent payload: %w", err)
@@ -137,6 +142,7 @@ func (s *Service) DecideRouteIdempotent(ctx context.Context, request router.Requ
 				"route.class":        string(result.Decision.Selected.RouteClass),
 				"model.id":           result.Decision.Selected.ModelID,
 				"model.version":      result.Decision.Selected.ModelVersion,
+				"deployment.id":      result.Decision.Selected.DeploymentID,
 				"evidence.version":   result.Decision.EvidenceVersion,
 				"policy.version":     result.Decision.PolicyVersion,
 				"task.version":       fmt.Sprintf("%d", result.Task.Version),
