@@ -62,6 +62,7 @@ func (l *Ledger) RecordModelUsage(ctx context.Context, usage ModelUsage) ([]doma
 			Amount:       premium,
 			Currency:     currency,
 			Attempt:      usage.Attempt,
+			Metadata:     deploymentMetadata(usage.DeploymentID),
 			CreatedAt:    now.Add(2 * time.Nanosecond),
 		})
 	}
@@ -116,6 +117,14 @@ func newEvent(now time.Time, usage ModelUsage, component domain.CostComponent, q
 		Amount:       quantity * unitPrice,
 		Currency:     currency,
 		Attempt:      usage.Attempt,
+		Metadata:     deploymentMetadata(usage.DeploymentID),
 		CreatedAt:    now,
 	}
+}
+
+func deploymentMetadata(id string) map[string]string {
+	if id == "" {
+		return nil
+	}
+	return map[string]string{"deployment_id": id}
 }
