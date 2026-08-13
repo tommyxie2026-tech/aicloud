@@ -30,14 +30,22 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 	}
 	candidates := make([]domain.RouteCandidate, 0)
 	for _, model := range models {
-		items, err := deployments.ListByModel(ctx, model.ID, model.Version)
+		items, err := deployments.ListByModelVersion(ctx, model.ID)
 		if err != nil {
 			return domain.RouteDecision{}, err
+		}
+		if len(items) == 0 {
+			items, err = deployments.ListByModel(ctx, model.ID, model.Version)
+			if err != nil {
+				return domain.RouteDecision{}, err
+			}
 		}
 		for _, item := range items {
 			candidate := DeploymentCandidate(model, item, req, now)
 			if r.admission != nil {
-				decision, err := r.admission.Check(ctx, model)
+				admissionModel := model
+				admissionModel.DeploymentMode = item.Mode
+				decision, err := r.admission.Check(ctx, admissionModel)
 				if err != nil {
 					return domain.RouteDecision{}, err
 				}
