@@ -12,5 +12,5 @@ func (s *Server) FullHandler() http.Handler {
 	s.registerEvidenceRoutes(mux)
 	mux.HandleFunc("/api/v1/tasks", s.taskCollectionCommandAware)
 	mux.Handle("/", s.Handler())
-	return s.taskScopeGuard(s.commandAwareTaskMutations(mux))
+	return WithRequestMetadata(s.taskScopeGuard(s.commandAwareTaskMutations(mux)))
 }
