@@ -18,8 +18,9 @@ const (
 
 type Deployment struct {
 	ID                string              `json:"id"`
-	ModelID           string              `json:"modelId"`
-	ModelVersion      string              `json:"modelVersion"`
+	ModelVersionID    string              `json:"modelVersionId"`
+	ModelID           string              `json:"modelId,omitempty"`
+	ModelVersion      string              `json:"modelVersion,omitempty"`
 	Provider          string              `json:"provider"`
 	Endpoint          string              `json:"endpoint,omitempty"`
 	Mode              DeploymentMode      `json:"mode"`
@@ -28,6 +29,7 @@ type Deployment struct {
 	Runtime           string              `json:"runtime,omitempty"`
 	Quantization      string              `json:"quantization,omitempty"`
 	PricingPolicyRef  string              `json:"pricingPolicyRef,omitempty"`
+	Pricing           PricingProfile      `json:"pricing,omitempty"`
 	Health            HealthStatus        `json:"health"`
 	HealthCheckedAt   *time.Time          `json:"healthCheckedAt,omitempty"`
 	P95LatencyMS      int64               `json:"p95LatencyMs,omitempty"`
@@ -67,6 +69,7 @@ func (d Deployment) IsRoutingEligible(now time.Time, maxSignalAge time.Duration)
 type DeploymentRepository interface {
 	List(context.Context) ([]Deployment, error)
 	ListByModel(context.Context, string, string) ([]Deployment, error)
+	ListByModelVersion(context.Context, string) ([]Deployment, error)
 	Get(context.Context, string) (Deployment, error)
 	Create(context.Context, Deployment) (Deployment, error)
 	Update(context.Context, Deployment) (Deployment, error)
