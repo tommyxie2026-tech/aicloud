@@ -21,6 +21,7 @@ const (
 	defaultJWKSCache   = 5 * time.Minute
 	defaultClockSkew   = 60 * time.Second
 	maxTokenBytes      = 16 * 1024
+	maxRedirects       = 10
 )
 
 var (
@@ -52,11 +53,9 @@ type OIDCConfig struct {
 // claims into the platform Principal. External tokens can never assert a
 // System principal.
 type OIDCVerifier struct {
-	cfg     OIDCConfig
-	client  *http.Client
-	jwksURL string
-	keys    *remoteKeySet
-	now     func() time.Time
+	cfg  OIDCConfig
+	keys *remoteKeySet
+	now  func() time.Time
 }
 
 type discoveryDocument struct {
@@ -65,9 +64,10 @@ type discoveryDocument struct {
 }
 
 type jwtHeader struct {
-	Alg string `json:"alg"`
-	Kid string `json:"kid"`
-	Typ string `json:"typ"`
+	Alg  string   `json:"alg"`
+	Kid  string   `json:"kid"`
+	Typ  string   `json:"typ"`
+	Crit []string `json:"crit"`
 }
 
 func NewOIDCVerifier(ctx context.Context, cfg OIDCConfig, client *http.Client) (*OIDCVerifier, error) {
@@ -107,7 +107,7 @@ func NewOIDCVerifier(ctx context.Context, cfg OIDCConfig, client *http.Client) (
 	if err := keys.refresh(ctx); err != nil {
 		return nil, err
 	}
-	return &OIDCVerifier{cfg: cfg, client: httpClient, jwksURL: jwksURL, keys: keys, now: time.Now}, nil
+	return &OIDCVerifier{cfg: cfg, keys: keys, now: time.Now}, nil
 }
 
 func normalizeConfig(cfg OIDCConfig) OIDCConfig {
@@ -115,24 +115,12 @@ func normalizeConfig(cfg OIDCConfig) OIDCConfig {
 	cfg.Audience = strings.TrimSpace(cfg.Audience)
 	cfg.JWKSURL = strings.TrimSpace(cfg.JWKSURL)
 	cfg.AllowedAlgorithms = normalizeStrings(cfg.AllowedAlgorithms)
-	if cfg.TenantClaim == "" {
-		cfg.TenantClaim = "tenant_id"
-	}
-	if cfg.ProjectClaim == "" {
-		cfg.ProjectClaim = "project_id"
-	}
-	if cfg.RolesClaim == "" {
-		cfg.RolesClaim = "roles"
-	}
-	if cfg.CapabilitiesClaim == "" {
-		cfg.CapabilitiesClaim = "capabilities"
-	}
-	if cfg.PrincipalTypeClaim == "" {
-		cfg.PrincipalTypeClaim = "principal_type"
-	}
-	if cfg.SessionClaim == "" {
-		cfg.SessionClaim = "sid"
-	}
+	cfg.TenantClaim = defaultClaimName(cfg.TenantClaim, "tenant_id")
+	cfg.ProjectClaim = defaultClaimName(cfg.ProjectClaim, "project_id")
+	cfg.RolesClaim = defaultClaimName(cfg.RolesClaim, "roles")
+	cfg.CapabilitiesClaim = defaultClaimName(cfg.CapabilitiesClaim, "capabilities")
+	cfg.PrincipalTypeClaim = defaultClaimName(cfg.PrincipalTypeClaim, "principal_type")
+	cfg.SessionClaim = defaultClaimName(cfg.SessionClaim, "sid")
 	if cfg.ClockSkew <= 0 {
 		cfg.ClockSkew = defaultClockSkew
 	}
@@ -142,13 +130,34 @@ func normalizeConfig(cfg OIDCConfig) OIDCConfig {
 	return cfg
 }
 
-func cloneHTTPClient(client *http.Client) *http.Client {
-	if client == nil {
-		return &http.Client{Timeout: defaultHTTPTimeout}
+func defaultClaimName(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
 	}
-	copy := *client
+	return value
+}
+
+func cloneHTTPClient(client *http.Client) *http.Client {
+	var copy http.Client
+	if client != nil {
+		copy = *client
+	}
 	if copy.Timeout <= 0 {
 		copy.Timeout = defaultHTTPTimeout
+	}
+	previousRedirectPolicy := copy.CheckRedirect
+	copy.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req == nil || req.URL == nil || req.URL.Scheme != "https" {
+			return fmt.Errorf("OIDC metadata redirect must remain HTTPS")
+		}
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("OIDC metadata redirect limit exceeded")
+		}
+		if previousRedirectPolicy != nil {
+			return previousRedirectPolicy(req, via)
+		}
+		return nil
 	}
 	return &copy
 }
@@ -211,7 +220,10 @@ func (v *OIDCVerifier) verifyToken(ctx context.Context, raw string) (identity.Pr
 		return identity.Principal{}, ErrTokenInvalid
 	}
 	var header jwtHeader
-	if err := json.Unmarshal(headerBytes, &header); err != nil || header.Kid == "" || !contains(v.cfg.AllowedAlgorithms, header.Alg) {
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return identity.Principal{}, ErrTokenInvalid
+	}
+	if header.Kid == "" || len(header.Crit) != 0 || !contains(v.cfg.AllowedAlgorithms, header.Alg) {
 		return identity.Principal{}, ErrTokenInvalid
 	}
 	if err := v.keys.verify(ctx, header.Alg, header.Kid, []byte(segments[0]+"."+segments[1]), segments[2]); err != nil {
@@ -247,7 +259,7 @@ func (v *OIDCVerifier) validateClaims(claims map[string]any) error {
 	if !ok || issuer != v.cfg.Issuer {
 		return ErrTokenInvalid
 	}
-	audiences, ok := claimStringList(claims["aud"])
+	audiences, ok := claimAudienceList(claims["aud"])
 	if !ok || !contains(audiences, v.cfg.Audience) {
 		return ErrTokenInvalid
 	}
@@ -341,6 +353,35 @@ func claimString(claims map[string]any, name string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimSpace(stringValue), true
+}
+
+// claimAudienceList follows JWT audience semantics: a scalar aud value is one
+// exact audience, not a whitespace-delimited list.
+func claimAudienceList(value any) ([]string, bool) {
+	switch typed := value.(type) {
+	case string:
+		typed = strings.TrimSpace(typed)
+		if typed == "" {
+			return nil, false
+		}
+		return []string{typed}, true
+	case []any:
+		items := make([]string, 0, len(typed))
+		for _, entry := range typed {
+			stringValue, ok := entry.(string)
+			if !ok {
+				return nil, false
+			}
+			stringValue = strings.TrimSpace(stringValue)
+			if stringValue == "" {
+				return nil, false
+			}
+			items = append(items, stringValue)
+		}
+		return normalizeStrings(items), len(items) > 0
+	default:
+		return nil, false
+	}
 }
 
 func claimStringList(value any) ([]string, bool) {
