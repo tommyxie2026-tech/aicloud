@@ -22,6 +22,7 @@ func TestLedgerRecordsAndAggregatesModelCost(t *testing.T) {
 		Provider:     "provider-1",
 		ModelID:      "model-1",
 		ModelVersion: "v1",
+		DeploymentID: "deployment-1",
 		Pricing: domain.PricingProfile{
 			Currency:          "USD",
 			InputPerMillion:   2,
@@ -38,6 +39,11 @@ func TestLedgerRecordsAndAggregatesModelCost(t *testing.T) {
 	if len(recorded) != 3 {
 		t.Fatalf("event count = %d", len(recorded))
 	}
+	for _, event := range recorded {
+		if event.DeploymentID != "deployment-1" || event.Metadata["deployment_id"] != "deployment-1" {
+			t.Fatalf("deployment identity not retained: %#v", event)
+		}
+	}
 	total, currency, err := ledger.AggregateTask(context.Background(), "task-1")
 	if err != nil {
 		t.Fatalf("AggregateTask returned error: %v", err)
@@ -45,7 +51,6 @@ func TestLedgerRecordsAndAggregatesModelCost(t *testing.T) {
 	if currency != "USD" {
 		t.Fatalf("currency = %s", currency)
 	}
-	// Base cost: 1 USD input + 1 USD output; priority premium: 1 USD.
 	if math.Abs(total-3) > 0.000001 {
 		t.Fatalf("total = %f", total)
 	}
@@ -60,6 +65,7 @@ func TestLedgerKeepsRetryAttemptVisible(t *testing.T) {
 		Provider:     "provider-1",
 		ModelID:      "model-1",
 		ModelVersion: "v1",
+		DeploymentID: "deployment-retry",
 		Pricing:      domain.PricingProfile{Currency: "USD", InputPerMillion: 1, OutputPerMillion: 1},
 		Usage:        provider.TokenUsage{InputTokens: 100, OutputTokens: 10},
 		Attempt:      2,
@@ -73,5 +79,8 @@ func TestLedgerKeepsRetryAttemptVisible(t *testing.T) {
 	}
 	if len(stored) != 2 || stored[0].Attempt != 2 || stored[1].Attempt != 2 {
 		t.Fatalf("retry attempt not retained: %#v", stored)
+	}
+	if stored[0].DeploymentID != "deployment-retry" || stored[1].DeploymentID != "deployment-retry" {
+		t.Fatalf("deployment identity not retained across retry: %#v", stored)
 	}
 }
