@@ -44,8 +44,8 @@ func TestOpenAPITaskStatesAndCommandHeaders(t *testing.T) {
 func TestOpenAPICoreRequestsAreClosed(t *testing.T) {
 	body := readOpenAPI(t)
 	for _, name := range []string{"CreateTaskRequest:", "RouteRequest:", "ModelExecutionRequest:", "EvaluationRequest:", "ToolExecutionRequest:"} {
-		section := schemaSection(t, body, name)
-		if !strings.Contains(section, "additionalProperties: false") {
+		marker := "    " + name + "\n      type: object\n      additionalProperties: false"
+		if !strings.Contains(body, marker) {
 			t.Fatalf("%s accepts undocumented top-level fields", name)
 		}
 	}
@@ -105,20 +105,6 @@ func pathSection(t *testing.T, body, marker string) string {
 	}
 	rest := body[start+len(marker):]
 	if next := strings.Index(rest, "\n  /"); next >= 0 {
-		rest = rest[:next]
-	}
-	return rest
-}
-
-func schemaSection(t *testing.T, body, name string) string {
-	t.Helper()
-	marker := "    " + name
-	start := strings.Index(body, marker)
-	if start < 0 {
-		t.Fatalf("schema %s not found", name)
-	}
-	rest := body[start+len(marker):]
-	if next := strings.Index(rest, "\n    "); next >= 0 {
 		rest = rest[:next]
 	}
 	return rest
