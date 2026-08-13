@@ -7,283 +7,328 @@ servers:
 security:
   - bearerAuth: []
 paths:
-  /tasks:
-    post:
-      operationId: createTask
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateTaskRequest'
-      responses:
-        '202':
-          description: Task accepted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Task'
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Error' }
-        '403': { $ref: '#/components/responses/Error' }
-        '409': { $ref: '#/components/responses/Error' }
-  /tasks/{task_id}:
-    get:
-      operationId: getTask
-      parameters:
-        - $ref: '#/components/parameters/TaskID'
-      responses:
-        '200':
-          description: Task
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Task'
-        '404': { $ref: '#/components/responses/Error' }
-  /tasks/{task_id}:cancel:
-    post:
-      operationId: cancelTask
-      parameters:
-        - $ref: '#/components/parameters/TaskID'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '202': { description: Cancellation accepted }
-        '409': { $ref: '#/components/responses/Error' }
-  /tasks/{task_id}:approve:
-    post:
-      operationId: approveTask
-      parameters:
-        - $ref: '#/components/parameters/TaskID'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApprovalRequest'
-      responses:
-        '202': { description: Approval decision accepted }
-        '409': { $ref: '#/components/responses/Error' }
-  /tasks/{task_id}/events:
-    get:
-      operationId: listTaskEvents
-      parameters:
-        - $ref: '#/components/parameters/TaskID'
-      responses:
-        '200':
-          description: Task events
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/TaskEvent' }
-  /tasks/{task_id}/cost:
-    get:
-      operationId: getTaskCost
-      parameters:
-        - $ref: '#/components/parameters/TaskID'
-      responses:
-        '200':
-          description: Cost summary
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/CostSummary' }
   /models:
     get:
       operationId: listModels
+      parameters: [{$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
       responses:
-        '200':
-          description: Models
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Model' }
+        '200': {description: Models, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
     post:
       operationId: createModel
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CreateModelRequest' }
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelWriteRequest'}}}}
       responses:
-        '201':
-          description: Model created
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Model' }
-  /models/{model_id}/versions:
+        '201': {description: Model created, content: {application/json: {schema: {$ref: '#/components/schemas/Model'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /models/{model_id}:
+    parameters: [{$ref: '#/components/parameters/ModelID'}]
+    get:
+      operationId: getModel
+      responses:
+        '200': {description: Model, content: {application/json: {schema: {$ref: '#/components/schemas/Model'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: updateModel
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelWriteRequest'}}}}
+      responses:
+        '200': {description: Model updated, content: {application/json: {schema: {$ref: '#/components/schemas/Model'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /models/{model_id}/admission:
+    parameters: [{$ref: '#/components/parameters/ModelID'}]
+    get:
+      operationId: getModelAdmission
+      responses:
+        '200': {description: Admission view, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        default: {$ref: '#/components/responses/Error'}
     post:
-      operationId: createModelVersion
-      parameters:
-        - name: model_id
-          in: path
-          required: true
-          schema: { type: string }
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CreateModelVersionRequest' }
+      operationId: appendModelAdmissionEvidence
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AdmissionEvidence'}}}}
       responses:
-        '201':
-          description: Version created
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ModelVersion' }
-  /model-versions/{version_id}/admission:
+        '201': {description: Admission evidence, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tools:
+    get:
+      operationId: listTools
+      parameters: [{$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
+      responses:
+        '200': {description: Tools, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks:
+    get:
+      operationId: listTasks
+      parameters: [{$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
+      responses:
+        '200': {description: Tasks, content: {application/json: {schema: {$ref: '#/components/schemas/TaskListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
     post:
-      operationId: setModelAdmission
-      parameters:
-        - name: version_id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/AdmissionRequest' }
+      operationId: createTask
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateTaskRequest'}}}}
       responses:
-        '200': { description: Admission updated }
+        '202': {description: Task accepted, content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}:
+    parameters: [{$ref: '#/components/parameters/TaskID'}]
+    get:
+      operationId: getTask
+      responses:
+        '200':
+          description: Task
+          headers:
+            ETag: {schema: {type: string}}
+            X-Resource-Version: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/route:
+    parameters: [{$ref: '#/components/parameters/TaskID'}]
+    post:
+      operationId: routeTask
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RouteRequest'}}}}
+      responses:
+        '201': {description: Route decision, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/routes:
+    parameters: [{$ref: '#/components/parameters/TaskID'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
+    get:
+      operationId: listTaskRoutes
+      responses:
+        '200': {description: Routes, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/costs:
+    parameters: [{$ref: '#/components/parameters/TaskID'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
+    get:
+      operationId: listTaskCosts
+      responses:
+        '200': {description: Costs, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/audit:
+    parameters: [{$ref: '#/components/parameters/TaskID'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
+    get:
+      operationId: listTaskAudit
+      responses:
+        '200': {description: Audit evidence, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/model:
+    parameters: [{$ref: '#/components/parameters/TaskID'}]
+    post:
+      operationId: executeTaskModel
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelExecutionRequest'}}}}
+      responses:
+        '200': {description: Model result, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/trace:
+    parameters: [{$ref: '#/components/parameters/TaskID'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
+    get:
+      operationId: listTaskTrace
+      responses:
+        '200': {description: Trace evidence, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/evaluations:
+    parameters: [{$ref: '#/components/parameters/TaskID'}]
+    get:
+      operationId: listTaskEvaluations
+      parameters: [{$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/PageToken'}]
+      responses:
+        '200': {description: Evaluations, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createTaskEvaluation
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EvaluationRequest'}}}}
+      responses:
+        '201': {description: Evaluation created, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /tasks/{task_id}/tools/{tool_id}:
+    parameters: [{$ref: '#/components/parameters/TaskID'}, {$ref: '#/components/parameters/ToolID'}]
+    post:
+      operationId: executeTaskTool
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ToolExecutionRequest'}}}}
+      responses:
+        '201': {description: Tool invocation, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
       required: true
-      schema: { type: string, minLength: 8, maxLength: 128 }
+      schema: {type: string, minLength: 1, maxLength: 256}
+    PageSize:
+      name: pageSize
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    PageToken:
+      name: pageToken
+      in: query
+      schema: {type: string}
     TaskID:
       name: task_id
       in: path
       required: true
-      schema: { type: string }
+      schema: {type: string, minLength: 1}
+    ModelID:
+      name: model_id
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    ToolID:
+      name: tool_id
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
   responses:
     Error:
-      description: Error response
+      description: Stable API error envelope
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
   schemas:
     CreateTaskRequest:
       type: object
-      required: [project_id, agent_id, goal]
+      additionalProperties: false
+      required: [input]
       properties:
-        project_id: { type: string }
-        agent_id: { type: string }
-        goal: { type: string, minLength: 1, maxLength: 20000 }
-        inputs: { type: object, additionalProperties: true }
-        constraints:
-          type: object
-          properties:
-            max_cost_usd: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$' }
-            deadline_seconds: { type: integer, minimum: 1, maximum: 86400 }
-            data_classification: { type: string, enum: [public, internal, confidential, restricted] }
+        input: {type: string, minLength: 1, maxLength: 20000}
+        agentId: {type: string}
     Task:
       type: object
-      required: [task_id, trace_id, project_id, status, created_at]
+      required: [id, tenantId, projectId, createdBy, agentId, input, status, version, traceId, createdAt, updatedAt]
       properties:
-        task_id: { type: string }
-        trace_id: { type: string }
-        project_id: { type: string }
-        agent_id: { type: string }
+        id: {type: string}
+        tenantId: {type: string}
+        projectId: {type: string}
+        createdBy: {type: string}
+        agentId: {type: string}
+        input: {type: string}
         status:
           type: string
-          enum: [CREATED, PLANNING, EXECUTING, WAITING_APPROVAL, VALIDATING, COMPLETED, FAILED, CANCELLED]
-        result: { type: object, additionalProperties: true }
-        failure_code: { type: [string, 'null'] }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-    TaskEvent:
+          enum: [CREATED, PLANNING, ROUTING, EXECUTING, WAITING_APPROVAL, VALIDATING, COMPLETED, FAILED, CANCELLED, EXPIRED]
+        version: {type: integer, minimum: 1}
+        result: {type: string}
+        cost: {type: number}
+        estimatedCost: {type: number}
+        actualCost: {type: number}
+        currency: {type: string}
+        routeDecisionId: {type: string}
+        traceId: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        completedAt: {type: [string, 'null'], format: date-time}
+    TaskListResponse:
       type: object
-      required: [event_id, task_id, sequence, event_type, occurred_at]
+      required: [items]
       properties:
-        event_id: { type: string }
-        task_id: { type: string }
-        sequence: { type: integer, minimum: 1 }
-        event_type: { type: string }
-        payload: { type: object, additionalProperties: true }
-        occurred_at: { type: string, format: date-time }
-    ApprovalRequest:
+        items: {type: array, items: {$ref: '#/components/schemas/Task'}}
+        nextPageToken: {type: string}
+    ListResponse:
       type: object
-      required: [approval_id, decision]
+      required: [items]
       properties:
-        approval_id: { type: string }
-        decision: { type: string, enum: [APPROVE, REJECT] }
-        reason: { type: string, maxLength: 4000 }
-    CostSummary:
-      type: object
-      required: [task_id, currency, total]
-      properties:
-        task_id: { type: string }
-        currency: { type: string, example: USD }
-        total: { type: string }
-        breakdown: { type: object, additionalProperties: true }
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        nextPageToken: {type: string}
     Model:
       type: object
-      required: [model_id, name, visibility]
+      required: [id, name, provider]
+      additionalProperties: true
       properties:
-        model_id: { type: string }
-        name: { type: string }
-        visibility: { type: string, enum: [global, private, restricted] }
-        description: { type: string }
-    CreateModelRequest:
+        id: {type: string}
+        name: {type: string}
+        version: {type: string}
+        provider: {type: string}
+    ModelListResponse:
       type: object
-      required: [name, visibility]
+      required: [items]
       properties:
-        name: { type: string }
-        visibility: { type: string, enum: [global, private, restricted] }
-        description: { type: string }
-    CreateModelVersionRequest:
+        items: {type: array, items: {$ref: '#/components/schemas/Model'}}
+        nextPageToken: {type: string}
+    ModelWriteRequest:
       type: object
-      required: [provider_id, provider_model_ref, deployment_mode, capabilities]
+      additionalProperties: true
+      required: [name, provider]
       properties:
-        provider_id: { type: string }
-        provider_model_ref: { type: string }
-        version_ref: { type: string }
-        deployment_mode: { type: string, enum: [commercial_api, enterprise_api, private_endpoint, self_hosted, local] }
-        capabilities: { type: object, additionalProperties: true }
-        pricing: { type: object, additionalProperties: true }
-        residency: { type: object, additionalProperties: true }
-        license: { type: object, additionalProperties: true }
-        provenance: { type: object, additionalProperties: true }
-        risk_level: { type: string, enum: [low, medium, high, critical] }
-    ModelVersion:
-      allOf:
-        - $ref: '#/components/schemas/CreateModelVersionRequest'
-        - type: object
-          required: [model_version_id, admission_state, lifecycle_state]
-          properties:
-            model_version_id: { type: string }
-            admission_state: { type: string, enum: [discovered, reviewed, approved, restricted, revoked] }
-            lifecycle_state: { type: string, enum: [draft, active, degraded, deprecated, retired] }
-    AdmissionRequest:
+        id: {type: string}
+        name: {type: string}
+        version: {type: string}
+        provider: {type: string}
+    RouteRequest:
       type: object
-      required: [decision]
+      additionalProperties: false
       properties:
-        decision: { type: string, enum: [reviewed, approved, restricted, revoked] }
-        reason: { type: string }
+        routeClass: {type: string, enum: [deterministic, efficient, specialist, flagship]}
+        requiredCapabilities: {type: array, items: {type: string}}
+        inferenceEffort: {type: string, enum: [minimal, low, medium, high]}
+        serviceTier: {type: string, enum: [standard, priority, batch, provisioned]}
+        estimatedInputTokens: {type: integer, minimum: 0}
+        estimatedOutputTokens: {type: integer, minimum: 0}
+        budget: {type: number, minimum: 0}
+        currency: {type: string}
+        dataResidency: {type: string}
+        evidenceVersion: {type: string}
+        policyVersion: {type: string}
+        allowDegraded: {type: boolean}
+        requireFreshSignals: {type: boolean}
+        signalMaxAgeSeconds: {type: integer, minimum: 0}
+    ModelExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [taskType, instruction, outputSchema]
+      properties:
+        requestId: {type: string}
+        taskType: {type: string}
+        userId: {type: string}
+        riskHint: {type: string}
+        systemPrompt: {type: string}
+        instruction: {type: string}
+        context: {type: object, additionalProperties: true}
+        outputSchema: {type: object, additionalProperties: true}
+        safetyPolicy: {type: object, additionalProperties: true}
+        maxOutputTokens: {type: integer, minimum: 0}
+        temperature: {type: number}
+    EvaluationRequest:
+      type: object
+      additionalProperties: false
+      required: [config, metrics, thresholds]
+      properties:
+        config: {type: object, additionalProperties: true}
+        metrics: {type: object, additionalProperties: true}
+        thresholds: {type: object, additionalProperties: true}
+        rawOutput: {type: string}
+    ToolExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        agentId: {type: string}
+        action: {type: string, minLength: 1}
+        arguments: {type: array, items: {type: string}}
+        environment: {type: object, additionalProperties: {type: string}}
+        approvalId: {type: string}
+        workspacePath: {type: string}
+    AdmissionEvidence:
+      type: object
+      additionalProperties: true
+      required: [id, modelId, modelVersion, evidenceDigest]
+      properties:
+        id: {type: string}
+        modelId: {type: string}
+        modelVersion: {type: string}
+        evidenceDigest: {type: string}
     ErrorEnvelope:
       type: object
+      additionalProperties: false
       required: [error]
       properties:
         error:
           type: object
+          additionalProperties: false
           required: [code, message, request_id, trace_id, retryable]
           properties:
-            code: { type: string }
-            message: { type: string }
-            request_id: { type: string }
-            trace_id: { type: string }
-            retryable: { type: boolean }
-            details: { type: object, additionalProperties: true }
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            trace_id: {type: string}
+            retryable: {type: boolean}
+            details: {type: object, additionalProperties: true}
