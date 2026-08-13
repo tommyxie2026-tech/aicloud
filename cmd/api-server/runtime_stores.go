@@ -52,7 +52,7 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 		postgresTasks := repository.NewScopedPostgresTasks(repos.DB)
 		tasks := tenantrepo.NewScopedTasks(postgresTasks)
 		routes := tenantrepo.NewScopedRouteDecisions(repos.RouteDecisions, tasks)
-		costs := tenantrepo.NewScopedCostEvents(repos.CostEvents, tasks)
+		costs := tenantrepo.NewScopedCostEvents(repos.DeploymentCostEvents(), tasks)
 		return runtimeStores{
 			models: repos.Models,
 			deployments: repos.DeploymentRepository(),
