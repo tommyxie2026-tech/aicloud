@@ -29,7 +29,6 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 		return domain.RouteDecision{}, err
 	}
 	pricingPolicies := r.pricingPolicyRepository()
-	pricingRefs := make(map[string]string)
 	candidates := make([]domain.RouteCandidate, 0)
 	for _, model := range models {
 		items, err := deployments.ListByModelVersion(ctx, model.ID)
@@ -45,11 +44,7 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 		for _, item := range items {
 			candidate := DeploymentCandidate(model, item, req, now)
 			if pricingPolicies != nil {
-				var pricingRef string
-				candidate, pricingRef = quoteCandidate(ctx, pricingPolicies, candidate, item, req, now)
-				if pricingRef != "" {
-					pricingRefs[item.ID] = pricingRef
-				}
+				candidate, _ = quoteCandidate(ctx, pricingPolicies, candidate, item, req, now)
 			}
 			if r.admission != nil {
 				admissionModel := model
@@ -70,7 +65,7 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 		return domain.RouteDecision{}, err
 	}
 	reason := fmt.Sprintf("selected deployment %s for %s@%s", selected.DeploymentID, selected.ModelID, selected.ModelVersion)
-	if pricingRef := pricingRefs[selected.DeploymentID]; pricingRef != "" {
+	if pricingRef := pricingEvidenceRef(ctx, pricingPolicies, selected.DeploymentID, now); pricingRef != "" {
 		reason = fmt.Sprintf("%s using pricing policy %s with estimated task cost %.6f", reason, pricingRef, selected.EstimatedCost)
 	}
 	return domain.RouteDecision{
