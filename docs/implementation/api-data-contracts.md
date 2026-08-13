@@ -1,151 +1,237 @@
 # API and Data Contracts
 
-## API conventions
-Base path: `/api/v1`. JSON uses snake_case. Timestamps are RFC3339 UTC. IDs are opaque strings. Writes accept `Idempotency-Key`; repeated requests with the same tenant/project/key and equivalent body return the original result. Conflicting body returns 409.
+## 1. API conventions
 
-Trusted headers are produced/validated by gateway middleware; clients may send Authorization and Idempotency-Key but cannot forge internal tenant/subject headers.
+Base path is `/api/v1`. Public JSON uses `camelCase`; internal SQL and durable-event schemas may use `snake_case`. Timestamps are RFC3339 UTC. IDs are opaque strings.
 
-## Error envelope
+Authentication produces a verified `identity.Principal`. Public handlers never accept Tenant/Project security scope as a substitute for authenticated context. In OIDC mode, Tenant/Project/Role/Capability values originate only from cryptographically verified claims. Trusted-ingress mode is an explicit compatibility mode and requires a separately authenticated ingress that replaces identity headers.
+
+Request and trace correlation are established before authentication:
+
+```text
+X-Request-ID
+X-Trace-ID
+```
+
+Invalid or missing correlation IDs are replaced by the API boundary and echoed in the response.
+
+Durable `Idempotency-Key` semantics currently apply to the R6 Task command kernel only:
+
+- Task creation;
+- Task routing;
+- logical model execution.
+
+For those operations, same key + same canonical request replays the original business result; same key + different request returns HTTP 409. Other mutations must not be described as durably exactly-once until their own command transaction exists.
+
+## 2. Error envelope
+
+All `/api/v1` errors use:
 
 ```json
 {
   "error": {
-    "code": "MODEL_NOT_ELIGIBLE",
-    "message": "no model satisfies policy and capability requirements",
-    "request_id": "req_...",
-    "trace_id": "tr_...",
+    "code": "INVALID_REQUEST",
+    "message": "request is invalid",
+    "request_id": "req-...",
+    "trace_id": "trace-...",
     "retryable": false,
     "details": {}
   }
 }
 ```
 
-Stable codes include INVALID_ARGUMENT, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, IDEMPOTENCY_CONFLICT, POLICY_DENIED, APPROVAL_REQUIRED, BUDGET_EXCEEDED, MODEL_NOT_ELIGIBLE, PROVIDER_UNAVAILABLE, RATE_LIMITED, TASK_TERMINAL, INTERNAL.
+Core boundary codes include `INVALID_REQUEST`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `METHOD_NOT_ALLOWED`, `RATE_LIMITED`, `SERVICE_UNAVAILABLE`, `INTERNAL_ERROR`, `IDEMPOTENCY_CONFLICT`, and `IDEMPOTENCY_IN_PROGRESS`. Domain-specific layers may add stable codes without changing the envelope.
 
-## Minimum REST resources
+## 3. Executable v0.1 public REST surface
+
+The machine-readable source of truth is `docs/implementation/contracts/openapi-v1.yaml`. R7D documents only operations implemented by the running API and governed by the R7 security boundary:
 
 ```text
-GET/POST   /api/v1/models
-GET        /api/v1/models/{model_id}
-POST       /api/v1/models/{model_id}/versions
-POST       /api/v1/model-versions/{version_id}/admission
+GET/POST  /api/v1/models
+GET/PUT   /api/v1/models/{model_id}
+GET/POST  /api/v1/models/{model_id}/admission
+GET       /api/v1/tools
 
-POST       /api/v1/tasks
-GET        /api/v1/tasks/{task_id}
-POST       /api/v1/tasks/{task_id}:cancel
-POST       /api/v1/tasks/{task_id}:approve
-GET        /api/v1/tasks/{task_id}/events
-GET        /api/v1/tasks/{task_id}/cost
-
-GET/POST   /api/v1/agents
-GET/POST   /api/v1/tools
-GET/POST   /api/v1/policies
-GET/POST   /api/v1/projects
-GET        /api/v1/audit-events
+GET/POST  /api/v1/tasks
+GET       /api/v1/tasks/{task_id}
+POST      /api/v1/tasks/{task_id}/route
+GET       /api/v1/tasks/{task_id}/routes
+GET       /api/v1/tasks/{task_id}/costs
+GET       /api/v1/tasks/{task_id}/audit
+POST      /api/v1/tasks/{task_id}/model
+GET       /api/v1/tasks/{task_id}/trace
+GET/POST  /api/v1/tasks/{task_id}/evaluations
+POST      /api/v1/tasks/{task_id}/tools/{tool_id}
 ```
 
-Task event streaming uses SSE at `/api/v1/tasks/{task_id}/events:stream` before WebSocket is considered.
+Cancel, approval, TaskEvent query/streaming, Agent CRUD, Policy CRUD, Project CRUD, and global audit query remain architecture or later-product contracts until executable handlers exist. They must not be advertised as completed v0.1 HTTP operations.
 
-## Create Task
+## 4. Task HTTP contract
+
+Task creation consumes verified Tenant/Project scope and requires `Idempotency-Key`:
 
 ```json
 {
-  "project_id": "prj_...",
-  "agent_id": "agt_...",
-  "goal": "scale dev-gpu-cluster gpu-workers from 3 to 6",
-  "inputs": {},
-  "constraints": {
-    "max_cost_usd": "1.00",
-    "deadline_seconds": 300,
-    "data_classification": "internal"
-  }
+  "input": "scale dev-gpu-cluster gpu-workers from 3 to 6",
+  "agentId": "infra-agent"
 }
 ```
 
-Response 202:
+Unknown top-level fields are rejected. Tenant/Project are not accepted from the body.
+
+Response HTTP 202 returns the aggregate projection, for example:
 
 ```json
 {
-  "task_id": "tsk_...",
-  "trace_id": "tr_...",
+  "id": "task-...",
+  "tenantId": "tenant-...",
+  "projectId": "project-...",
+  "createdBy": "user-...",
+  "agentId": "infra-agent",
+  "input": "scale dev-gpu-cluster gpu-workers from 3 to 6",
   "status": "CREATED",
-  "created_at": "..."
+  "version": 1,
+  "traceId": "trace-...",
+  "createdAt": "...",
+  "updatedAt": "..."
 }
 ```
 
-## Core PostgreSQL schema
-All mutable tables include `created_at`, `updated_at`, and optimistic `version bigint`. Monetary values use `numeric`, never float.
+Canonical Task status values are:
 
-### tenants
-`id pk, organization_id, name, status, created_at, updated_at`
+```text
+CREATED
+PLANNING
+ROUTING
+EXECUTING
+WAITING_APPROVAL
+VALIDATING
+COMPLETED
+FAILED
+CANCELLED
+EXPIRED
+```
 
-### projects
-`id pk, tenant_id not null, name, status, default_policy_id, created_at, updated_at`; unique `(tenant_id,name)`.
+Direct `GET /tasks/{task_id}` also returns:
 
-### subjects
-`id pk, tenant_id, type(user|service|agent), external_subject, status, metadata jsonb`; unique `(tenant_id,type,external_subject)`.
+```text
+ETag: "task:<task-id>:v<version>"
+X-Resource-Version: <version>
+```
 
-### models
-`id pk, owner_tenant_id nullable, name, visibility(global|private|restricted), description, created_at, updated_at`.
+`version` is the aggregate/PostgreSQL optimistic revision. R7D does not introduce `If-Match` until a public command is explicitly wired to expected-version semantics.
 
-### model_versions
-`id pk, model_id, owner_tenant_id nullable, provider_id, provider_model_ref, version_ref, deployment_mode, capabilities jsonb, context_limits jsonb, pricing jsonb, residency jsonb, license jsonb, provenance jsonb, risk_level, lifecycle_state, admission_state, artifact_digest, created_at`; immutable after admission except operational state references.
+## 5. Pagination
 
-### provider_endpoints
-`id pk, tenant_id nullable, provider_type, endpoint_ref, region, credential_ref, config jsonb, enabled`; secrets are references only.
+List and evidence-list endpoints use bounded pagination:
 
-### tasks
-`id pk, tenant_id, project_id, agent_id, subject_id, trace_id, idempotency_key, goal, input jsonb, constraints jsonb, status, result jsonb, failure_code, created_at, updated_at, version`; unique `(tenant_id,project_id,idempotency_key)` when key present.
+- `pageSize`: default 50, minimum 1, maximum 200;
+- `pageToken`: opaque continuation token returned by the previous response;
+- response: `{ "items": [...], "nextPageToken": "..." }`.
 
-### task_events
-`id pk, tenant_id, project_id, task_id, sequence, event_type, payload jsonb, occurred_at`; append-only; unique `(task_id,sequence)`.
+Clients must treat `pageToken` as opaque. Invalid sizes or tokens return `INVALID_REQUEST`.
 
-### route_decisions
-`id pk, tenant_id, project_id, task_id, trace_id, request_hash, selected_model_version_id, selected_provider_endpoint_id, eligible_candidates jsonb, rejected_candidates jsonb, score_breakdown jsonb, fallback_chain jsonb, created_at`.
+## 6. PostgreSQL contract
 
-### tool_invocations
-`id pk, tenant_id, project_id, task_id, tool_id, action, resource_ref, policy_decision_id, credential_lease_ref, input_hash, status, result_ref, started_at, ended_at`.
+Accepted ADR invariants and machine-readable migrations are authoritative for storage. Prose below describes the durable resource model; exact physical columns and migration state must be read from `db/migrations/` and implementation contract SQL when they differ.
 
-### approvals
-`id pk, tenant_id, project_id, task_id, reason, risk_level, requested_by, decided_by, decision, expires_at, created_at, decided_at`.
+### Tenants and projects
 
-### cost_events
-`id pk, tenant_id, project_id, task_id, trace_id, source_type, source_id, provider_id, model_version_id, usage jsonb, currency, amount numeric(20,8), pricing_version, occurred_at`; append-only.
+Tenant and Project are security boundaries. Tenant-owned rows carry `tenant_id`; Project resources carry both `tenant_id` and `project_id` where practical. Normal runtime database roles are subject to RLS and do not use application-controlled RLS bypass flags.
 
-### audit_events
-`id pk, tenant_id, project_id nullable, trace_id, subject_id, action, resource_type, resource_id, decision, metadata jsonb, occurred_at`; append-only.
+### Task aggregate
 
-### artifacts
-`id pk, tenant_id, project_id, task_id, kind, object_key, digest, size_bytes, classification, created_at`.
+`tasks` owns immutable security identity and the current projection, including at minimum:
 
-## Required indexes
-Every tenant table starts indexes with tenant_id where tenant-scoped queries dominate. Required examples: `(tenant_id,project_id,status,created_at desc)` on tasks; `(tenant_id,task_id,sequence)` on task_events; `(tenant_id,task_id,occurred_at)` on cost/audit; `(model_id,admission_state,lifecycle_state)` on model_versions.
+```text
+id
+tenant_id
+project_id
+created_by
+agent_id
+input
+status
+version
+trace_id
+created_at
+updated_at
+completed_at
+```
 
-## Row Level Security
-Enable RLS for tasks, task_events, approvals, cost_events, audit_events, artifacts and tenant-private model metadata. Connection/session context sets the trusted tenant identifier. Application repository predicates remain mandatory; RLS is defense in depth.
+Task identity fields are not mutable through ordinary updates. `version` increments through aggregate command persistence and protects against stale writers.
 
-## Event envelope
-Internal durable events use:
+### TaskEvent
+
+`task_events` is append-only business history. Core fields include:
+
+```text
+event_id / id
+tenant_id
+project_id
+task_id
+sequence
+event_type
+actor / evidence payload
+trace_id where applicable
+occurred_at
+schema version where applicable
+```
+
+`(task_id, sequence)` is unique and sequences are contiguous for committed business events.
+
+### Transactional Outbox and idempotency
+
+R6 persists Task projection changes, TaskEvent, Outbox delivery intent, and command idempotency result in one PostgreSQL transaction where the command contract requires them.
+
+Outbox delivery is at-least-once. Consumers must deduplicate using a stable delivery idempotency key. The platform does not claim distributed exactly-once transport.
+
+### Routing, cost, audit, evaluation, tools and admission
+
+Route decisions, cost evidence, audit evidence, evaluation results, Tool invocations, model admission evidence, and model registry metadata remain independently queryable evidence/control-plane resources. Their Tenant/Project attribution must follow the Resource Scope Matrix and cannot weaken Task ownership or RLS.
+
+Monetary persistence uses exact/numeric representation where SQL owns the amount; cost evidence records pricing version so historical cost remains explainable.
+
+## 7. Row Level Security
+
+RLS is enabled/forced on tenant-sensitive runtime tables according to migrations. Application repository predicates remain mandatory; RLS is an independent defense-in-depth boundary.
+
+Runtime application/worker roles must not be superuser or `BYPASSRLS`. Migration/admin access uses separate credentials and execution paths.
+
+## 8. Durable event envelope
+
+Business events are append-only and external delivery uses the transactional Outbox. A representative logical envelope is:
 
 ```json
 {
-  "event_id": "evt_...",
-  "event_type": "task.status.changed",
+  "event_id": "evt-...",
+  "event_type": "TaskRoutingStarted",
   "schema_version": 1,
   "occurred_at": "...",
-  "tenant_id": "ten_...",
-  "project_id": "prj_...",
-  "task_id": "tsk_...",
-  "trace_id": "tr_...",
-  "producer": "workflow",
+  "tenant_id": "tenant-...",
+  "project_id": "project-...",
+  "task_id": "task-...",
+  "trace_id": "trace-...",
   "payload": {}
 }
 ```
 
-Events are at-least-once; consumers must be idempotent by event_id. Domain state changes and outbound durable events use transactional outbox when asynchronous publication is required.
+Physical delivery is at-least-once; consumers are idempotent. PostgreSQL business state and TaskEvent history remain independent from Temporal execution history.
 
-## Migration rules
-SQL migrations are forward-only in production. Destructive changes use expand -> migrate/backfill -> switch readers/writers -> contract. Schema migrations must be safe for rolling deployment.
+## 9. Migration rules
 
-## API compatibility
-Within `/api/v1`, adding optional fields is compatible. Removing/renaming fields, changing semantics, or changing enum meaning is incompatible and requires a new version or migration window.
+Production SQL migrations are forward-oriented. Destructive changes use:
+
+```text
+Expand
+-> Backfill/Migrate
+-> Switch Reader/Writer
+-> Contract
+```
+
+Writer-contract migrations require explicit drain/cutover rules when old and new writers cannot safely coexist. Runtime and migration database roles remain separate.
+
+## 10. API compatibility
+
+R7D is the v0.1 convergence window that removes stale pre-S1 draft assumptions. After R7D merges, the executable OpenAPI contract and runtime must change together.
+
+Adding optional response fields is normally compatible. Removing or renaming fields, changing required request fields, changing enum semantics, changing idempotency behavior, or changing security scope is incompatible and requires an explicit API migration decision rather than silent drift.
