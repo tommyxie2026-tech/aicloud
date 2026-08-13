@@ -10,7 +10,9 @@ import (
 
 func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deployments domain.DeploymentRepository) (domain.RouteDecision, error) {
 	if deployments == nil || req.RouteClass == domain.RouteDeterministic {
-		return r.Plan(ctx, req)
+		planner := *r
+		planner.decisions = nil
+		return planner.Decide(ctx, req)
 	}
 	if req.TaskID == "" {
 		return domain.RouteDecision{}, fmt.Errorf("task ID is required")
