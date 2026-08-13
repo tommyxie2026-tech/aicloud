@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -19,6 +20,19 @@ type DeploymentLifecycleEvent struct {
 	RoutingEligible bool                `json:"routingEligible"`
 	MigrationState  string              `json:"migrationState,omitempty"`
 	CreatedAt       time.Time           `json:"createdAt"`
+}
+
+func (e DeploymentLifecycleEvent) Validate() error {
+	if e.ID == "" || e.DeploymentID == "" {
+		return fmt.Errorf("deployment lifecycle event ID and deployment ID are required")
+	}
+	if e.EffectiveAt.IsZero() {
+		return fmt.Errorf("deployment lifecycle effective time is required")
+	}
+	if e.AnnouncedAt != nil && e.AnnouncedAt.After(e.EffectiveAt) {
+		return fmt.Errorf("deployment lifecycle announcement cannot follow effective time")
+	}
+	return ValidateDeploymentTransition(e.From, e.To)
 }
 
 type DeploymentLifecycleEventRepository interface {
