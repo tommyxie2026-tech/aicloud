@@ -7,12 +7,12 @@ import (
 )
 
 type PricingContextBand struct {
-	MinTokens        int64    `json:"minTokens"`
-	MaxTokens        int64    `json:"maxTokens,omitempty"`
-	InputPerMillion  *float64 `json:"inputPerMillion,omitempty"`
-	OutputPerMillion *float64 `json:"outputPerMillion,omitempty"`
-	CacheHitPerMillion *float64 `json:"cacheHitPerMillion,omitempty"`
-	CacheMissPerMillion *float64 `json:"cacheMissPerMillion,omitempty"`
+	MinTokens            int64    `json:"minTokens"`
+	MaxTokens            int64    `json:"maxTokens,omitempty"`
+	InputPerMillion      *float64 `json:"inputPerMillion,omitempty"`
+	OutputPerMillion     *float64 `json:"outputPerMillion,omitempty"`
+	CacheHitPerMillion   *float64 `json:"cacheHitPerMillion,omitempty"`
+	CacheMissPerMillion  *float64 `json:"cacheMissPerMillion,omitempty"`
 }
 
 type CapacityPricing struct {
@@ -23,10 +23,10 @@ type CapacityPricing struct {
 }
 
 type SelfHostedAllocation struct {
-	GPUHour        float64 `json:"gpuHour,omitempty"`
-	CPUCoreHour    float64 `json:"cpuCoreHour,omitempty"`
-	MemoryGBHour   float64 `json:"memoryGbHour,omitempty"`
-	StorageGBHour  float64 `json:"storageGbHour,omitempty"`
+	GPUHourPrice       float64 `json:"gpuHourPrice,omitempty"`
+	CPUCoreHourPrice   float64 `json:"cpuCoreHourPrice,omitempty"`
+	MemoryGBHourPrice  float64 `json:"memoryGbHourPrice,omitempty"`
+	StorageGBHourPrice float64 `json:"storageGbHourPrice,omitempty"`
 }
 
 type PricingPolicy struct {
