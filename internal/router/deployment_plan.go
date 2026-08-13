@@ -28,6 +28,8 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 	if err != nil {
 		return domain.RouteDecision{}, err
 	}
+	pricingPolicies := r.pricingPolicyRepository()
+	pricingRefs := make(map[string]string)
 	candidates := make([]domain.RouteCandidate, 0)
 	for _, model := range models {
 		items, err := deployments.ListByModelVersion(ctx, model.ID)
@@ -42,6 +44,13 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 		}
 		for _, item := range items {
 			candidate := DeploymentCandidate(model, item, req, now)
+			if pricingPolicies != nil {
+				var pricingRef string
+				candidate, pricingRef = quoteCandidate(ctx, pricingPolicies, candidate, item, req, now)
+				if pricingRef != "" {
+					pricingRefs[item.ID] = pricingRef
+				}
+			}
 			if r.admission != nil {
 				admissionModel := model
 				admissionModel.DeploymentMode = item.Mode
@@ -60,12 +69,16 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 	if err != nil {
 		return domain.RouteDecision{}, err
 	}
+	reason := fmt.Sprintf("selected deployment %s for %s@%s", selected.DeploymentID, selected.ModelID, selected.ModelVersion)
+	if pricingRef := pricingRefs[selected.DeploymentID]; pricingRef != "" {
+		reason = fmt.Sprintf("%s using pricing policy %s with estimated task cost %.6f", reason, pricingRef, selected.EstimatedCost)
+	}
 	return domain.RouteDecision{
 		ID:              fmt.Sprintf("route-%d", now.UnixNano()),
 		TaskID:          req.TaskID,
 		Selected:        selected,
 		Candidates:      candidates,
-		Reason:          fmt.Sprintf("selected deployment %s for %s@%s", selected.DeploymentID, selected.ModelID, selected.ModelVersion),
+		Reason:          reason,
 		FallbackChain:   fallback,
 		EvidenceVersion: req.EvidenceVersion,
 		PolicyVersion:   req.PolicyVersion,
