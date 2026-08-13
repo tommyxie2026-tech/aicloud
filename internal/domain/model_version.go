@@ -5,21 +5,24 @@ import (
 	"time"
 )
 
+// ModelVersion contains catalog and governance evidence only. Mutable runtime
+// state such as endpoint, pricing, health, quota, capacity, region and queue
+// belongs to Deployment.
 type ModelVersion struct {
-	ID                string
-	Name              string
-	Version           string
-	Lifecycle         ModelLifecycle
-	Capabilities      []string
-	EvaluationVersion string
-	License           string
-	LicenseEvidence   LicenseEvidence
-	Provenance        ModelProvenance
-	ArtifactDigest    string
-	ApprovalStatus    ApprovalStatus
-	RiskLevel         string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                string          `json:"id"`
+	Name              string          `json:"name"`
+	Version           string          `json:"version"`
+	Lifecycle         ModelLifecycle  `json:"lifecycle"`
+	Capabilities      []string        `json:"capabilities,omitempty"`
+	EvaluationVersion string          `json:"evaluationVersion,omitempty"`
+	License           string          `json:"license,omitempty"`
+	LicenseEvidence   LicenseEvidence `json:"licenseEvidence,omitempty"`
+	Provenance        ModelProvenance `json:"provenance,omitempty"`
+	ArtifactDigest    string          `json:"artifactDigest,omitempty"`
+	ApprovalStatus    ApprovalStatus  `json:"approvalStatus"`
+	RiskLevel         string          `json:"riskLevel,omitempty"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	UpdatedAt         time.Time       `json:"updatedAt"`
 }
 
 type ModelVersionRepository interface {
