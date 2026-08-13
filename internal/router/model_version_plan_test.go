@@ -39,7 +39,7 @@ func TestPlanUsesModelVersionAndDeploymentRuntime(t *testing.T) {
 	decision, err := r.Plan(context.Background(), Request{
 		TaskID: "task-version", RouteClass: domain.RouteEfficient,
 		RequiredCapabilities: []string{"coding"},
-		RequireFreshSignals: true, SignalMaxAge: time.Minute,
+		RequireFreshSignals:  true, SignalMaxAge: time.Minute,
 		EstimatedInputTokens: 1000, EstimatedOutputTokens: 1000,
 	})
 	if err != nil {
