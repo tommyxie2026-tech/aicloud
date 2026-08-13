@@ -7,6 +7,11 @@ import (
 	"testing"
 )
 
+type testPage struct {
+	Items         []map[string]string `json:"items"`
+	NextPageToken string              `json:"nextPageToken"`
+}
+
 func TestResponseContractPaginatesCollections(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, []map[string]string{{"id": "1"}, {"id": "2"}, {"id": "3"}})
@@ -19,25 +24,23 @@ func TestResponseContractPaginatesCollections(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
-	var page struct {
-		Items         []map[string]string `json:"items"`
-		NextPageToken string              `json:"nextPageToken"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+	var firstPage testPage
+	if err := json.Unmarshal(response.Body.Bytes(), &firstPage); err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Items) != 2 || page.NextPageToken == "" {
-		t.Fatalf("unexpected page: %+v", page)
+	if len(firstPage.Items) != 2 || firstPage.NextPageToken == "" {
+		t.Fatalf("unexpected page: %+v", firstPage)
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/api/v1/tasks?pageSize=2&pageToken="+page.NextPageToken, nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/tasks?pageSize=2&pageToken="+firstPage.NextPageToken, nil)
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+	var secondPage testPage
+	if err := json.Unmarshal(response.Body.Bytes(), &secondPage); err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Items) != 1 || page.Items[0]["id"] != "3" || page.NextPageToken != "" {
-		t.Fatalf("unexpected second page: %+v", page)
+	if len(secondPage.Items) != 1 || secondPage.Items[0]["id"] != "3" || secondPage.NextPageToken != "" {
+		t.Fatalf("unexpected second page: %+v", secondPage)
 	}
 }
 
