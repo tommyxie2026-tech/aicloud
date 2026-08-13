@@ -21,8 +21,8 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 		RawText: "ok", TokenUsage: provider.TokenUsage{InputTokens: 100, OutputTokens: 20},
 	}}
 	providers := NewMemoryProviderRegistry()
-	_ = providers.Put(context.Background(), "primary", primary)
-	_ = providers.Put(context.Background(), "secondary", secondary)
+	_ = providers.Put(context.Background(), "deployment-primary", primary)
+	_ = providers.Put(context.Background(), "deployment-secondary", secondary)
 	models := repository.NewMemoryModels(
 		runtimeModel("primary", "primary-provider", 10),
 		runtimeModel("secondary", "secondary-provider", 1),
@@ -37,15 +37,22 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 		traceStore,
 	)
 	decision := domain.RouteDecision{
-		Selected:      domain.RouteCandidate{ModelID: "primary", ModelVersion: "v1", RouteClass: domain.RouteFlagship},
-		FallbackChain: []domain.RouteCandidate{{ModelID: "secondary", ModelVersion: "v1", RouteClass: domain.RouteEfficient}},
+		Selected: domain.RouteCandidate{
+			ModelID: "primary", ModelVersion: "v1", DeploymentID: "deployment-primary", RouteClass: domain.RouteFlagship,
+		},
+		FallbackChain: []domain.RouteCandidate{{
+			ModelID: "secondary", ModelVersion: "v1", DeploymentID: "deployment-secondary", RouteClass: domain.RouteEfficient,
+		}},
 	}
 	result, err := executor.Execute(context.Background(), "task-1", "trace-1", decision, provider.ProviderRequest{RequestID: "request-1", Instruction: "test", OutputSchema: provider.OutputSchemaRef{Name: "result"}})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
-	if !result.Fallback || result.Candidate.ModelID != "secondary" || len(result.Attempts) != 2 {
+	if !result.Fallback || result.Candidate.DeploymentID != "deployment-secondary" || len(result.Attempts) != 2 {
 		t.Fatalf("unexpected fallback result: %#v", result)
+	}
+	if result.Attempts[0].DeploymentID != "deployment-primary" || result.Attempts[1].DeploymentID != "deployment-secondary" {
+		t.Fatalf("deployment identity changed across attempts: %#v", result.Attempts)
 	}
 	if result.Attempts[0].OperationID != "request-1" || result.Attempts[1].OperationID != "request-1" {
 		t.Fatalf("logical operation identity changed across attempts: %#v", result.Attempts)
@@ -63,9 +70,15 @@ func TestExecutorFallsBackOnRetryableProviderFailure(t *testing.T) {
 	if len(events) != 2 || events[0].Attempt != 2 || events[1].Attempt != 2 {
 		t.Fatalf("successful fallback costs not retained: %#v", events)
 	}
+	if events[0].DeploymentID != "deployment-secondary" || events[1].DeploymentID != "deployment-secondary" {
+		t.Fatalf("cost evidence lost deployment identity: %#v", events)
+	}
 	traces, _ := traceStore.ListByTask(context.Background(), "task-1")
 	if len(traces) != 2 || traces[0].Status != tracepkg.StatusError || traces[1].Status != tracepkg.StatusOK {
 		t.Fatalf("unexpected trace evidence: %#v", traces)
+	}
+	if traces[0].Attributes["deployment.id"] != "deployment-primary" || traces[1].Attributes["deployment.id"] != "deployment-secondary" {
+		t.Fatalf("trace did not retain deployment identity: %#v", traces)
 	}
 	if traces[0].Attributes["model.operation_id"] != "request-1" || traces[1].Attributes["model.attempt_id"] != result.Attempts[1].AttemptID {
 		t.Fatalf("trace did not retain operation/attempt identity: %#v", traces)
