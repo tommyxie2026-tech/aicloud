@@ -8,7 +8,7 @@ import (
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 )
 
-func (l *Ledger) RecordReconciledModelUsage(ctx context.Context, usage ModelUsage, evidence domain.RoutePricingEvidence, policies domain.PricingPolicyRepository) ([]domain.CostEvent, error) {
+func (l *Ledger) RecordReconciledModelUsage(ctx context.Context, usage ModelUsage, evidence domain.RoutePricingEvidence, policies domain.PricingPolicyRepository, effort domain.InferenceEffort) ([]domain.CostEvent, error) {
 	if policies == nil {
 		return nil, fmt.Errorf("pricing policy repository is required")
 	}
@@ -27,6 +27,7 @@ func (l *Ledger) RecordReconciledModelUsage(ctx context.Context, usage ModelUsag
 		Region:          policy.Region,
 		Batch:           usage.ServiceTier == domain.TierBatch,
 		ServiceTier:     usage.ServiceTier,
+		InferenceEffort: effort,
 	}, quoteAt)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile route-time pricing policy: %w", err)
@@ -51,12 +52,12 @@ func (l *Ledger) RecordReconciledModelUsage(ctx context.Context, usage ModelUsag
 			Currency:     quote.Currency,
 			Attempt:      usage.Attempt,
 			Metadata: map[string]string{
-				"deployment_id":         usage.DeploymentID,
-				"route_decision_id":     evidence.RouteDecisionID,
-				"pricing_policy_id":     evidence.PolicyID,
+				"deployment_id":          usage.DeploymentID,
+				"route_decision_id":      evidence.RouteDecisionID,
+				"pricing_policy_id":      evidence.PolicyID,
 				"pricing_policy_version": evidence.PolicyVersion,
-				"pricing_policy_digest": evidence.PolicyDigest,
-				"pricing_component":     component.Name,
+				"pricing_policy_digest":  evidence.PolicyDigest,
+				"pricing_component":      component.Name,
 			},
 			CreatedAt: now.Add(time.Duration(index) * time.Nanosecond),
 		}
