@@ -2,29 +2,39 @@
 
 ## 状态
 
-实施阶段：R7B 认证验证器核心。
+实施阶段：R7B 认证验证与 Server 接线。
 
-本文档在 R7A `PrincipalVerifier` 边界上增加面向生产的 OpenID Connect / JWT 验证器。当前阶段**尚不宣称** API Server 生产接线或 RBAC/ABAC 已经完成。
+本文档在 R7A `PrincipalVerifier` 边界上增加面向生产的 OpenID Connect / JWT 验证器和显式 Runtime Verifier Selection。RBAC/ABAC 仍属于独立的 R7C 授权边界。
 
 ## 目标
 
 把外部 Bearer Token 转换为经过验证的 `identity.Principal`，同时禁止业务 Handler 直接解析或信任未经验证的 Claim。
 
 ```text
-Authorization: Bearer <JWT>
-        |
-        v
-OIDCVerifier
-        |
-        +-- HTTPS Issuer Discovery（可选）
-        +-- HTTPS JWKS 获取与缓存
-        +-- 签名算法白名单
-        +-- RSA 签名验证
-        +-- Issuer / Audience 校验
-        +-- exp / nbf / iat 校验
-        +-- Verified Claim Mapping
-        v
-identity.Principal
+HTTP Request
+    |
+    v
+Request / Trace Metadata
+    |
+    v
+PrincipalVerifier
+    |
+    +-- trusted_ingress  （显式兼容模式）
+    |
+    `-- oidc
+          |
+          +-- HTTPS Issuer Discovery（可选）
+          +-- HTTPS JWKS 获取与缓存
+          +-- 签名算法白名单
+          +-- RSA 签名验证
+          +-- Issuer / Audience 校验
+          +-- exp / nbf / iat 校验
+          +-- Verified Claim Mapping
+          v
+    identity.Principal
+          |
+          v
+Tenant / Project Scoped API
 ```
 
 ## 安全不变量
@@ -42,6 +52,35 @@ identity.Principal
 11. Tenant、Project、Role、Capability 只有在签名和标准 Claim 验证成功之后才允许进入 Principal。
 12. Token 只从唯一的 `Authorization: Bearer ...` Header 读取，不支持 Query String 或 Cookie 降级读取。
 13. Bearer Token 有长度上限，并且不得写入日志。
+14. Authentication Mode 必须显式可识别；未知模式会阻止 API Server 启动。
+15. 在 OIDC 模式下，配置不完整或身份基础设施不可访问会使 API Server 启动失败，而不是静默回退到 Trusted Header。
+16. Request/Trace Metadata 位于 Authentication 外层，使认证失败响应也遵守相同的 Correlation Contract。
+
+## Runtime 配置
+
+`AICLOUD_AUTH_MODE` 选择 Verifier：
+
+- `trusted_ingress`：显式的 v0.1 兼容模式；
+- `oidc`：基于密码学验证的 Bearer Token 模式。
+
+OIDC 配置：
+
+| 环境变量 | 默认值 |
+|---|---|
+| `AICLOUD_OIDC_ISSUER` | 无 |
+| `AICLOUD_OIDC_AUDIENCE` | 无 |
+| `AICLOUD_OIDC_JWKS_URL` | 省略时使用 Discovery |
+| `AICLOUD_OIDC_ALLOWED_ALGORITHMS` | `RS256` |
+| `AICLOUD_OIDC_TENANT_CLAIM` | `tenant_id` |
+| `AICLOUD_OIDC_PROJECT_CLAIM` | `project_id` |
+| `AICLOUD_OIDC_ROLES_CLAIM` | `roles` |
+| `AICLOUD_OIDC_CAPABILITIES_CLAIM` | `capabilities` |
+| `AICLOUD_OIDC_PRINCIPAL_TYPE_CLAIM` | `principal_type` |
+| `AICLOUD_OIDC_SESSION_CLAIM` | `sid` |
+| `AICLOUD_OIDC_CLOCK_SKEW_SECONDS` | `60` |
+| `AICLOUD_OIDC_JWKS_CACHE_TTL_SECONDS` | `300` |
+
+当前兼容默认仍为 `trusted_ingress`，目的是避免已有 v0.1 部署在升级时隐式改变 Authentication Mode。生产环境应显式设置该模式，并优先使用 `oidc`；只有在独立可信的入口已经完成认证并强制替换身份 Header 时，才应使用 Trusted Ingress 模式。
 
 ## 默认 Claim 映射
 
@@ -65,6 +104,27 @@ Verifier 在构造阶段主动获取 JWKS，使错误配置或无法访问的身
 
 这个模型允许安全的正常密钥轮换，但不会接受 Token 自己提供的任意公钥。
 
+## Server 接线
+
+运行中的 API Server 在启动时只构造一次 Verifier，并把它注入 R7A Authentication Boundary：
+
+```text
+config.Load()
+    |
+    v
+buildPrincipalVerifier()
+    |
+    v
+WithRequestMetadata(
+    WithPrincipalVerifier(
+        verifier,
+        FullHandler,
+    ),
+)
+```
+
+因此不支持的 Authentication Mode 或无效的 OIDC 初始化配置都会在 Startup 阶段 Fail Closed。
+
 ## 失败模型
 
 认证失败由 R7A API Boundary 转换成稳定的 `UNAUTHENTICATED` ErrorEnvelope。OIDC Metadata/JWKS 配置错误属于启动或配置失败，而不是每次请求的授权判断。
@@ -80,14 +140,15 @@ R7B 核心测试使用进程内 TLS OIDC/JWKS Server 和真实 2048-bit RSA Sign
 - JWKS Key Rotation 刷新；
 - 缺失或重复 Authorization Header 拒绝。
 
-## R7B 剩余工作
+配置与 Server Selection Test 额外覆盖：
 
-在 R7B 可以正式标记完成之前，还需要：
+- 显式 Trusted Ingress 兼容模式；
+- OIDC 环境变量映射与默认值；
+- 未知 Authentication Mode 拒绝；
+- OIDC 配置不完整时 Fail Closed。
 
-1. 把 Verifier Selection 接入 `cmd/api-server` 配置；
-2. Trusted Ingress 仅保留为显式兼容模式；
-3. 保证 Request/Trace Metadata 位于 Authentication 外层，使 401 也具备关联 ID；
-4. 增加配置与 Server Wiring Test；
-5. 运行完整 CI，并完成 Authentication Boundary Review。
+## 完成门禁
+
+只有完整仓库 CI 通过，并且 Authentication Boundary Review 确认以上安全不变量后，R7B 才能正式标记完成。在此之前，R7B PR 保持 Draft。
 
 RBAC/ABAC 属于 R7C；OpenAPI/Domain Convergence 属于 R7D。
