@@ -59,7 +59,7 @@ func TestPlanSelectsEligibleDeployment(t *testing.T) {
 	decision, err := r.Plan(context.Background(), Request{
 		TaskID: "task-1", RouteClass: domain.RouteEfficient,
 		RequiredCapabilities: []string{"coding"},
-		RequireFreshSignals: true, SignalMaxAge: time.Minute,
+		RequireFreshSignals:  true, SignalMaxAge: time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("Plan returned error: %v", err)

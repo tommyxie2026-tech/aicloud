@@ -120,13 +120,13 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 		operationID = taskID
 	}
 	attempt := Attempt{
-		OperationID: operationID,
-		AttemptID: newPhysicalAttemptID(operationID, attemptNumber, started),
-		ModelID: candidate.ModelID,
+		OperationID:  operationID,
+		AttemptID:    newPhysicalAttemptID(operationID, attemptNumber, started),
+		ModelID:      candidate.ModelID,
 		ModelVersion: candidate.ModelVersion,
 		DeploymentID: candidate.DeploymentID,
-		Status: "STARTED",
-		StartedAt: started,
+		Status:       "STARTED",
+		StartedAt:    started,
 	}
 	breakerKey := candidate.DeploymentID
 	if breakerKey == "" {
@@ -191,16 +191,16 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 			return attempt, nil, false, modelErr
 		}
 		_, costErr := e.costs.RecordModelUsage(ctx, cost.ModelUsage{
-			TaskID: taskID,
-			TraceID: traceID,
-			Provider: model.Provider,
-			ModelID: model.ID,
+			TaskID:       taskID,
+			TraceID:      traceID,
+			Provider:     model.Provider,
+			ModelID:      model.ID,
 			ModelVersion: model.Version,
 			DeploymentID: candidate.DeploymentID,
-			Pricing: model.Pricing,
-			Usage: response.TokenUsage,
-			Attempt: attemptNumber,
-			ServiceTier: candidate.ServiceTier,
+			Pricing:      model.Pricing,
+			Usage:        response.TokenUsage,
+			Attempt:      attemptNumber,
+			ServiceTier:  candidate.ServiceTier,
 		})
 		if costErr != nil {
 			return attempt, nil, false, costErr
@@ -242,14 +242,14 @@ func (e *Executor) appendTrace(ctx context.Context, taskID, traceID string, cand
 	}
 	attributes := map[string]string{
 		"model.operation_id": attempt.OperationID,
-		"model.attempt_id": attempt.AttemptID,
-		"model.id": candidate.ModelID,
-		"model.version": candidate.ModelVersion,
-		"route.class": string(candidate.RouteClass),
-		"service.tier": string(candidate.ServiceTier),
-		"inference.effort": string(candidate.InferenceEffort),
-		"attempt.status": attempt.Status,
-		"circuit.state": string(attempt.CircuitState),
+		"model.attempt_id":   attempt.AttemptID,
+		"model.id":           candidate.ModelID,
+		"model.version":      candidate.ModelVersion,
+		"route.class":        string(candidate.RouteClass),
+		"service.tier":       string(candidate.ServiceTier),
+		"inference.effort":   string(candidate.InferenceEffort),
+		"attempt.status":     attempt.Status,
+		"circuit.state":      string(attempt.CircuitState),
 	}
 	if candidate.DeploymentID != "" {
 		attributes["deployment.id"] = candidate.DeploymentID

@@ -54,30 +54,30 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 		routes := tenantrepo.NewScopedRouteDecisions(repos.RouteDecisions, tasks)
 		costs := tenantrepo.NewScopedCostEvents(repos.DeploymentCostEvents(), tasks)
 		return runtimeStores{
-			models: repos.Models,
+			models:      repos.Models,
 			deployments: repos.DeploymentRepository(),
-			tasks: tasks,
-			routes: routes,
-			costs: costs,
-			traces: repository.NewPostgresTraceStore(repos.DB),
+			tasks:       tasks,
+			routes:      routes,
+			costs:       costs,
+			traces:      repository.NewPostgresTraceStore(repos.DB),
 			evaluations: repository.NewPostgresEvaluationStore(repos.DB),
-			admissions: repository.NewPostgresAdmissionStore(repos.DB),
-			close: func() { _ = repos.DB.Close() },
+			admissions:  repository.NewPostgresAdmissionStore(repos.DB),
+			close:       func() { _ = repos.DB.Close() },
 		}, nil
 	}
 	tasks := tenantrepo.NewScopedTasks(repository.NewMemoryTasks())
 	routes := tenantrepo.NewScopedRouteDecisions(repository.NewMemoryRouteDecisions(), tasks)
 	costs := tenantrepo.NewScopedCostEvents(repository.NewMemoryCostEvents(), tasks)
 	return runtimeStores{
-		models: repository.NewMemoryModels(),
+		models:      repository.NewMemoryModels(),
 		deployments: repository.NewMemoryDeployments(),
-		tasks: tasks,
-		routes: routes,
-		costs: costs,
-		traces: tracepkg.NewMemoryStore(),
+		tasks:       tasks,
+		routes:      routes,
+		costs:       costs,
+		traces:      tracepkg.NewMemoryStore(),
 		evaluations: evaluation.NewMemoryStore(),
-		admissions: admission.NewMemoryStore(),
-		close: func() {},
+		admissions:  admission.NewMemoryStore(),
+		close:       func() {},
 	}, nil
 }
 
@@ -165,26 +165,26 @@ func upsertDeployment(ctx context.Context, deployments domain.DeploymentReposito
 
 func deploymentFromModel(model domain.Model, id string) domain.Deployment {
 	return domain.Deployment{
-		ID: id,
-		ModelID: model.ID,
-		ModelVersion: model.Version,
-		Provider: model.Provider,
-		Endpoint: model.Endpoint,
-		Mode: model.DeploymentMode,
-		DataResidency: model.DataResidency,
-		Health: model.Health,
-		HealthCheckedAt: model.HealthCheckedAt,
-		P95LatencyMS: model.P95LatencyMS,
-		ErrorRate: model.ErrorRate,
-		QuotaRemaining: model.QuotaRemaining,
+		ID:                id,
+		ModelID:           model.ID,
+		ModelVersion:      model.Version,
+		Provider:          model.Provider,
+		Endpoint:          model.Endpoint,
+		Mode:              model.DeploymentMode,
+		DataResidency:     model.DataResidency,
+		Health:            model.Health,
+		HealthCheckedAt:   model.HealthCheckedAt,
+		P95LatencyMS:      model.P95LatencyMS,
+		ErrorRate:         model.ErrorRate,
+		QuotaRemaining:    model.QuotaRemaining,
 		CapacityAvailable: model.CapacityAvailable,
-		QueueDepth: model.QueueDepth,
-		ServiceTiers: append([]domain.ServiceTier(nil), model.ServiceTiers...),
-		InferenceEfforts: append([]domain.InferenceEffort(nil), model.InferenceEfforts...),
-		Lifecycle: deploymentLifecycleFromModel(model.Lifecycle),
-		RoutingEligible: model.ApprovalStatus == domain.ApprovalApproved && model.Lifecycle != domain.ModelRetired && model.Lifecycle != domain.ModelRevoked,
-		CreatedAt: model.CreatedAt,
-		UpdatedAt: model.UpdatedAt,
+		QueueDepth:        model.QueueDepth,
+		ServiceTiers:      append([]domain.ServiceTier(nil), model.ServiceTiers...),
+		InferenceEfforts:  append([]domain.InferenceEffort(nil), model.InferenceEfforts...),
+		Lifecycle:         deploymentLifecycleFromModel(model.Lifecycle),
+		RoutingEligible:   model.ApprovalStatus == domain.ApprovalApproved && model.Lifecycle != domain.ModelRetired && model.Lifecycle != domain.ModelRevoked,
+		CreatedAt:         model.CreatedAt,
+		UpdatedAt:         model.UpdatedAt,
 	}
 }
 
@@ -217,10 +217,10 @@ func mockRuntimeRecords(now time.Time) (domain.Model, admission.Evidence) {
 		ID: "mock-model-v1", Name: "Mock Model", Version: "v1", Provider: "mock",
 		DeploymentMode: domain.DeploymentLocal, Lifecycle: domain.ModelActive,
 		Capabilities: []string{"structured-output", "json-schema", "chinese", "local-deployment"},
-		Pricing: domain.PricingProfile{Currency: "USD"}, Health: domain.HealthHealthy,
+		Pricing:      domain.PricingProfile{Currency: "USD"}, Health: domain.HealthHealthy,
 		HealthCheckedAt: &now, QuotaRemaining: -1, CapacityAvailable: -1,
-		ServiceTiers: []domain.ServiceTier{domain.TierStandard},
-		InferenceEfforts: []domain.InferenceEffort{domain.EffortLow},
+		ServiceTiers:      []domain.ServiceTier{domain.TierStandard},
+		InferenceEfforts:  []domain.InferenceEffort{domain.EffortLow},
 		EvaluationVersion: "mock-golden-v1", License: "internal",
 		ApprovalStatus: domain.ApprovalApproved, RiskLevel: "low",
 		CreatedAt: now, UpdatedAt: now,
@@ -246,13 +246,13 @@ func configuredProviderEvidence(modelID string, cfg config.ProviderConfig, now t
 		reviewedAt = &now
 	}
 	return admission.Evidence{
-		ID: "admission-" + shortDigest(modelID+"|"+cfg.LicenseID+"|"+cfg.LicenseTextRef),
+		ID:      "admission-" + shortDigest(modelID+"|"+cfg.LicenseID+"|"+cfg.LicenseTextRef),
 		ModelID: modelID, ModelVersion: cfg.ModelVersion, Status: status,
 		LicenseID: cfg.LicenseID, LicenseTextRef: cfg.LicenseTextRef, SourceRef: cfg.Endpoint,
 		CommercialUseAllowed: cfg.Approved, HostedServiceAllowed: cfg.Approved,
 		Reviewer: cfg.EvidenceReviewer, ReviewedAt: reviewedAt,
 		EvidenceDigest: evidenceDigest(modelID, cfg.ModelVersion, cfg.LicenseID, cfg.LicenseTextRef),
-		CreatedAt: now,
+		CreatedAt:      now,
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 )
 
 type MemoryDeployments struct {
-	mu sync.RWMutex
+	mu    sync.RWMutex
 	items map[string]domain.Deployment
 }
 

@@ -9,12 +9,12 @@ import (
 
 func DeploymentCandidate(model domain.Model, deployment domain.Deployment, req Request, now time.Time) domain.RouteCandidate {
 	candidate := domain.RouteCandidate{
-		ModelID: model.ID,
-		ModelVersion: model.Version,
-		DeploymentID: deployment.ID,
-		RouteClass: req.RouteClass,
+		ModelID:         model.ID,
+		ModelVersion:    model.Version,
+		DeploymentID:    deployment.ID,
+		RouteClass:      req.RouteClass,
 		InferenceEffort: req.InferenceEffort,
-		ServiceTier: req.ServiceTier,
+		ServiceTier:     req.ServiceTier,
 	}
 	reject := func(reason string) { candidate.RejectionReasons = append(candidate.RejectionReasons, reason) }
 

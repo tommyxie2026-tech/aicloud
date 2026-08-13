@@ -53,14 +53,14 @@ func (r *Router) PlanWithDeployments(ctx context.Context, req Request, deploymen
 		return domain.RouteDecision{}, err
 	}
 	return domain.RouteDecision{
-		ID: fmt.Sprintf("route-%d", now.UnixNano()),
-		TaskID: req.TaskID,
-		Selected: selected,
-		Candidates: candidates,
-		Reason: fmt.Sprintf("selected deployment %s for %s@%s", selected.DeploymentID, selected.ModelID, selected.ModelVersion),
-		FallbackChain: fallback,
+		ID:              fmt.Sprintf("route-%d", now.UnixNano()),
+		TaskID:          req.TaskID,
+		Selected:        selected,
+		Candidates:      candidates,
+		Reason:          fmt.Sprintf("selected deployment %s for %s@%s", selected.DeploymentID, selected.ModelID, selected.ModelVersion),
+		FallbackChain:   fallback,
 		EvidenceVersion: req.EvidenceVersion,
-		PolicyVersion: req.PolicyVersion,
-		CreatedAt: now,
+		PolicyVersion:   req.PolicyVersion,
+		CreatedAt:       now,
 	}, nil
 }
