@@ -28,7 +28,10 @@ func reconcileDeploymentCostEvent(ctx context.Context, db *sql.DB, event domain.
 		return event, nil
 	}
 	if err != nil {
-		return domain.CostEvent{}, fmt.Errorf("load route identity for cost reconciliation: %w", err)
+		if ctx.Err() != nil {
+			return domain.CostEvent{}, ctx.Err()
+		}
+		return event, nil
 	}
 
 	var policyID, policyVersion, policyDigest string
@@ -42,6 +45,8 @@ func reconcileDeploymentCostEvent(ctx context.Context, db *sql.DB, event domain.
 		if err == nil {
 			policyID, policyVersion, policyDigest = policy.ID, policy.Version, policy.Digest
 		}
+	} else {
+		return event, nil
 	}
 	if errors.Is(err, ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
 		return event, nil
@@ -55,7 +60,7 @@ func reconcileDeploymentCostEvent(ctx context.Context, db *sql.DB, event domain.
 	if err := db.QueryRowContext(ctx, `SELECT payload FROM task_events WHERE task_id=$1 AND event_type='TaskRoutingStarted' AND payload->>'routeDecisionId'=$2 ORDER BY sequence DESC LIMIT 1`, event.TaskID, routeID).Scan(&payload); err == nil {
 		_ = json.Unmarshal(payload, &inputs)
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		return domain.CostEvent{}, fmt.Errorf("load route pricing inputs: %w", err)
+		return event, nil
 	}
 
 	usage := domain.PricingUsageEstimate{
