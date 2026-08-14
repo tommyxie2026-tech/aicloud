@@ -187,16 +187,16 @@ func createS3DCancelTask(t *testing.T, ctx context.Context, commands *repository
 		Task: task,
 		Event: domain.TaskEvent{
 			EventID: "event-task-d8-cancel", EventType: "TaskCreated",
-			Actor: domain.TaskEventActor{PrincipalType: string(identity.PrincipalUser), SubjectID: "operator-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: string(identity.PrincipalUser), SubjectID: "operator-a"},
 			Payload: payload, SchemaVersion: 1, OccurredAt: now, CreatedAt: now,
 		},
 		Idempotency: domain.IdempotencyRecord{
 			TenantID: "tenant-a", ProjectID: "project-a", Operation: "test.create.cancel-task",
 			Key: "create-task-d8-cancel", RequestDigest: "sha256:create-task-d8-cancel",
 			Status: domain.IdempotencyCompleted, ResponseCode: 202,
-			ResponseDigest: "sha256:create-task-d8-cancel-response",
+			ResponseDigest:  "sha256:create-task-d8-cancel-response",
 			ResponsePayload: json.RawMessage(`{"accepted":true}`),
-			CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour),
+			CreatedAt:       now, ExpiresAt: now.Add(24 * time.Hour),
 		},
 	})
 	if err != nil {
