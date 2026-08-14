@@ -15,9 +15,9 @@ import (
 
 type fakeActivityTasks struct {
 	domain.TaskRepository
-	task     domain.Task
-	err      error
-	getCalls int
+	task      domain.Task
+	err       error
+	getCalls  int
 	principal identity.Principal
 }
 
