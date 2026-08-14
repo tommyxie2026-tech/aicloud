@@ -227,8 +227,8 @@ func (a *PostgresLifecycleActivities) TransitionTask(ctx context.Context, input 
 	responseDigest := sha256Digest(responsePayload)
 
 	commit := repository.TaskCommandCommit{
-		Task:            next,
-		ExpectedVersion: input.ExpectedVersion,
+		Task:       next,
+		Transition: transition,
 		Event: domain.TaskEvent{
 			EventID:   tracepkg.NewID("task-event"),
 			EventType: eventType,
@@ -351,7 +351,7 @@ func (a *PostgresLifecycleActivities) attest(
 		AuthnMethod: WorkflowWorkerAuthnMethod,
 		Issuer:      WorkflowWorkerIssuer,
 	}
-	if err := principal.Validate(); err != nil {
+	if err := identity.Validate(principal); err != nil {
 		return ActivityExecutionInfo{}, identity.Principal{}, nonRetryable(ErrorTypeActivityScope, err)
 	}
 	if principal.ProjectID == "" {
