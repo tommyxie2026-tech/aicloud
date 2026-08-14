@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -74,6 +75,10 @@ func (s *Server) executeModel(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := validateModelExecutionRequest(request); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	businessRequest := request
 	businessRequest.RequestID = ""
 	digest, err := canonicalRequestDigest(struct {
@@ -106,6 +111,41 @@ func (s *Server) executeModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result.Result)
+}
+
+func validateModelExecutionRequest(request provider.ProviderRequest) error {
+	if request.TaskType == "" {
+		return fmt.Errorf("taskType is required")
+	}
+	if !isSupportedProviderTaskType(request.TaskType) {
+		return fmt.Errorf("taskType is unsupported")
+	}
+	if strings.TrimSpace(request.Instruction) == "" {
+		return fmt.Errorf("instruction is required")
+	}
+	if strings.TrimSpace(request.OutputSchema.Name) == "" {
+		return fmt.Errorf("outputSchema.name is required")
+	}
+	if strings.TrimSpace(request.OutputSchema.Version) == "" {
+		return fmt.Errorf("outputSchema.version is required")
+	}
+	return nil
+}
+
+func isSupportedProviderTaskType(taskType provider.TaskType) bool {
+	switch taskType {
+	case provider.TaskGeneratePlan,
+		provider.TaskGeneratePatch,
+		provider.TaskExplainRisk,
+		provider.TaskGenerateRollback,
+		provider.TaskGenerateValidationReport,
+		provider.TaskSummarizeState,
+		provider.TaskRepairYAML,
+		provider.TaskExplainPolicyFailure:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) taskTrace(w http.ResponseWriter, r *http.Request) {
