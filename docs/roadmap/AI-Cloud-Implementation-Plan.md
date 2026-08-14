@@ -39,7 +39,7 @@ Required capabilities:
 - commercial API, enterprise private endpoint, self-hosted open-source model, and local model support;
 - model lifecycle states: draft, active, degraded, deprecated, and retired.
 
-The Model Registry must be the source of truth for model capabilities, deployment mode, pricing, evaluation results, license evidence, risk level, and operational health.
+The Model Registry is the source of truth for immutable model identity, capability, evaluation, license, provenance and approval evidence. Deployment-specific health, capacity, region, endpoint and runtime pricing belong to the Deployment Registry introduced in R5.
 
 ### P0-2 Task-Level Cost Accounting
 
@@ -67,7 +67,7 @@ Required dimensions:
 - agent;
 - task;
 - workflow run;
-- model and provider;
+- model and deployment;
 - tool;
 - sandbox execution.
 
@@ -79,15 +79,17 @@ Cost per Successful Task
 
 ### P0-3 Agent Observability and Continuous Evaluation
 
-Every task must produce a complete execution trace covering planning, model calls, tool calls, policy decisions, sandbox execution, retries, approvals, validation, cost, and final result.
+Every task must produce a complete execution trace covering planning, model calls, deployment selection, tool calls, policy decisions, sandbox execution, retries, approvals, validation, cost, route outcomes, and final result.
 
 Evaluation must include:
 
 - offline benchmark datasets;
 - production trace sampling;
-- regression tests before model or prompt upgrades;
-- quality, cost, latency, safety, stability, and human-intervention metrics;
+- regression tests before model, prompt, harness, workflow or route-policy upgrades;
+- quality, cost, latency, safety, stability, fallback and human-intervention metrics;
 - model routing decisions based on enterprise task evidence rather than public benchmarks alone.
+
+Evaluation is progressively extended from model-level scoring to execution-configuration evaluation under R7.
 
 ### P0-4 Hybrid Model Deployment
 
@@ -98,9 +100,10 @@ AI Cloud must support a mixed model estate:
 - private cloud endpoints;
 - self-hosted open-source models;
 - local small models;
+- edge deployments where policy allows;
 - future domain-specific models.
 
-Control-plane APIs, policy, task execution, observability, and evaluation must work consistently across all deployment modes.
+Control-plane APIs, policy, task execution, observability, and evaluation must work consistently across all deployment modes. A model version may have multiple deployments and the router selects a deployment independently from immutable model identity.
 
 ### P0-5 Secure Tool and Enterprise-System Access
 
@@ -115,9 +118,11 @@ Tool Gateway
   |
 Policy Engine
   |
+Approval when required
+  |
 Credential Broker
   |
-Enterprise Resource
+Sandbox or Approved Enterprise Resource
 ```
 
 Required controls:
@@ -152,22 +157,23 @@ The router must account for more than quality and unit price.
 
 Routing inputs must include:
 
-- current provider health;
+- deployment health;
 - quota and rate-limit availability;
 - regional availability;
 - estimated queue time;
 - context and capability fit;
 - cost budget;
 - tenant policy;
-- model evaluation score;
-- data-residency restrictions.
+- execution-evaluation evidence;
+- data-residency restrictions;
+- inference effort and service tier when supported.
 
 Required reliability controls:
 
 - health checking;
 - timeout and bounded retry;
 - circuit breaking;
-- provider and model fallback chains;
+- deployment and model fallback chains;
 - request admission control;
 - budget and capacity reservation;
 - degraded-mode behavior;
@@ -205,7 +211,7 @@ Evaluation Result
 Exit criteria:
 
 - one provider-neutral request can execute through at least two adapters;
-- each execution records model version, trace ID, token usage, estimated cost, and validation result;
+- each execution records model version, deployment identity where applicable, trace ID, token usage, estimated cost, and validation result;
 - unsupported provider-specific fields do not leak into the platform domain model.
 
 ## 4. Phase 1: AI Cloud MVP
@@ -217,8 +223,9 @@ Deliver:
 - unified model protocol;
 - Model Gateway and provider adapters;
 - Model Registry;
+- Deployment Registry foundation;
 - commercial API and self-hosted model integration paths;
-- capability-aware model routing;
+- capability-aware model and deployment routing;
 - health checks, circuit breaker, timeout, retry, and fallback;
 - task-level usage and cost ledger;
 - Policy Engine;
@@ -241,9 +248,10 @@ Recommended technology:
 Exit criteria:
 
 - at least one commercial provider and one self-hosted or private provider are available behind the same API;
+- one model version can be represented independently from one or more deployment endpoints;
 - a provider outage or quota exhaustion triggers a policy-compliant fallback;
-- every task exposes total cost, selected model, selection reason, retry history, and final status;
-- task traces connect API request, workflow, model call, tool call, and sandbox execution.
+- every task exposes total cost, selected model and deployment, selection reason, retry history, and final status;
+- task traces connect API request, workflow, route decision, model call, tool call, and sandbox execution.
 
 ## 5. Phase 2: Enterprise AI Platform
 
@@ -255,21 +263,23 @@ Add:
 - RBAC and workload identity;
 - Credential Vault and short-lived credentials;
 - production MCP and enterprise Tool Gateway;
-- model evaluation platform;
+- execution-evaluation platform;
 - AI FinOps budgets, showback, and chargeback;
 - model license and supply-chain governance;
 - model artifact signature and approval workflow;
 - production capacity management and admission control;
 - regional routing and data-residency policy;
+- Agent Harness Registry;
+- route-outcome feedback and controlled route-policy improvement;
 - agent package and marketplace foundation.
 
 Exit criteria:
 
-- tenant, project, agent, task, model, tool, and sandbox costs are independently reportable;
+- tenant, project, agent, task, model, deployment, tool, and sandbox costs are independently reportable;
 - unapproved or license-incompatible models cannot enter production routing;
 - high-risk tool actions require policy approval and optional human approval;
-- model upgrades must pass regression gates before production rollout;
-- the platform can operate in degraded mode when one provider or region is unavailable.
+- model, prompt, harness or routing-policy upgrades must pass regression gates before production rollout;
+- the platform can operate in degraded mode when one provider, deployment or region is unavailable.
 
 ## 6. Phase 3: AI Operating System
 
@@ -292,10 +302,11 @@ Capabilities:
 - autonomous agent lifecycle;
 - enterprise tool ecosystem;
 - model supply-chain management;
-- continuous online and offline evaluation;
+- continuous online and offline execution evaluation;
 - intelligent workload scheduling;
 - multi-cluster and multi-region execution;
-- capacity-aware and value-aware model routing;
+- capacity-aware and value-aware model/deployment routing;
+- evidence-driven route-policy improvement;
 - domain-specific agent and model packages;
 - industry workflow templates;
 - policy-controlled human and agent collaboration.
@@ -308,25 +319,33 @@ At this stage, competitive advantage is measured less by access to one model and
 
 No business workflow may depend directly on a provider SDK. Provider SDKs remain inside adapters.
 
-### 7.2 Task Economics
+### 7.2 Model and Deployment Independence
 
-All platform components must emit cost events linked to tenant, project, task, workflow, and trace IDs.
+Immutable model identity, provider integration and runtime deployment are separate concerns. A task route may select model, deployment, inference effort and service tier independently under policy constraints.
 
-### 7.3 Observability and Evaluation
+### 7.3 Task Economics
 
-New model, prompt, workflow, and tool versions require traceability and regression comparison.
+All platform components must emit cost events linked to tenant, project, task, workflow, route decision and trace IDs.
 
-### 7.4 Security and Trust Boundaries
+### 7.4 Observability and Execution Evaluation
+
+New model, deployment, prompt, harness, workflow, tool and route-policy versions require traceability and regression comparison.
+
+### 7.5 Security and Trust Boundaries
 
 Models propose. Policies decide. Humans approve when required. Controllers and sandboxed workers execute.
 
-### 7.5 Reliability and Capacity
+### 7.6 Reliability and Capacity
 
-Each external or private model endpoint must publish health, quota, capacity, latency, and error signals to the router.
+Each external or private model deployment must publish health, quota, capacity, latency, queue and error signals to the router with explicit signal freshness.
 
-### 7.6 License and Supply Chain
+### 7.7 License and Supply Chain
 
 Every model artifact or external endpoint must have an owner, source, version, license status, risk status, and approval record.
+
+### 7.8 Route Outcome Feedback
+
+Every completed route attempt should produce evidence that can be joined to task result, cost, latency, retries, fallback, validation, safety and human-intervention outcomes. Adaptive routing may consume this evidence only through versioned, reversible and policy-governed mechanisms.
 
 ## 8. Priority Order
 
@@ -334,27 +353,32 @@ Every model artifact or external endpoint must have an owner, source, version, l
 
 1. Unified model protocol and adapter contract.
 2. Model Registry operational metadata.
-3. Hybrid commercial and private model access.
-4. Task-level cost and trace ledger.
-5. Health-aware routing, circuit breaking, and fallback.
-6. Tool Gateway and Policy Engine boundary.
-7. Agent trace and minimum regression evaluation.
+3. Deployment Registry foundation and model/deployment separation.
+4. Hybrid commercial and private model access.
+5. Task-level cost and trace ledger.
+6. Health-aware routing, circuit breaking, and fallback.
+7. Tool Gateway and Policy Engine boundary.
+8. Agent trace and minimum regression evaluation.
 
 ### Next P1
 
-1. Open-model license and supply-chain governance.
-2. Capacity admission and regional routing.
-3. Enterprise evaluation datasets and release gates.
-4. Multi-tenant budgets and cost governance.
-5. Workload identity and short-lived credentials.
+1. Joint model/deployment/effort/service-tier routing.
+2. Execution Evaluation and RouteOutcome evidence.
+3. Agent Harness Registry.
+4. Open-model license and supply-chain governance.
+5. Capacity admission and regional routing.
+6. Enterprise evaluation datasets and release gates.
+7. Multi-tenant budgets and cost governance.
+8. Workload identity and short-lived credentials.
 
 ### Later P2
 
 1. Agent and tool marketplace.
-2. Intelligent value-aware scheduling.
-3. Multi-cluster optimization.
-4. Domain-specific model and workflow packages.
-5. Automated business-value and ROI optimization.
+2. Controlled evidence-driven routing adaptation.
+3. Intelligent value-aware scheduling.
+4. Multi-cluster optimization.
+5. Domain-specific model and workflow packages.
+6. Automated business-value and ROI optimization.
 
 ## 9. Architecture Decisions
 
@@ -373,4 +397,51 @@ The following ADRs guide implementation:
 - ADR-011 Identity and Credential Vault;
 - ADR-012 Model Marketplace.
 
-Future ADR work should focus on implementation decisions that directly support the roadmap, especially model routing and fallback, model supply-chain governance, task cost accounting, and hybrid deployment boundaries.
+Future ADR work should focus on implementation decisions that directly support the roadmap, especially model/deployment separation, joint routing and fallback, execution-evaluation identity, route-outcome evidence, harness versioning, model supply-chain governance, task cost accounting, and hybrid deployment boundaries.
+
+## 10. R5-R10 Next-Stage Contract References
+
+R5-R10 extend the current roadmap without replacing or renumbering v0.1 Engineering Milestones 1-9. They define the next architectural contracts to freeze before implementation expands.
+
+### R5 Deployment Registry
+
+Separate immutable model identity from runtime deployment identity. A Deployment references one ModelVersion and owns endpoint, deployment mode, region, runtime, quantization, cost model, health, capacity, quota, queue, lifecycle, ownership and routing-eligibility metadata.
+
+### R6 Capability / Economics / Runtime-Aware Router
+
+Route selection becomes joint selection across model, deployment, inference effort and service tier. Hard policy constraints are applied before soft optimization over expected task success, total task cost, latency, capacity and reliability.
+
+### R7 Execution Evaluation
+
+Evaluation identity expands from model-only scoring to the exact execution configuration: model, deployment, prompt, harness, workflow, tools, permissions, policy, sandbox/runtime, budgets, retry configuration, dataset and validators.
+
+### R8 Route Outcome Feedback Loop
+
+Persist a RouteOutcome linked to Task, RouteDecision, Trace and Evaluation Evidence. It records success, fallback, retries, final cost, latency, quality, human intervention and safety/policy outcomes. Automatic production-policy mutation remains deferred until replay, rollback and governance controls exist.
+
+### R9 Agent Harness Registry
+
+Version prompt/context strategy, memory/state strategy, tool set, control flow, retry/recovery, verification, permission profile and tracing configuration as a first-class Harness definition. Model-harness pairings become reproducible evaluation targets.
+
+### R10 Tool Execution Governance
+
+Keep Tool Gateway as the mandatory enterprise execution choke point regardless of MCP or other tool protocols. Enforce deterministic policy, task-scoped credentials, approval, sandbox/network boundaries, audit evidence, timeout/idempotency and rollback/compensation metadata where supported.
+
+Detailed rationale, architecture shape, acceptance direction and external evidence are maintained in:
+
+- `docs/roadmap/2026-08-11-industry-signals-and-architecture-implications.md`
+- `docs/roadmap/2026-08-11-industry-signals-and-architecture-implications.zh-CN.md`
+
+The canonical next-stage execution chain is:
+
+```text
+Task
+  -> Capability Requirements
+  -> Model
+  -> Deployment
+  -> Inference Effort / Service Tier
+  -> Harness / Agent Runtime
+  -> Governed Tool Execution
+  -> Trace + Evaluation + CostEvent + RouteOutcome
+  -> Policy-bounded Routing Feedback
+```

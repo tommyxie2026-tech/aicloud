@@ -172,29 +172,30 @@ The current implementation priority is not to connect the largest possible numbe
 
 ```text
 Operational Model Registry
+-> Deployment Registry
 -> deterministic / efficient / specialist / flagship routing
--> model + inference effort + service tier selection
+-> model + deployment + inference effort + service tier selection
 -> hybrid commercial and internal-model deployment
 -> task-level cost ledger
 -> Tool Gateway + Policy + short-lived credentials + Sandbox
 -> Agent attack and privilege-boundary tests
 -> health, quota, capacity, latency, circuit breaker, and fallback
--> full Trace and reproducible evaluation evidence
+-> full Trace + Execution Evaluation + RouteOutcome evidence
 -> license and provenance production admission
 ```
 
 The ten current P0 capabilities are:
 
-1. operational Model Registry;
-2. joint routing of model, inference effort, and service tier;
-3. commercial API and internal-model hybrid deployment;
-4. total cost per successful task;
-5. Tool Gateway, Policy Engine, and Sandbox before broad Agent autonomy;
-6. model-license and provenance evidence admission;
-7. Agent-level attack and privilege-escalation tests;
+1. operational Model Registry with immutable model identity and evidence;
+2. Deployment Registry and separation of model identity from runtime endpoints;
+3. joint routing of model, deployment, inference effort, and service tier;
+4. commercial API and internal-model hybrid deployment;
+5. total cost per successful task;
+6. Tool Gateway, Policy Engine, and Sandbox before broad Agent autonomy;
+7. model-license, provenance and security evidence admission;
 8. health-, quota-, capacity-, latency-, and failure-aware routing;
 9. specialist routing for security, code, document, and future domain tasks;
-10. end-to-end Trace and reproducible evaluation configuration.
+10. end-to-end Trace, reproducible Execution Evaluation, and RouteOutcome evidence.
 
 Detailed implementation requirements, current progress, module mapping, test gates, and staged delivery are documented in:
 
@@ -202,6 +203,10 @@ Detailed implementation requirements, current progress, module mapping, test gat
 - [`docs/roadmap/AI-Cloud-Implementation-Plan.md`](docs/roadmap/AI-Cloud-Implementation-Plan.md)
 - [`docs/roadmap/v0.1-engineering-milestones.md`](docs/roadmap/v0.1-engineering-milestones.md)
 - [`docs/roadmap/AI-Cloud-Module-Implementation-Plan-and-Status.md`](docs/roadmap/AI-Cloud-Module-Implementation-Plan-and-Status.md)
+- [`docs/roadmap/2026-08-11-industry-signals-and-architecture-implications.md`](docs/roadmap/2026-08-11-industry-signals-and-architecture-implications.md)
+- [`docs/roadmap/2026-08-11-industry-signals-and-architecture-implications.zh-CN.md`](docs/roadmap/2026-08-11-industry-signals-and-architecture-implications.zh-CN.md)
+
+The new R5-R10 contract extension covers Deployment Registry, joint capability/economics/runtime routing, Execution Evaluation, RouteOutcome feedback, Agent Harness Registry, and Tool Execution Governance. These references extend the existing v0.1 roadmap rather than renumbering Milestones 1-9.
 
 The runnable v0.1 skeleton remains in Draft PR #1 until reviewed and merged. Code is counted as completed only after its acceptance criteria pass on `main`.
 
