@@ -45,13 +45,17 @@ func (a *CancelDeliveryAdapter) Deliver(ctx context.Context, message domain.Outb
 		return fmt.Errorf("workflow cancellation payload Task identity mismatch")
 	}
 
-	if err := a.engine.Cancel(ctx, CancelRequest{
+	request := CancelRequest{
 		TenantID:  message.TenantID,
 		ProjectID: message.ProjectID,
 		TaskID:    message.TaskID,
 		TraceID:   payload.TraceID,
 		Reason:    payload.Reason,
-	}); err != nil {
+	}
+	if err := request.Validate(); err != nil {
+		return fmt.Errorf("validate workflow cancellation request: %w", err)
+	}
+	if err := a.engine.Cancel(ctx, request); err != nil {
 		return fmt.Errorf("cancel durable Task workflow: %w", err)
 	}
 	return nil
