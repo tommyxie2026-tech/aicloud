@@ -31,32 +31,32 @@ type CommercialThreshold struct {
 }
 
 type LicenseEvidenceVersion struct {
-	ID                  string               `json:"id"`
-	Version             string               `json:"version"`
-	ModelVersionID      string               `json:"modelVersionId"`
-	LicenseID           string               `json:"licenseId"`
-	WeightAvailability  LicensePermission    `json:"weightAvailability"`
-	CommercialUse       LicensePermission    `json:"commercialUse"`
-	HostedService       LicensePermission    `json:"hostedService"`
-	Redistribution      LicensePermission    `json:"redistribution"`
-	DerivativeWorks     LicensePermission    `json:"derivativeWorks"`
-	AttributionRequired bool                 `json:"attributionRequired"`
-	NoticeRequired      bool                 `json:"noticeRequired"`
+	ID                  string                `json:"id"`
+	Version             string                `json:"version"`
+	ModelVersionID      string                `json:"modelVersionId"`
+	LicenseID           string                `json:"licenseId"`
+	WeightAvailability  LicensePermission     `json:"weightAvailability"`
+	CommercialUse       LicensePermission     `json:"commercialUse"`
+	HostedService       LicensePermission     `json:"hostedService"`
+	Redistribution      LicensePermission     `json:"redistribution"`
+	DerivativeWorks     LicensePermission     `json:"derivativeWorks"`
+	AttributionRequired bool                  `json:"attributionRequired"`
+	NoticeRequired      bool                  `json:"noticeRequired"`
 	Thresholds          []CommercialThreshold `json:"thresholds,omitempty"`
-	RevenueShareRef     string               `json:"revenueShareRef,omitempty"`
-	AdditionalFeeRef    string               `json:"additionalFeeRef,omitempty"`
-	AllowedGeographies  []string             `json:"allowedGeographies,omitempty"`
-	BlockedGeographies  []string             `json:"blockedGeographies,omitempty"`
-	AllowedCustomerTags []string             `json:"allowedCustomerTags,omitempty"`
-	BlockedCustomerTags []string             `json:"blockedCustomerTags,omitempty"`
-	EffectiveFrom       time.Time            `json:"effectiveFrom"`
-	EffectiveTo         *time.Time           `json:"effectiveTo,omitempty"`
-	ReviewAfter         *time.Time           `json:"reviewAfter,omitempty"`
-	EvidenceRef         string               `json:"evidenceRef"`
-	EvidenceDigest      string               `json:"evidenceDigest"`
-	Reviewer            string               `json:"reviewer,omitempty"`
-	ApprovalState       LicenseApprovalState `json:"approvalState"`
-	CreatedAt           time.Time            `json:"createdAt"`
+	RevenueShareRef     string                `json:"revenueShareRef,omitempty"`
+	AdditionalFeeRef    string                `json:"additionalFeeRef,omitempty"`
+	AllowedGeographies  []string              `json:"allowedGeographies,omitempty"`
+	BlockedGeographies  []string              `json:"blockedGeographies,omitempty"`
+	AllowedCustomerTags []string              `json:"allowedCustomerTags,omitempty"`
+	BlockedCustomerTags []string              `json:"blockedCustomerTags,omitempty"`
+	EffectiveFrom       time.Time             `json:"effectiveFrom"`
+	EffectiveTo         *time.Time            `json:"effectiveTo,omitempty"`
+	ReviewAfter         *time.Time            `json:"reviewAfter,omitempty"`
+	EvidenceRef         string                `json:"evidenceRef"`
+	EvidenceDigest      string                `json:"evidenceDigest"`
+	Reviewer            string                `json:"reviewer,omitempty"`
+	ApprovalState       LicenseApprovalState  `json:"approvalState"`
+	CreatedAt           time.Time             `json:"createdAt"`
 }
 
 func (e LicenseEvidenceVersion) Ref() string { return e.ID + "@" + e.Version }
