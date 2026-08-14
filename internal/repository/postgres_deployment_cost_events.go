@@ -19,6 +19,14 @@ func (r *PostgresRepositories) DeploymentCostEvents() *PostgresDeploymentCostEve
 }
 
 func (r *PostgresDeploymentCostEvents) Append(ctx context.Context, event domain.CostEvent) (domain.CostEvent, error) {
+	if r == nil || r.db == nil {
+		return domain.CostEvent{}, fmt.Errorf("database is required")
+	}
+	reconciled, err := reconcileDeploymentCostEvent(ctx, r.db, event)
+	if err != nil {
+		return domain.CostEvent{}, err
+	}
+	event = reconciled
 	metadata, err := json.Marshal(event.Metadata)
 	if err != nil {
 		return domain.CostEvent{}, fmt.Errorf("encode cost metadata: %w", err)
