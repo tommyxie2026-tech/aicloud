@@ -2,10 +2,13 @@ package httpapi
 
 import (
 	"bufio"
+	"net/http/httptest"
 	"os"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 )
 
 func TestOpenAPIOperations(t *testing.T) {
@@ -23,6 +26,33 @@ func TestOpenAPIOperations(t *testing.T) {
 	sort.Strings(expected)
 	if strings.Join(actual, "\n") != strings.Join(expected, "\n") {
 		t.Fatalf("OpenAPI operation drift\nactual=%v\nexpected=%v", actual, expected)
+	}
+}
+
+func TestEveryOpenAPIOperationResolvesThroughRuntimeAccessMap(t *testing.T) {
+	principal := identity.Principal{
+		Type:       identity.PrincipalUser,
+		SubjectID:  "contract-user",
+		TenantID:   "tenant-contract",
+		ProjectID:  "project-contract",
+		AuthnMethod: "test",
+		Issuer:     "test",
+	}
+	for _, operation := range parseOperations(t, readOpenAPI(t)) {
+		parts := strings.SplitN(operation, " ", 2)
+		if len(parts) != 2 {
+			t.Fatalf("invalid operation %q", operation)
+		}
+		path := strings.NewReplacer(
+			"{model_id}", "model-1",
+			"{task_id}", "task-1",
+			"{tool_id}", "tool-1",
+		).Replace(parts[1])
+		request := httptest.NewRequest(parts[0], "/api/v1"+path, nil)
+		resolved, _, known := resolveAPIAccess(request, principal)
+		if !known || resolved.Action == "" {
+			t.Fatalf("OpenAPI operation %s does not resolve through runtime access map: known=%v action=%q", operation, known, resolved.Action)
+		}
 	}
 }
 
