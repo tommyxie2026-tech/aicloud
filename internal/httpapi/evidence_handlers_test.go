@@ -74,7 +74,7 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 	routeRequest.Header.Set(idempotencyKeyHeader, "evidence-task-route")
 	assertHTTPStatus(t, handler, routeRequest, http.StatusCreated)
 
-	modelBody, _ := json.Marshal(map[string]any{"requestId": "request-1", "instruction": "produce JSON", "outputSchema": map[string]string{"name": "result", "version": "v1"}})
+	modelBody, _ := json.Marshal(map[string]any{"requestId": "request-1", "taskType": string(provider.TaskGeneratePlan), "instruction": "produce JSON", "outputSchema": map[string]string{"name": "result", "version": "v1"}})
 	modelRequest := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/model", bytes.NewReader(modelBody))
 	modelRequest.Header.Set(idempotencyKeyHeader, "evidence-task-model")
 	assertHTTPStatus(t, handler, modelRequest, http.StatusOK)
