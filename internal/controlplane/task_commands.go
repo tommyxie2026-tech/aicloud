@@ -71,6 +71,7 @@ func (s *Service) CreateTaskIdempotent(ctx context.Context, input, agentID strin
 
 	payload, err := json.Marshal(map[string]any{
 		"taskId":  task.ID,
+		"traceId": task.TraceID,
 		"status":  task.Status,
 		"agentId": task.AgentID,
 	})
@@ -100,7 +101,7 @@ func (s *Service) CreateTaskIdempotent(ctx context.Context, input, agentID strin
 			EventType:      "TaskCreated",
 			Payload:        payload,
 			Destination:    "workflow.start",
-			IdempotencyKey: "task:create:" + strings.TrimSpace(metadata.IdempotencyKey),
+			IdempotencyKey: "workflow-start:" + principal.TenantID + ":" + task.ID,
 			Status:         domain.OutboxPending,
 			AvailableAt:    now,
 			CreatedAt:      now,
