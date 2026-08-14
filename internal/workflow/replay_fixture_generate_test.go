@@ -1,11 +1,8 @@
 package workflow
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
-	"fmt"
 	"testing"
 	"time"
 
@@ -14,12 +11,12 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 	temporalworker "go.temporal.io/sdk/worker"
-	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // TestGenerateS3CReplayFixture is temporary. It intentionally fails after
-// printing a gzip/base64 encoded real Temporal history so the stable fixture
-// can be checked in and this generator removed before merge.
+// printing a base64 encoded protobuf Temporal history so the stable fixture can
+// be checked in and this generator removed before merge.
 func TestGenerateS3CReplayFixture(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -79,20 +76,10 @@ func TestGenerateS3CReplayFixture(t *testing.T) {
 		history.Events = append(history.Events, event)
 	}
 
-	body, err := protojson.MarshalOptions{Indent: "  "}.Marshal(history)
+	body, err := proto.Marshal(history)
 	if err != nil {
 		t.Fatalf("marshal workflow history: %v", err)
 	}
-	var compressed bytes.Buffer
-	zw := gzip.NewWriter(&compressed)
-	if _, err := zw.Write(body); err != nil {
-		t.Fatalf("compress workflow history: %v", err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatalf("close workflow history compressor: %v", err)
-	}
-	encoded := base64.StdEncoding.EncodeToString(compressed.Bytes())
-	t.Fatalf("S3C_REPLAY_FIXTURE_BEGIN\n%s\nS3C_REPLAY_FIXTURE_END\njson_bytes=%d events=%d", encoded, len(body), len(history.Events))
+	encoded := base64.StdEncoding.EncodeToString(body)
+	t.Fatalf("S3C_REPLAY_FIXTURE_BEGIN\n%s\nS3C_REPLAY_FIXTURE_END\nproto_bytes=%d events=%d", encoded, len(body), len(history.Events))
 }
-
-var _ = fmt.Sprintf
