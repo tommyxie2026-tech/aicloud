@@ -205,8 +205,11 @@ func TestPostgresTransitionCommitsCanonicalEventAndIdempotencyEvidence(t *testin
 	if commands.resolveCalls != 1 || commands.commitCalls != 1 || tasks.getCalls != 1 {
 		t.Fatalf("resolve=%d get=%d commit=%d", commands.resolveCalls, tasks.getCalls, commands.commitCalls)
 	}
-	if commands.commit.ExpectedVersion != 1 || commands.commit.Event.EventType != "TaskPlanningStarted" {
-		t.Fatalf("unexpected commit: %+v", commands.commit)
+	if commands.commit.Task.Version != 1 || commands.commit.Transition.From != domain.TaskCreated || commands.commit.Transition.To != domain.TaskPlanning {
+		t.Fatalf("unexpected R6 transition evidence: %+v", commands.commit)
+	}
+	if commands.commit.Event.EventType != "TaskPlanningStarted" {
+		t.Fatalf("unexpected commit event: %+v", commands.commit)
 	}
 	if commands.commit.Event.Actor.PrincipalType != string(identity.PrincipalServiceAccount) || commands.commit.Event.Actor.SubjectID != WorkflowWorkerSubject {
 		t.Fatalf("unexpected event actor: %+v", commands.commit.Event.Actor)
