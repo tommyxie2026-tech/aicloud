@@ -69,6 +69,7 @@ func main() {
 	toolService, auditStore := buildSecureTools()
 	control := controlplane.New(models, stores.tasks, workflow.NoopEngine{}).
 		WithGovernance(stores.routes, stores.costs).
+		WithDeployments(stores.deployments).
 		WithSecureTools(toolService, auditStore).
 		WithEvidence(stores.traces, stores.evaluations, admissionService, modelRuntime)
 	principalVerifier, err := buildPrincipalVerifier(ctx, cfg.Auth)

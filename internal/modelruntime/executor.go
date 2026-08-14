@@ -30,22 +30,22 @@ func NewMemoryProviderRegistry() *MemoryProviderRegistry {
 	return &MemoryProviderRegistry{providers: make(map[string]provider.ModelProvider)}
 }
 
-func (r *MemoryProviderRegistry) Get(_ context.Context, modelID string) (provider.ModelProvider, error) {
+func (r *MemoryProviderRegistry) Get(_ context.Context, key string) (provider.ModelProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	item, ok := r.providers[modelID]
+	item, ok := r.providers[key]
 	if !ok {
-		return nil, fmt.Errorf("provider for model %s is not registered", modelID)
+		return nil, fmt.Errorf("provider for %s is not registered", key)
 	}
 	return item, nil
 }
 
-func (r *MemoryProviderRegistry) Put(_ context.Context, modelID string, item provider.ModelProvider) error {
-	if modelID == "" || item == nil {
-		return fmt.Errorf("model ID and provider are required")
+func (r *MemoryProviderRegistry) Put(_ context.Context, key string, item provider.ModelProvider) error {
+	if key == "" || item == nil {
+		return fmt.Errorf("provider key and provider are required")
 	}
 	r.mu.Lock()
-	r.providers[modelID] = item
+	r.providers[key] = item
 	r.mu.Unlock()
 	return nil
 }
@@ -55,6 +55,7 @@ type Attempt struct {
 	AttemptID    string                     `json:"attemptId"`
 	ModelID      string                     `json:"modelId"`
 	ModelVersion string                     `json:"modelVersion"`
+	DeploymentID string                     `json:"deploymentId,omitempty"`
 	Status       string                     `json:"status"`
 	ErrorCode    provider.ProviderErrorCode `json:"errorCode,omitempty"`
 	ErrorMessage string                     `json:"errorMessage,omitempty"`
@@ -119,13 +120,19 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 		operationID = taskID
 	}
 	attempt := Attempt{
-		OperationID: operationID,
-		AttemptID:   newPhysicalAttemptID(operationID, attemptNumber, started),
-		ModelID:     candidate.ModelID, ModelVersion: candidate.ModelVersion,
-		Status: "STARTED", StartedAt: started,
+		OperationID:  operationID,
+		AttemptID:    newPhysicalAttemptID(operationID, attemptNumber, started),
+		ModelID:      candidate.ModelID,
+		ModelVersion: candidate.ModelVersion,
+		DeploymentID: candidate.DeploymentID,
+		Status:       "STARTED",
+		StartedAt:    started,
 	}
-	key := candidate.ModelID + "@" + candidate.ModelVersion
-	allowed, snapshot, err := e.breaker.Allow(ctx, key)
+	breakerKey := candidate.DeploymentID
+	if breakerKey == "" {
+		breakerKey = candidate.ModelID + "@" + candidate.ModelVersion
+	}
+	allowed, snapshot, err := e.breaker.Allow(ctx, breakerKey)
 	if err != nil {
 		return attempt, nil, false, err
 	}
@@ -135,9 +142,17 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 		attempt.Retryable = true
 		attempt.CompletedAt = e.now().UTC()
 		e.appendTrace(ctx, taskID, traceID, candidate, attempt, "circuit breaker is open")
-		return attempt, nil, true, fmt.Errorf("circuit breaker is open for %s", key)
+		return attempt, nil, true, fmt.Errorf("circuit breaker is open for %s", breakerKey)
 	}
-	adapter, err := e.providers.Get(ctx, candidate.ModelID)
+
+	providerKey := candidate.DeploymentID
+	if providerKey == "" {
+		providerKey = candidate.ModelID
+	}
+	adapter, err := e.providers.Get(ctx, providerKey)
+	if err != nil && candidate.DeploymentID != "" {
+		adapter, err = e.providers.Get(ctx, candidate.ModelID)
+	}
 	if err != nil {
 		attempt.Status = "FAILED"
 		attempt.ErrorMessage = err.Error()
@@ -156,7 +171,7 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 		attempt.ErrorMessage = err.Error()
 		attempt.Retryable = retryable
 		if retryable {
-			snapshot, breakerErr := e.breaker.Failure(ctx, key)
+			snapshot, breakerErr := e.breaker.Failure(ctx, breakerKey)
 			if breakerErr != nil {
 				return attempt, nil, false, breakerErr
 			}
@@ -165,7 +180,7 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 		e.appendTrace(ctx, taskID, traceID, candidate, attempt, err.Error())
 		return attempt, nil, retryable, err
 	}
-	if err := e.breaker.Success(ctx, key); err != nil {
+	if err := e.breaker.Success(ctx, breakerKey); err != nil {
 		return attempt, nil, false, err
 	}
 	attempt.Status = "SUCCEEDED"
@@ -176,9 +191,16 @@ func (e *Executor) executeCandidate(ctx context.Context, taskID, traceID string,
 			return attempt, nil, false, modelErr
 		}
 		_, costErr := e.costs.RecordModelUsage(ctx, cost.ModelUsage{
-			TaskID: taskID, TraceID: traceID, Provider: model.Provider,
-			ModelID: model.ID, ModelVersion: model.Version, Pricing: model.Pricing,
-			Usage: response.TokenUsage, Attempt: attemptNumber, ServiceTier: candidate.ServiceTier,
+			TaskID:       taskID,
+			TraceID:      traceID,
+			Provider:     model.Provider,
+			ModelID:      model.ID,
+			ModelVersion: model.Version,
+			DeploymentID: candidate.DeploymentID,
+			Pricing:      model.Pricing,
+			Usage:        response.TokenUsage,
+			Attempt:      attemptNumber,
+			ServiceTier:  candidate.ServiceTier,
 		})
 		if costErr != nil {
 			return attempt, nil, false, costErr
@@ -218,17 +240,24 @@ func (e *Executor) appendTrace(ctx context.Context, taskID, traceID string, cand
 	} else if attempt.Status == "SKIPPED_OPEN_CIRCUIT" {
 		status = tracepkg.StatusSkipped
 	}
+	attributes := map[string]string{
+		"model.operation_id": attempt.OperationID,
+		"model.attempt_id":   attempt.AttemptID,
+		"model.id":           candidate.ModelID,
+		"model.version":      candidate.ModelVersion,
+		"route.class":        string(candidate.RouteClass),
+		"service.tier":       string(candidate.ServiceTier),
+		"inference.effort":   string(candidate.InferenceEffort),
+		"attempt.status":     attempt.Status,
+		"circuit.state":      string(attempt.CircuitState),
+	}
+	if candidate.DeploymentID != "" {
+		attributes["deployment.id"] = candidate.DeploymentID
+	}
 	_ = e.traces.Append(ctx, tracepkg.Event{
 		ID: tracepkg.NewID("trace-event"), TraceID: traceID, TaskID: taskID,
 		SpanID: tracepkg.NewID("span"), Name: "model.generate", Kind: "MODEL_CALL",
-		Status: status, Message: message,
-		Attributes: map[string]string{
-			"model.operation_id": attempt.OperationID, "model.attempt_id": attempt.AttemptID,
-			"model.id": candidate.ModelID, "model.version": candidate.ModelVersion,
-			"route.class": string(candidate.RouteClass), "service.tier": string(candidate.ServiceTier),
-			"inference.effort": string(candidate.InferenceEffort), "attempt.status": attempt.Status,
-			"circuit.state": string(attempt.CircuitState),
-		},
+		Status: status, Message: message, Attributes: attributes,
 		StartedAt: attempt.StartedAt, EndedAt: &ended,
 	})
 }

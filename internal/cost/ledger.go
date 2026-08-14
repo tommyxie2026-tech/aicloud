@@ -24,6 +24,7 @@ type ModelUsage struct {
 	Provider     string
 	ModelID      string
 	ModelVersion string
+	DeploymentID string
 	Pricing      domain.PricingProfile
 	Usage        provider.TokenUsage
 	Attempt      int
@@ -54,12 +55,14 @@ func (l *Ledger) RecordModelUsage(ctx context.Context, usage ModelUsage) ([]doma
 			Provider:     usage.Provider,
 			ModelID:      usage.ModelID,
 			ModelVersion: usage.ModelVersion,
+			DeploymentID: usage.DeploymentID,
 			Quantity:     1,
 			Unit:         string(usage.ServiceTier),
 			UnitPrice:    premium,
 			Amount:       premium,
 			Currency:     currency,
 			Attempt:      usage.Attempt,
+			Metadata:     deploymentMetadata(usage.DeploymentID),
 			CreatedAt:    now.Add(2 * time.Nanosecond),
 		})
 	}
@@ -107,12 +110,21 @@ func newEvent(now time.Time, usage ModelUsage, component domain.CostComponent, q
 		Provider:     usage.Provider,
 		ModelID:      usage.ModelID,
 		ModelVersion: usage.ModelVersion,
+		DeploymentID: usage.DeploymentID,
 		Quantity:     quantity,
 		Unit:         unit,
 		UnitPrice:    unitPrice,
 		Amount:       quantity * unitPrice,
 		Currency:     currency,
 		Attempt:      usage.Attempt,
+		Metadata:     deploymentMetadata(usage.DeploymentID),
 		CreatedAt:    now,
 	}
+}
+
+func deploymentMetadata(id string) map[string]string {
+	if id == "" {
+		return nil
+	}
+	return map[string]string{"deployment_id": id}
 }

@@ -26,6 +26,7 @@ import (
 
 type runtimeStores struct {
 	models      domain.ModelRepository
+	deployments domain.DeploymentRepository
 	tasks       domain.TaskRepository
 	routes      domain.RouteDecisionRepository
 	costs       domain.CostEventRepository
@@ -51,9 +52,13 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 		postgresTasks := repository.NewScopedPostgresTasks(repos.DB)
 		tasks := tenantrepo.NewScopedTasks(postgresTasks)
 		routes := tenantrepo.NewScopedRouteDecisions(repos.RouteDecisions, tasks)
-		costs := tenantrepo.NewScopedCostEvents(repos.CostEvents, tasks)
+		costs := tenantrepo.NewScopedCostEvents(repos.DeploymentCostEvents(), tasks)
 		return runtimeStores{
-			models: repos.Models, tasks: tasks, routes: routes, costs: costs,
+			models:      repos.Models,
+			deployments: repos.DeploymentRepository(),
+			tasks:       tasks,
+			routes:      routes,
+			costs:       costs,
 			traces:      repository.NewPostgresTraceStore(repos.DB),
 			evaluations: repository.NewPostgresEvaluationStore(repos.DB),
 			admissions:  repository.NewPostgresAdmissionStore(repos.DB),
@@ -64,9 +69,15 @@ func buildRuntimeStores(ctx context.Context, cfg config.Config) (runtimeStores, 
 	routes := tenantrepo.NewScopedRouteDecisions(repository.NewMemoryRouteDecisions(), tasks)
 	costs := tenantrepo.NewScopedCostEvents(repository.NewMemoryCostEvents(), tasks)
 	return runtimeStores{
-		models: repository.NewMemoryModels(), tasks: tasks, routes: routes, costs: costs,
-		traces: tracepkg.NewMemoryStore(), evaluations: evaluation.NewMemoryStore(),
-		admissions: admission.NewMemoryStore(), close: func() {},
+		models:      repository.NewMemoryModels(),
+		deployments: repository.NewMemoryDeployments(),
+		tasks:       tasks,
+		routes:      routes,
+		costs:       costs,
+		traces:      tracepkg.NewMemoryStore(),
+		evaluations: evaluation.NewMemoryStore(),
+		admissions:  admission.NewMemoryStore(),
+		close:       func() {},
 	}, nil
 }
 
@@ -78,16 +89,35 @@ func initializeModelRuntime(ctx context.Context, stores runtimeStores, models *m
 	if err := upsertModel(ctx, models, mockModel); err != nil {
 		return nil, nil, err
 	}
+	mockDeployment := deploymentFromModel(mockModel, "deployment-mock-model-v1")
+	if err := upsertDeployment(ctx, stores.deployments, mockDeployment); err != nil {
+		return nil, nil, err
+	}
 	if err := appendEvidenceOnce(ctx, stores.admissions, admissionService, mockEvidence); err != nil {
 		return nil, nil, err
 	}
-	if err := providerRegistry.Put(ctx, mockModel.ID, mock.NewProvider()); err != nil {
+	mockProvider := mock.NewProvider()
+	if err := providerRegistry.Put(ctx, mockModel.ID, mockProvider); err != nil {
+		return nil, nil, err
+	}
+	if err := providerRegistry.Put(ctx, mockDeployment.ID, mockProvider); err != nil {
 		return nil, nil, err
 	}
 
 	if configured != nil {
 		modelID := providerModelID(cfg.Provider.Name, cfg.Provider.DefaultModel, cfg.Provider.ModelVersion)
+		model, err := models.Get(ctx, modelID)
+		if err != nil {
+			return nil, nil, err
+		}
+		deployment := deploymentFromModel(model, deploymentID(model.ID, cfg.Provider.Endpoint, cfg.Provider.DataResidency))
+		if err := upsertDeployment(ctx, stores.deployments, deployment); err != nil {
+			return nil, nil, err
+		}
 		if err := providerRegistry.Put(ctx, modelID, configured); err != nil {
+			return nil, nil, err
+		}
+		if err := providerRegistry.Put(ctx, deployment.ID, configured); err != nil {
 			return nil, nil, err
 		}
 		evidence := configuredProviderEvidence(modelID, cfg.Provider, time.Now().UTC())
@@ -114,6 +144,65 @@ func upsertModel(ctx context.Context, models *modelservice.Service, model domain
 	model.CreatedAt = current.CreatedAt
 	_, err = models.Update(ctx, model)
 	return err
+}
+
+func upsertDeployment(ctx context.Context, deployments domain.DeploymentRepository, item domain.Deployment) error {
+	if deployments == nil {
+		return fmt.Errorf("deployment repository is required")
+	}
+	current, err := deployments.Get(ctx, item.ID)
+	if errors.Is(err, repository.ErrNotFound) {
+		_, err = deployments.Create(ctx, item)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	item.CreatedAt = current.CreatedAt
+	_, err = deployments.Update(ctx, item)
+	return err
+}
+
+func deploymentFromModel(model domain.Model, id string) domain.Deployment {
+	return domain.Deployment{
+		ID:                id,
+		ModelID:           model.ID,
+		ModelVersion:      model.Version,
+		Provider:          model.Provider,
+		Endpoint:          model.Endpoint,
+		Mode:              model.DeploymentMode,
+		DataResidency:     model.DataResidency,
+		Health:            model.Health,
+		HealthCheckedAt:   model.HealthCheckedAt,
+		P95LatencyMS:      model.P95LatencyMS,
+		ErrorRate:         model.ErrorRate,
+		QuotaRemaining:    model.QuotaRemaining,
+		CapacityAvailable: model.CapacityAvailable,
+		QueueDepth:        model.QueueDepth,
+		ServiceTiers:      append([]domain.ServiceTier(nil), model.ServiceTiers...),
+		InferenceEfforts:  append([]domain.InferenceEffort(nil), model.InferenceEfforts...),
+		Lifecycle:         deploymentLifecycleFromModel(model.Lifecycle),
+		RoutingEligible:   model.ApprovalStatus == domain.ApprovalApproved && model.Lifecycle != domain.ModelRetired && model.Lifecycle != domain.ModelRevoked,
+		CreatedAt:         model.CreatedAt,
+		UpdatedAt:         model.UpdatedAt,
+	}
+}
+
+func deploymentLifecycleFromModel(state domain.ModelLifecycle) domain.DeploymentLifecycle {
+	switch state {
+	case domain.ModelActive:
+		return domain.DeploymentReady
+	case domain.ModelDegraded:
+		return domain.DeploymentDegraded
+	case domain.ModelRetired, domain.ModelRevoked:
+		return domain.DeploymentRetired
+	default:
+		return domain.DeploymentDiscovered
+	}
+}
+
+func deploymentID(modelID, endpoint, residency string) string {
+	return "deployment-" + shortDigest(strings.Join([]string{modelID, endpoint, residency}, "|"))
 }
 
 func appendEvidenceOnce(ctx context.Context, store admission.Store, service *admission.Service, evidence admission.Evidence) error {
