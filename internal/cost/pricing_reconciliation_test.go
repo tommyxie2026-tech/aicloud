@@ -20,14 +20,14 @@ func TestReconciliationUsesExactRouteTimePricingVersion(t *testing.T) {
 		ID: "price-deployment", Version: "v1", DeploymentID: "deployment-1", Currency: "USD",
 		InputPerMillion: 2, OutputPerMillion: 10,
 		InferenceEffortFactors: map[domain.InferenceEffort]float64{domain.EffortHigh: 1.5},
-		EffectiveFrom: routeTime.Add(-time.Hour), EffectiveTo: timePointer(routeTime.Add(time.Hour)),
+		EffectiveFrom:          routeTime.Add(-time.Hour), EffectiveTo: timePointer(routeTime.Add(time.Hour)),
 		Digest: "sha256:v1", CreatedAt: routeTime.Add(-time.Hour),
 	}
 	v2 := domain.PricingPolicy{
 		ID: "price-deployment", Version: "v2", DeploymentID: "deployment-1", Currency: "USD",
 		InputPerMillion: 20, OutputPerMillion: 100,
 		InferenceEffortFactors: map[domain.InferenceEffort]float64{domain.EffortHigh: 1.5},
-		EffectiveFrom: routeTime.Add(time.Hour), Digest: "sha256:v2", CreatedAt: routeTime.Add(time.Hour),
+		EffectiveFrom:          routeTime.Add(time.Hour), Digest: "sha256:v2", CreatedAt: routeTime.Add(time.Hour),
 	}
 	for _, policy := range []domain.PricingPolicy{v1, v2} {
 		if _, err := policies.Create(ctx, policy); err != nil {
@@ -49,7 +49,7 @@ func TestReconciliationUsesExactRouteTimePricingVersion(t *testing.T) {
 	actual, err := ledger.RecordReconciledModelUsage(ctx, cost.ModelUsage{
 		TaskID: "task-1", TraceID: "trace-1", Provider: "provider-1",
 		ModelID: "model-1", ModelVersion: "m1", DeploymentID: "deployment-1",
-		Usage: provider.TokenUsage{InputTokens: 1_000_000, OutputTokens: 100_000, TotalTokens: 1_100_000},
+		Usage:   provider.TokenUsage{InputTokens: 1_000_000, OutputTokens: 100_000, TotalTokens: 1_100_000},
 		Attempt: 1,
 	}, evidence, policies, domain.EffortHigh)
 	if err != nil {
