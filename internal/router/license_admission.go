@@ -11,7 +11,7 @@ import (
 
 func evaluateRouteLicense(ctx context.Context, repo domain.LicenseEvidenceVersionRepository, model domain.Model, deployment domain.Deployment, at time.Time) (string, []string) {
 	if repo == nil {
-		return "", []string{"versioned license evidence repository is unavailable"}
+		return "", nil
 	}
 	evidence, err := repo.Resolve(ctx, model.ID, at)
 	if err != nil {
