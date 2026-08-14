@@ -4,14 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 )
-
-var errLicenseEvidenceNotFound = errors.New("license evidence version not found")
 
 func (s *Service) syncVersionedLicenseEvidence(ctx context.Context, model domain.Model) error {
 	licenseRepo := s.LicenseEvidenceVersionRepository()
@@ -50,8 +47,14 @@ func (s *Service) syncVersionedLicenseEvidence(ctx context.Context, model domain
 		ApprovalState:       domain.LicenseApproved,
 		CreatedAt:           legacy.ReviewedAt.UTC(),
 	}
-	if _, err := licenseRepo.Get(ctx, item.ID, item.Version); err == nil {
-		return nil
+	items, err := licenseRepo.ListByModelVersion(ctx, model.ID)
+	if err != nil {
+		return fmt.Errorf("list versioned license evidence: %w", err)
+	}
+	for _, existing := range items {
+		if existing.Ref() == item.Ref() {
+			return nil
+		}
 	}
 	if _, err := licenseRepo.Create(ctx, item); err != nil {
 		return fmt.Errorf("create versioned license evidence: %w", err)
@@ -100,8 +103,4 @@ func permission(allowed bool) domain.LicensePermission {
 		return domain.LicenseAllowed
 	}
 	return domain.LicenseForbidden
-}
-
-func isLicenseEvidenceNotFound(err error) bool {
-	return errors.Is(err, errLicenseEvidenceNotFound)
 }
