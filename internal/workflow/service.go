@@ -79,14 +79,28 @@ func WorkflowID(taskID string) (string, error) {
 	return "task/" + taskID, nil
 }
 
+// Engine is the pre-S3 compatibility seam used only by the legacy non-durable
+// CreateTask path. New durable execution code must use DurableEngine.
+//
+// Deprecated: remove after S3C moves all Task starts behind the Outbox path.
 type Engine interface {
+	Start(context.Context, string) error
+}
+
+// DurableEngine is the S3 execution boundary. It is intentionally Temporal
+// neutral and carries trusted business identity explicitly.
+type DurableEngine interface {
 	Start(context.Context, StartRequest) (StartResult, error)
 	Cancel(context.Context, CancelRequest) error
 }
 
 type NoopEngine struct{}
 
-func (NoopEngine) Start(_ context.Context, request StartRequest) (StartResult, error) {
+func (NoopEngine) Start(context.Context, string) error { return nil }
+
+type NoopDurableEngine struct{}
+
+func (NoopDurableEngine) Start(_ context.Context, request StartRequest) (StartResult, error) {
 	if err := request.Validate(); err != nil {
 		return StartResult{}, err
 	}
@@ -97,6 +111,6 @@ func (NoopEngine) Start(_ context.Context, request StartRequest) (StartResult, e
 	return StartResult{WorkflowID: workflowID}, nil
 }
 
-func (NoopEngine) Cancel(_ context.Context, request CancelRequest) error {
+func (NoopDurableEngine) Cancel(_ context.Context, request CancelRequest) error {
 	return request.Validate()
 }
