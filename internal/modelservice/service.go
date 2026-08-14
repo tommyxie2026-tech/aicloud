@@ -35,6 +35,32 @@ func (s *Service) Update(ctx context.Context, model domain.Model) (domain.Model,
 	return s.repo.Update(ctx, model)
 }
 
+func (s *Service) ModelVersionRepository() domain.ModelVersionRepository {
+	if s == nil || s.repo == nil {
+		return nil
+	}
+	provider, ok := s.repo.(interface {
+		ModelVersionRepository() domain.ModelVersionRepository
+	})
+	if !ok {
+		return nil
+	}
+	return provider.ModelVersionRepository()
+}
+
+func (s *Service) LicenseEvidenceVersionRepository() domain.LicenseEvidenceVersionRepository {
+	if s == nil || s.repo == nil {
+		return nil
+	}
+	provider, ok := s.repo.(interface {
+		LicenseEvidenceVersionRepository() domain.LicenseEvidenceVersionRepository
+	})
+	if !ok {
+		return nil
+	}
+	return provider.LicenseEvidenceVersionRepository()
+}
+
 func applyDefaults(model *domain.Model, now time.Time) {
 	if model.Version == "" {
 		model.Version = "v1"
