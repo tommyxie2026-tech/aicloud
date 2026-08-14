@@ -73,11 +73,11 @@ func runTemporalWorker(
 	}
 	defer temporalClient.Close()
 
-	temporalWorker := newWorker(temporalClient, strings.TrimSpace(config.TaskQueue), worker.Options{
-		WorkerStopTimeout:           config.StopTimeout,
-		WorkflowPanicPolicy:         worker.BlockWorkflow,
-		DisableRegistrationAliasing: true,
-	})
+	temporalWorker := newWorker(
+		temporalClient,
+		strings.TrimSpace(config.TaskQueue),
+		temporalWorkerOptions(config),
+	)
 	if temporalWorker == nil {
 		return fmt.Errorf("Temporal worker factory returned nil worker")
 	}
@@ -91,6 +91,14 @@ func runTemporalWorker(
 	<-ctx.Done()
 	temporalWorker.Stop()
 	return nil
+}
+
+func temporalWorkerOptions(config WorkerConfig) worker.Options {
+	return worker.Options{
+		WorkerStopTimeout:           config.StopTimeout,
+		WorkflowPanicPolicy:         worker.BlockWorkflow,
+		DisableRegistrationAliasing: true,
+	}
 }
 
 func dialTemporalClient(ctx context.Context, options client.Options) (client.Client, error) {
