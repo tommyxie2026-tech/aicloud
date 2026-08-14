@@ -16,16 +16,16 @@ import (
 var ErrOutboxNotDeadLetter = errors.New("outbox message is not dead letter")
 
 type OutboxRedriveEvent struct {
-	RedriveEventID    string
-	TenantID          string
-	ProjectID         string
-	OutboxID          string
+	RedriveEventID     string
+	TenantID           string
+	ProjectID          string
+	OutboxID           string
 	ActorPrincipalType string
-	ActorSubjectID    string
-	Reason            string
-	PreviousAttempts  int
-	PreviousLastError string
-	RedrivenAt        time.Time
+	ActorSubjectID     string
+	Reason             string
+	PreviousAttempts   int
+	PreviousLastError  string
+	RedrivenAt         time.Time
 }
 
 // RedriveDeadLetter explicitly returns one dead-letter Outbox message to the
