@@ -91,7 +91,13 @@ func TestCancelTaskIdempotentCommitsBusinessCancellationAndOutboxTogether(t *tes
 		t.Fatalf("resolve=%d get=%d commit=%d", commands.resolveCalls, repo.getCalls, commands.commitCalls)
 	}
 	commit := commands.commit
-	if commit.ExpectedVersion != 4 || commit.Event.EventType != "TaskCancelled" || commit.Event.RequestID != "request-a" {
+	if commit.Task.Version != 4 || commit.Transition.From != domain.TaskExecuting || commit.Transition.To != domain.TaskCancelled {
+		t.Fatalf("unexpected cancellation transition: %+v", commit)
+	}
+	if commit.Transition.Actor != "user-a" || commit.Transition.Cause != "operator requested" || commit.Transition.At.IsZero() {
+		t.Fatalf("incomplete cancellation transition evidence: %+v", commit.Transition)
+	}
+	if commit.Event.EventType != "TaskCancelled" || commit.Event.RequestID != "request-a" {
 		t.Fatalf("unexpected cancellation commit: %+v", commit)
 	}
 	if len(commit.Outbox) != 1 || commit.Outbox[0].Destination != "workflow.cancel" {
