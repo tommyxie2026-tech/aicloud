@@ -95,10 +95,10 @@ func (e *TemporalEngine) Cancel(ctx context.Context, request CancelRequest) erro
 
 func (b sdkTemporalBackend) Start(ctx context.Context, request temporalStartRequest) (temporalStartResult, error) {
 	run, err := b.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                                      request.WorkflowID,
-		TaskQueue:                               request.TaskQueue,
-		WorkflowIDReusePolicy:                   enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		WorkflowIDConflictPolicy:                enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		ID:                                       request.WorkflowID,
+		TaskQueue:                                request.TaskQueue,
+		WorkflowIDReusePolicy:                    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIDConflictPolicy:                 enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		WorkflowExecutionErrorWhenAlreadyStarted: true,
 	}, request.WorkflowType, request.Input)
 	if err != nil {
