@@ -11,10 +11,10 @@ import (
 )
 
 type WorkerConfig struct {
-	Enabled    bool
-	Address    string
-	Namespace  string
-	TaskQueue  string
+	Enabled     bool
+	Address     string
+	Namespace   string
+	TaskQueue   string
 	StopTimeout time.Duration
 }
 
@@ -74,8 +74,8 @@ func runTemporalWorker(
 	defer temporalClient.Close()
 
 	temporalWorker := newWorker(temporalClient, strings.TrimSpace(config.TaskQueue), worker.Options{
-		WorkerStopTimeout:            config.StopTimeout,
-		WorkflowPanicPolicy:          worker.BlockWorkflow,
+		WorkerStopTimeout:           config.StopTimeout,
+		WorkflowPanicPolicy:         worker.BlockWorkflow,
 		DisableRegistrationAliasing: true,
 	})
 	if temporalWorker == nil {
