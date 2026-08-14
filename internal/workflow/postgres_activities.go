@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	WorkflowWorkerSubject          = "aicloud-workflow-worker"
-	WorkflowWorkerAuthnMethod      = "internal_workload_identity"
+	WorkflowWorkerSubject         = "aicloud-workflow-worker"
+	WorkflowWorkerAuthnMethod     = "internal_workload_identity"
 	WorkflowWorkerIssuer          = "aicloud"
 	ActivityTransitionOperationV1 = "workflow.activity.task-transition.v1"
 
@@ -60,14 +60,14 @@ func (c ActivityTrustConfig) normalized() (ActivityTrustConfig, error) {
 }
 
 type ActivityExecutionInfo struct {
-	WorkflowID   string
+	WorkflowID    string
 	WorkflowRunID string
-	WorkflowType string
-	Namespace    string
-	TaskQueue    string
-	ActivityID   string
-	ActivityType string
-	Attempt      int32
+	WorkflowType  string
+	Namespace     string
+	TaskQueue     string
+	ActivityID    string
+	ActivityType  string
+	Attempt       int32
 }
 
 type activityInfoProvider func(context.Context) ActivityExecutionInfo
@@ -152,6 +152,27 @@ func (a *PostgresLifecycleActivities) TransitionTask(ctx context.Context, input 
 	}
 
 	scopedCtx := identity.WithPrincipal(ctx, principal)
+	requestDigest, err := lifecycleTransitionDigest(input, execution)
+	if err != nil {
+		return TaskSnapshot{}, fmt.Errorf("digest lifecycle transition: %w", err)
+	}
+	existing, found, err := a.commands.ResolveIdempotency(scopedCtx, repository.IdempotencyLookup{
+		TenantID:      principal.TenantID,
+		ProjectID:     principal.ProjectID,
+		Operation:     ActivityTransitionOperationV1,
+		Key:           input.OperationKey,
+		RequestDigest: requestDigest,
+	})
+	if err != nil {
+		if errors.Is(err, repository.ErrIdempotencyConflict) {
+			return TaskSnapshot{}, nonRetryable(ErrorTypeActivityIdempotency, err)
+		}
+		return TaskSnapshot{}, err
+	}
+	if found {
+		return decodeReplaySnapshot(existing.ResponsePayload, input)
+	}
+
 	current, err := a.tasks.Get(scopedCtx, input.TaskID)
 	if err != nil {
 		return TaskSnapshot{}, a.mapScopedReadError(err)
@@ -202,10 +223,6 @@ func (a *PostgresLifecycleActivities) TransitionTask(ctx context.Context, input 
 	responsePayload, err := json.Marshal(committedSnapshot)
 	if err != nil {
 		return TaskSnapshot{}, fmt.Errorf("encode lifecycle idempotency response: %w", err)
-	}
-	requestDigest, err := lifecycleTransitionDigest(input, execution)
-	if err != nil {
-		return TaskSnapshot{}, fmt.Errorf("digest lifecycle transition: %w", err)
 	}
 	responseDigest := sha256Digest(responsePayload)
 
@@ -327,12 +344,12 @@ func (a *PostgresLifecycleActivities) attest(
 	}
 
 	principal := identity.Principal{
-		Type:       identity.PrincipalServiceAccount,
-		SubjectID:  a.trust.WorkerSubject,
-		TenantID:   strings.TrimSpace(tenantID),
-		ProjectID:  strings.TrimSpace(projectID),
+		Type:        identity.PrincipalServiceAccount,
+		SubjectID:   a.trust.WorkerSubject,
+		TenantID:    strings.TrimSpace(tenantID),
+		ProjectID:   strings.TrimSpace(projectID),
 		AuthnMethod: WorkflowWorkerAuthnMethod,
-		Issuer:     WorkflowWorkerIssuer,
+		Issuer:      WorkflowWorkerIssuer,
 	}
 	if err := principal.Validate(); err != nil {
 		return ActivityExecutionInfo{}, identity.Principal{}, nonRetryable(ErrorTypeActivityScope, err)
