@@ -68,6 +68,14 @@ func (a *MemoryLifecycleActivities) TransitionTask(_ context.Context, input Tran
 	if strings.TrimSpace(input.OperationKey) == "" {
 		return TaskSnapshot{}, fmt.Errorf("operation key is required")
 	}
+
+	// Scope is re-established before both first-application and idempotent replay.
+	// This deliberately models the S3D requirement that an idempotency hit can
+	// never become a Tenant/Project authorization bypass.
+	task, err := a.taskForScope(input.TenantID, input.ProjectID, input.TaskID, input.TraceID)
+	if err != nil {
+		return TaskSnapshot{}, err
+	}
 	if record, ok := a.operations[input.OperationKey]; ok {
 		if record.To != input.To {
 			return TaskSnapshot{}, fmt.Errorf("%w: %s was recorded for %s, requested %s", ErrOperationKeyConflict, input.OperationKey, record.To, input.To)
@@ -75,10 +83,6 @@ func (a *MemoryLifecycleActivities) TransitionTask(_ context.Context, input Tran
 		return record.Snapshot, nil
 	}
 
-	task, err := a.taskForScope(input.TenantID, input.ProjectID, input.TaskID, input.TraceID)
-	if err != nil {
-		return TaskSnapshot{}, err
-	}
 	if task.IsTerminal() {
 		return snapshotFromTask(task), nil
 	}
