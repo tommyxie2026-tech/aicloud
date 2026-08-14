@@ -35,8 +35,12 @@ func (r StartRequest) Validate() error {
 	if strings.TrimSpace(r.TraceID) == "" {
 		return fmt.Errorf("%w: trace ID is required", ErrInvalidStartRequest)
 	}
-	if strings.TrimSpace(r.WorkflowType) == "" {
+	workflowType := strings.TrimSpace(r.WorkflowType)
+	if workflowType == "" {
 		return fmt.Errorf("%w: workflow type is required", ErrInvalidStartRequest)
+	}
+	if workflowType != TaskExecutionWorkflowType {
+		return fmt.Errorf("%w: workflow type %q is unsupported", ErrInvalidStartRequest, workflowType)
 	}
 	return nil
 }
