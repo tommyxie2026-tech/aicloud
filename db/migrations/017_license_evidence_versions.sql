@@ -1,3 +1,6 @@
+ALTER TABLE model_versions
+    ADD COLUMN IF NOT EXISTS license_evidence_version_ref TEXT NOT NULL DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS license_evidence_versions (
     id TEXT NOT NULL,
     version TEXT NOT NULL,
@@ -46,5 +49,7 @@ CREATE INDEX IF NOT EXISTS license_evidence_model_effective_idx
 CREATE INDEX IF NOT EXISTS license_evidence_approval_idx
     ON license_evidence_versions(model_version_id, approval_state, effective_from DESC);
 
+COMMENT ON COLUMN model_versions.license_evidence_version_ref IS
+    'Current approved license evidence version reference. Historical RouteDecision evidence remains immutable when this pointer advances.';
 COMMENT ON TABLE license_evidence_versions IS
     'Immutable authoritative commercial-license evidence. New upstream terms create a new version; historical routing evidence must never be rewritten.';
