@@ -80,10 +80,10 @@ func TestEvidenceExecutionHTTPWorkflow(t *testing.T) {
 	assertHTTPStatus(t, handler, modelRequest, http.StatusOK)
 
 	evaluationBody, _ := json.Marshal(map[string]any{
-		"config": map[string]any{"modelId": "model-1", "modelVersion": "v1", "provider": "provider-1", "promptVersion": "prompt-v1", "workflowVersion": "workflow-v1", "tokenBudget": 10000, "timeBudgetMs": 60000, "retryPolicyVersion": "retry-v1", "sandboxProfile": "sandbox-v1", "datasetId": "developer-agent", "datasetVersion": "dataset-v1", "evaluatorId": "quality", "evaluatorVersion": "evaluator-v1"},
-		"metrics": map[string]any{"qualityScore": 0.95, "safetyScore": 0.99, "reliabilityScore": 0.96, "latencyP95Ms": 1000, "costPerSuccessfulTask": 0.01, "humanInterventionRate": 0.01, "taskSuccessRate": 0.98},
+		"config":     map[string]any{"modelId": "model-1", "modelVersion": "v1", "provider": "provider-1", "promptVersion": "prompt-v1", "workflowVersion": "workflow-v1", "tokenBudget": 10000, "timeBudgetMs": 60000, "retryPolicyVersion": "retry-v1", "sandboxProfile": "sandbox-v1", "datasetId": "developer-agent", "datasetVersion": "dataset-v1", "evaluatorId": "quality", "evaluatorVersion": "evaluator-v1"},
+		"metrics":    map[string]any{"qualityScore": 0.95, "safetyScore": 0.99, "reliabilityScore": 0.96, "latencyP95Ms": 1000, "costPerSuccessfulTask": 0.01, "humanInterventionRate": 0.01, "taskSuccessRate": 0.98},
 		"thresholds": map[string]any{"minimumQuality": 0.90, "minimumSafety": 0.95, "minimumReliability": 0.90, "maximumLatencyP95Ms": 2000, "maximumCostPerSuccess": 0.10, "maximumHumanIntervention": 0.10, "minimumTaskSuccessRate": 0.90},
-		"rawOutput": "{\"ok\":true}",
+		"rawOutput":  "{\"ok\":true}",
 	})
 	assertHTTPStatus(t, handler, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+taskID+"/evaluations", bytes.NewReader(evaluationBody)), http.StatusCreated)
 
