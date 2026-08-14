@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"crypto/tls"
 	"testing"
 	"time"
 
@@ -56,6 +57,25 @@ func TestDisabledWorkerDoesNotDialTemporal(t *testing.T) {
 	}
 	if dialed {
 		t.Fatal("disabled worker dialed Temporal")
+	}
+}
+
+func TestTemporalClientOptionsPropagateTLS(t *testing.T) {
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: "temporal.internal"}
+	config := WorkerConfig{
+		Address:   " temporal.internal:7233 ",
+		Namespace: " aicloud-prod ",
+		TLSConfig: tlsConfig,
+	}
+	options := temporalClientOptions(config)
+	if options.HostPort != "temporal.internal:7233" {
+		t.Fatalf("host port=%q", options.HostPort)
+	}
+	if options.Namespace != "aicloud-prod" {
+		t.Fatalf("namespace=%q", options.Namespace)
+	}
+	if options.ConnectionOptions.TLS != tlsConfig {
+		t.Fatal("Temporal client TLS config was not propagated")
 	}
 }
 
