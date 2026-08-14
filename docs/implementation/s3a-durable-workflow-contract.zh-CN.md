@@ -50,13 +50,60 @@ EXPIRED
 
 工作流进度必须通过合法的 Task Command / Transition 与追加式 TaskEvent 表达。Temporal Workflow 本地状态只属于执行状态，不是业务事实。
 
-Workflow ID 由 Task 身份确定性生成，例如：
+Workflow ID 由 Task 身份确定性生成：
 
 ```text
 workflow_id = "task/" + task_id
+workflow_type = "task-execution-v1"
 ```
 
 v0.1 中，一个 Task 最多只能存在一个活动的主 Workflow Identity。
+
+### Workflow Engine 边界
+
+当前 `workflow.Engine.Start(ctx, taskID)` Seam 对 S3 来说过于弱，在引入 Temporal Adapter 前必须升级。Engine 抽象保持 Temporal-neutral，并显式携带可信业务关联信息。
+
+目标契约：
+
+```go
+type StartRequest struct {
+    TenantID     string
+    ProjectID    string
+    TaskID       string
+    TraceID      string
+    WorkflowType string
+}
+
+type StartResult struct {
+    WorkflowID     string
+    RunID          string
+    AlreadyStarted bool
+}
+
+type CancelRequest struct {
+    TenantID  string
+    ProjectID string
+    TaskID    string
+    TraceID   string
+    Reason    string
+}
+
+type Engine interface {
+    Start(context.Context, StartRequest) (StartResult, error)
+    Cancel(context.Context, CancelRequest) error
+}
+```
+
+规则：
+
+1. `StartRequest` 必须由可信 Outbox / Business Data 构建，不能来自未验证 Client Header。
+2. `WorkflowID` 始终由 `TaskID` 派生，调用方不能任意指定 Workflow ID。
+3. `RunID` 仅作为观测证据，不能作为业务身份。
+4. 对同一确定性 `WorkflowID` 重复启动已存在/正在运行的 Workflow 时，统一归一为幂等成功（`AlreadyStarted=true`）。
+5. 如果 Workflow ID 冲突并不代表同一 Task / 同一 Workflow Contract，则必须报错，不能静默接受。
+6. `Cancel` 只请求编排取消，不能直接修改 Task Status。
+7. 后续实现 Durable Task Cancellation 时，必须先提交业务 Transition/Event 与 `workflow.cancel` Outbox Intent，再由投递调用 `Engine.Cancel`。
+8. Engine Interface 不暴露数据库、Provider、Tool Gateway、Credential 或基础设施执行能力。
 
 ## 4. API 变更
 
@@ -121,8 +168,9 @@ API Command
    -> Commit
 
 Outbox Dispatcher
-   -> workflow.Engine.Start(task identity)
-   -> Temporal StartWorkflow
+   -> workflow-start DeliveryAdapter
+   -> workflow.Engine.Start(StartRequest)
+   -> Temporal StartWorkflow(workflow_id = task/<task_id>)
 
 Temporal Workflow
    -> Activity: load Task snapshot
@@ -140,6 +188,12 @@ Temporal Workflow
 所有业务写入只能发生在 Activity 或 Activity 调用的 Application Service 中。Workflow 代码本身必须保持 Deterministic，并且不能直接产生外部副作用。
 
 首个实现子切片应先用确定性的 Fake Activities 验证 Start / Restart / Replay，再接真实 Model 或 Tool 副作用。
+
+### Workflow 确定性规则
+
+Workflow Code 不能直接使用会影响业务决策的非确定性 Process / Runtime 能力，包括 Wall-clock Time、Random / UUID、非托管 Goroutine、Network Call、Database Call、Provider / Tool Call，以及结果会影响 Command 的非确定性迭代。此类工作必须进入 Activity 或 Workflow Engine 提供的确定性 Primitive。
+
+Workflow Definition 上线后的变更必须支持 Replay-safe Versioning。具体 Temporal SDK Versioning 机制在 S3B 中基于当前 Temporal Go SDK 官方文档核验后选择；冻结的不变量是：新部署必须能够重放受支持旧 Workflow Code 产生的历史。
 
 ## 8. 失败模型
 
@@ -166,14 +220,29 @@ Temporal Workflow
 4. Task 终态不可逆。
 5. Workflow 观察到 Task 已终态后应直接退出，不得写入第二次终态 Transition。
 6. Temporal 故障只能延迟 Task 执行，不能丢失 Task。
+7. 如果 Workflow Start 已成功但 Outbox Ack 失败，仍然是安全的：重复投递会解析到相同确定性 WorkflowID，并归一为 Already Started。
 
 ## 9. 幂等模型
 
-需要明确区分三层幂等：
+需要明确区分三层幂等。
 
 ### API Command Idempotency
 
 已由 R6 Command Kernel 为受支持命令提供。
+
+### Outbox Delivery Identity 与 Workflow Identity
+
+Outbox `IdempotencyKey` 是 Transport Delivery Identity，不是 Temporal WorkflowID，不能作为全局 Workflow Identity 使用。
+
+对于 `workflow.start`，S3B 应把 Durable Delivery Key 收敛为 Task Scope，例如：
+
+```text
+workflow-start:<tenant_id>:<task_id>
+```
+
+这样可以避免两个 Tenant 恰好复用相同公共 API `Idempotency-Key` 时形成跨租户碰撞。
+
+当前 R6 Task Create Outbox Key 来自 API Idempotency Key。在迁移完成前，Temporal Delivery Adapter 必须把确定性的 `task/<task_id>` 作为等价的下游持久去重机制，并且不能从当前 Outbox Key 派生 Temporal Identity。
 
 ### Workflow Start Idempotency
 
@@ -181,12 +250,6 @@ Temporal Workflow
 
 ```text
 workflow_id = task/<task_id>
-```
-
-Workflow Start 的 Outbox Delivery Key 必须稳定，例如：
-
-```text
-workflow-start:<task_id>
 ```
 
 同一个 Task 的重复投递不能创建多个并行主 Workflow。
@@ -241,6 +304,7 @@ S3 通过现有 `workflow.Engine` Seam 渐进引入。
 
 ```text
 NoopEngine
+   -> expanded Temporal-neutral Engine contract
    -> Deterministic In-Process Test Engine
    -> TemporalEngine（配置开关）
    -> Shadow / Dev 启用
@@ -249,6 +313,8 @@ NoopEngine
 
 整个过程中公共 API 契约保持不变。
 
+Legacy 非持久 `CreateTask` 路径可以继续只用于开发环境；生产持久性承诺只适用于 R6 已经能够原子提交 Task + TaskEvent + Outbox + Idempotency 的 Command Path。
+
 在 Temporal 启用前创建的历史 Task，除非有明确 Reconciliation / Migration Rule，否则继续保留旧执行模式；S3 不允许自动重放历史副作用。
 
 ## 13. 测试
@@ -256,15 +322,19 @@ NoopEngine
 S3 必须增加以下可执行测试：
 
 - Workflow ID 确定性生成；
+- Engine Start Request Validation 与可信身份传播；
 - 同一 Task 重复 Start 幂等；
+- 现有 Outbox API-Key Identity 绝不能作为 Temporal WorkflowID；
+- Task-scoped Workflow Start Delivery Key Migration；
 - API / DB Commit 后 Workflow 延迟启动；
+- Workflow Start 成功后 Outbox Ack 失败并重复投递；
 - Outbox 重复投递；
 - Worker Restart + Workflow Resume；
 - Activity Retry 不重复 Task Transition；
 - Stale Task Version Conflict 后的 Retry / Reload；
 - Terminal Task Short-Circuit；
 - Cancellation / Restart 行为；
-- Temporal Replay Determinism；
+- 受支持 Workflow Version 之间的 Temporal Replay Determinism；
 - Workflow Code 不直接调用 DB / Provider / Tool Network Client；
 - 完整 PostgreSQL Integration Path；
 - 中英文文档一致性检查；
@@ -278,12 +348,14 @@ S3A Contract Gate 只有在以下事项全部冻结后才通过：
 2. TaskEvent 是权威追加式业务历史。
 3. Temporal 只拥有 Orchestration / Execution History。
 4. Durable Task Command 在 Commit 后只能通过 Outbox 投递 Workflow Start。
-5. Workflow ID 对每个 Task 确定。
-6. Workflow Code Deterministic 且不直接产生外部副作用。
-7. 业务写入经幂等 Activity / Application Service 完成。
-8. Worker 必须重建 Tenant/Project Scope，并继续受 RLS 限制。
-9. Temporal Retry 不等于业务幂等。
-10. Restart / Replay Test 属于 Merge Gate。
+5. Workflow ID 对每个 Task 确定，并且与公共 API Idempotency Key 相互独立。
+6. Engine Boundary 显式携带可信 Tenant/Project/Task/Trace Identity，并保持 Temporal-neutral。
+7. Workflow Code Deterministic 且不直接产生外部副作用。
+8. 业务写入经幂等 Activity / Application Service 完成。
+9. Worker 必须重建 Tenant/Project Scope，并继续受 RLS 限制。
+10. Temporal Retry 不等于业务幂等。
+11. Business Cancellation 必须先提交，再投递 Orchestration Cancellation。
+12. Restart / Replay / Version Compatibility Test 属于 Merge Gate。
 
 ## 15. 回滚策略
 
@@ -291,7 +363,7 @@ Temporal Engine 引入期间必须保持可通过配置回滚。
 
 只有在确保同一 Task 不会同时被两个 Engine 执行时，才能将新 Task Start 切回旧 Engine。
 
-已经启动的 Temporal Workflow 必须由对应 Worker Version Drain、通过明确业务规则取消，或继续完成。Rollback 绝不能为同一 Task 启动第二个 Executor。
+已经启动的 Temporal Workflow 必须由 Replay-compatible Worker Version Drain、通过明确业务规则取消，或继续完成。Rollback 绝不能为同一 Task 启动第二个 Executor。
 
 ## 建议的 S3 交付切片
 
