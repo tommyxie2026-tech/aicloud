@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -139,56 +140,74 @@ func TaskLifecycleWorkflow(ctx temporalworkflow.Context, input TaskWorkflowInput
 
 		switch snapshot.Status {
 		case domain.TaskCreated:
-			next, err := transitionTask(ctx, input, snapshot, domain.TaskPlanning)
+			next, applied, err := transitionTask(ctx, input, snapshot, domain.TaskPlanning)
 			if err != nil {
 				return result, err
 			}
 			result.ObservedStatus = next.Status
-			result.Steps = append(result.Steps, string(domain.TaskPlanning))
+			if applied && next.Status == domain.TaskPlanning {
+				result.Steps = append(result.Steps, string(domain.TaskPlanning))
+			}
 		case domain.TaskPlanning:
 			if err := executeStub(ctx, ActivityPlanStub, input); err != nil {
 				return result, err
 			}
 			result.Steps = append(result.Steps, "plan")
-			next, err := transitionTask(ctx, input, snapshot, domain.TaskRouting)
+			next, applied, err := transitionTask(ctx, input, snapshot, domain.TaskRouting)
 			if err != nil {
 				return result, err
 			}
 			result.ObservedStatus = next.Status
-			result.Steps = append(result.Steps, string(domain.TaskRouting))
+			if applied && next.Status == domain.TaskRouting {
+				result.Steps = append(result.Steps, string(domain.TaskRouting))
+			}
 		case domain.TaskRouting:
 			if err := executeStub(ctx, ActivityRouteStub, input); err != nil {
 				return result, err
 			}
 			result.Steps = append(result.Steps, "route")
-			next, err := transitionTask(ctx, input, snapshot, domain.TaskExecuting)
+			next, applied, err := transitionTask(ctx, input, snapshot, domain.TaskExecuting)
 			if err != nil {
 				return result, err
 			}
 			result.ObservedStatus = next.Status
-			result.Steps = append(result.Steps, string(domain.TaskExecuting))
+			if applied && next.Status == domain.TaskExecuting {
+				result.Steps = append(result.Steps, string(domain.TaskExecuting))
+			}
 		case domain.TaskExecuting:
 			if err := executeStub(ctx, ActivityExecuteStub, input); err != nil {
 				return result, err
 			}
 			result.Steps = append(result.Steps, "execute")
-			next, err := transitionTask(ctx, input, snapshot, domain.TaskValidating)
+			next, applied, err := transitionTask(ctx, input, snapshot, domain.TaskValidating)
 			if err != nil {
 				return result, err
 			}
 			result.ObservedStatus = next.Status
-			result.Steps = append(result.Steps, string(domain.TaskValidating))
+			if applied && next.Status == domain.TaskValidating {
+				result.Steps = append(result.Steps, string(domain.TaskValidating))
+			}
 		case domain.TaskValidating:
 			if err := executeStub(ctx, ActivityValidateStub, input); err != nil {
 				return result, err
 			}
 			result.Steps = append(result.Steps, "validate")
-			next, err := transitionTask(ctx, input, snapshot, domain.TaskCompleted)
+			next, applied, err := transitionTask(ctx, input, snapshot, domain.TaskCompleted)
 			if err != nil {
 				return result, err
 			}
 			result.ObservedStatus = next.Status
+			if !applied || next.Status != domain.TaskCompleted {
+				continue
+			}
 			result.Steps = append(result.Steps, string(domain.TaskCompleted))
+			finalSnapshot, err := loadTaskSnapshot(ctx, input)
+			if err != nil {
+				return result, err
+			}
+			result.ObservedStatus = finalSnapshot.Status
+			result.AlreadyTerminal = false
+			return result, nil
 		case domain.TaskWaitingApproval:
 			return result, temporal.NewNonRetryableApplicationError(
 				"WAITING_APPROVAL is not handled by the S3C lifecycle",
@@ -216,7 +235,11 @@ func loadTaskSnapshot(ctx temporalworkflow.Context, input TaskWorkflowInput) (Ta
 	return snapshot, err
 }
 
-func transitionTask(ctx temporalworkflow.Context, input TaskWorkflowInput, snapshot TaskSnapshot, to domain.TaskStatus) (TaskSnapshot, error) {
+// transitionTask returns applied=false only when a stale-version error caused
+// the Workflow to reload authoritative state instead of committing this
+// transition attempt. Callers must not claim the target state in evidence when
+// applied is false.
+func transitionTask(ctx temporalworkflow.Context, input TaskWorkflowInput, snapshot TaskSnapshot, to domain.TaskStatus) (TaskSnapshot, bool, error) {
 	var next TaskSnapshot
 	err := temporalworkflow.ExecuteActivity(ctx, ActivityTransition, TransitionTaskInput{
 		TenantID:        input.TenantID,
@@ -229,12 +252,13 @@ func transitionTask(ctx temporalworkflow.Context, input TaskWorkflowInput, snaps
 		OperationKey:    TransitionOperationKey(input.TaskID, to),
 	}).Get(ctx, &next)
 	if err == nil {
-		return next, nil
+		return next, true, nil
 	}
 	if isApplicationErrorType(err, ErrorTypeStaleTaskVersion) {
-		return loadTaskSnapshot(ctx, input)
+		reloaded, reloadErr := loadTaskSnapshot(ctx, input)
+		return reloaded, false, reloadErr
 	}
-	return TaskSnapshot{}, err
+	return TaskSnapshot{}, false, err
 }
 
 func executeStub(ctx temporalworkflow.Context, activityName string, input TaskWorkflowInput) error {
