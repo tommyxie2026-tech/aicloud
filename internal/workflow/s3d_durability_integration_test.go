@@ -346,7 +346,7 @@ func createS3DDurableTask(t *testing.T, ctx context.Context, commands *repositor
 		Task: task,
 		Event: domain.TaskEvent{
 			EventID: "event-" + taskID, EventType: "TaskCreated",
-			Actor: domain.TaskEventActor{PrincipalType: string(identity.PrincipalUser), SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: string(identity.PrincipalUser), SubjectID: "user-a"},
 			Payload: payload, SchemaVersion: 1, OccurredAt: now, CreatedAt: now,
 		},
 		Outbox: []domain.OutboxMessage{{
