@@ -89,7 +89,9 @@ func reconcileDeploymentCostEvent(ctx context.Context, db *sql.DB, event domain.
 		}
 		for _, component := range quote.Components {
 			if pricingComponentMatchesCostEvent(component.Name, event.Component) {
-				event.UnitPrice = component.UnitPrice * component.Factor
+				// PricingQuote token components are expressed per million-token,
+				// while CostEvent retains the historical per-token unit contract.
+				event.UnitPrice = component.UnitPrice * component.Factor / 1_000_000
 				event.Amount = component.Amount
 				break
 			}
