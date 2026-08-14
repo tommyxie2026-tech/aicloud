@@ -37,6 +37,31 @@ func TestMemoryLifecycleTransitionIsIdempotentByOperationKey(t *testing.T) {
 	}
 }
 
+func TestMemoryLifecycleIdempotentReplayStillRequiresScope(t *testing.T) {
+	activities := NewMemoryLifecycleActivities(newLifecycleTask(domain.TaskCreated))
+	input := TransitionTaskInput{
+		TenantID:        "tenant-a",
+		ProjectID:       "project-a",
+		TaskID:          "task-a",
+		TraceID:         "trace-a",
+		ExpectedVersion: 1,
+		To:              domain.TaskPlanning,
+		Cause:           TaskLifecycleVersion,
+		OperationKey:    TransitionOperationKey("task-a", domain.TaskPlanning),
+	}
+	if _, err := activities.TransitionTask(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
+
+	input.TenantID = "tenant-other"
+	if _, err := activities.TransitionTask(context.Background(), input); !errors.Is(err, ErrLifecycleScope) {
+		t.Fatalf("cross-scope idempotent replay error=%v", err)
+	}
+	if activities.OperationCount() != 1 {
+		t.Fatalf("operation count=%d", activities.OperationCount())
+	}
+}
+
 func TestMemoryLifecycleRejectsOperationKeyReuseForDifferentTransition(t *testing.T) {
 	activities := NewMemoryLifecycleActivities(newLifecycleTask(domain.TaskCreated))
 	key := "task-a:transition:shared"
