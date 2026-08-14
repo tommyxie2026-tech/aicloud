@@ -44,7 +44,7 @@ paths:
       operationId: appendModelAdmissionEvidence
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AdmissionEvidence'}}}}
       responses:
-        '201': {description: Admission evidence, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '201': {description: Admission evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AdmissionEvidence'}}}}
         default: {$ref: '#/components/responses/Error'}
   /tools:
     get:
@@ -229,30 +229,101 @@ components:
       properties:
         items: {type: array, items: {type: object, additionalProperties: true}}
         nextPageToken: {type: string}
+    PricingProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        currency: {type: string}
+        inputPerMillion: {type: number}
+        outputPerMillion: {type: number}
+        cachedPerMillion: {type: number}
+        serviceTierFactor: {type: number}
+    LicenseEvidence:
+      type: object
+      additionalProperties: false
+      properties:
+        licenseId: {type: string}
+        licenseTextRef: {type: string}
+        upstreamModel: {type: string}
+        commercialUseAllowed: {type: boolean}
+        hostedServiceAllowed: {type: boolean}
+        redistributionAllowed: {type: boolean}
+        noticeRequired: {type: boolean}
+        reviewer: {type: string}
+        reviewedAt: {type: [string, 'null'], format: date-time}
+    ModelProvenance:
+      type: object
+      additionalProperties: false
+      properties:
+        source: {type: string}
+        baseModels: {type: array, items: {type: string}}
+        datasets: {type: array, items: {type: string}}
+        fineTunings: {type: array, items: {type: string}}
+        buildProcess: {type: string}
     Model:
       type: object
-      required: [id, name, provider]
-      additionalProperties: true
+      additionalProperties: false
       properties:
         id: {type: string}
         name: {type: string}
         version: {type: string}
         provider: {type: string}
-    ModelListResponse:
-      type: object
-      required: [items]
-      properties:
-        items: {type: array, items: {$ref: '#/components/schemas/Model'}}
-        nextPageToken: {type: string}
+        endpoint: {type: string}
+        deploymentMode: {type: string, enum: [public-api, enterprise-api, private-endpoint, self-hosted, local]}
+        lifecycle: {type: string, enum: [draft, active, degraded, deprecated, retired, revoked]}
+        capabilities: {type: array, items: {type: string}}
+        pricing: {$ref: '#/components/schemas/PricingProfile'}
+        health: {type: string, enum: [unknown, healthy, degraded, unhealthy]}
+        healthCheckedAt: {type: [string, 'null'], format: date-time}
+        p95LatencyMs: {type: integer}
+        errorRate: {type: number}
+        quotaRemaining: {type: integer}
+        capacityAvailable: {type: integer}
+        queueDepth: {type: integer}
+        serviceTiers: {type: array, items: {type: string, enum: [standard, priority, batch, provisioned]}}
+        inferenceEfforts: {type: array, items: {type: string, enum: [minimal, low, medium, high]}}
+        evaluationVersion: {type: string}
+        license: {type: string}
+        licenseEvidence: {$ref: '#/components/schemas/LicenseEvidence'}
+        provenance: {$ref: '#/components/schemas/ModelProvenance'}
+        artifactDigest: {type: string}
+        approvalStatus: {type: string, enum: [discovered, evidence-collected, reviewed, approved, restricted, rejected, revoked]}
+        riskLevel: {type: string}
+        dataResidency: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
     ModelWriteRequest:
       type: object
-      additionalProperties: true
-      required: [name, provider]
+      additionalProperties: false
       properties:
         id: {type: string}
         name: {type: string}
         version: {type: string}
         provider: {type: string}
+        endpoint: {type: string}
+        deploymentMode: {type: string, enum: [public-api, enterprise-api, private-endpoint, self-hosted, local]}
+        lifecycle: {type: string, enum: [draft, active, degraded, deprecated, retired, revoked]}
+        capabilities: {type: array, items: {type: string}}
+        pricing: {$ref: '#/components/schemas/PricingProfile'}
+        health: {type: string, enum: [unknown, healthy, degraded, unhealthy]}
+        healthCheckedAt: {type: [string, 'null'], format: date-time}
+        p95LatencyMs: {type: integer}
+        errorRate: {type: number}
+        quotaRemaining: {type: integer}
+        capacityAvailable: {type: integer}
+        queueDepth: {type: integer}
+        serviceTiers: {type: array, items: {type: string, enum: [standard, priority, batch, provisioned]}}
+        inferenceEfforts: {type: array, items: {type: string, enum: [minimal, low, medium, high]}}
+        evaluationVersion: {type: string}
+        license: {type: string}
+        licenseEvidence: {$ref: '#/components/schemas/LicenseEvidence'}
+        provenance: {$ref: '#/components/schemas/ModelProvenance'}
+        artifactDigest: {type: string}
+        approvalStatus: {type: string, enum: [discovered, evidence-collected, reviewed, approved, restricted, rejected, revoked]}
+        riskLevel: {type: string}
+        dataResidency: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
     RouteRequest:
       type: object
       additionalProperties: false
@@ -271,20 +342,29 @@ components:
         allowDegraded: {type: boolean}
         requireFreshSignals: {type: boolean}
         signalMaxAgeSeconds: {type: integer, minimum: 0}
+    SchemaReference:
+      type: object
+      additionalProperties: false
+      required: [name, version]
+      properties:
+        name: {type: string, minLength: 1}
+        version: {type: string, minLength: 1}
     ModelExecutionRequest:
       type: object
       additionalProperties: false
       required: [taskType, instruction, outputSchema]
       properties:
         requestId: {type: string}
-        taskType: {type: string}
+        taskType:
+          type: string
+          enum: [GeneratePlan, GeneratePatch, ExplainRisk, GenerateRollback, GenerateValidationReport, SummarizeState, RepairYAML, ExplainPolicyFailure]
         userId: {type: string}
         riskHint: {type: string}
         systemPrompt: {type: string}
-        instruction: {type: string}
+        instruction: {type: string, minLength: 1}
         context: {type: object, additionalProperties: true}
-        outputSchema: {type: object, additionalProperties: true}
-        safetyPolicy: {type: object, additionalProperties: true}
+        outputSchema: {$ref: '#/components/schemas/SchemaReference'}
+        safetyPolicy: {$ref: '#/components/schemas/SchemaReference'}
         maxOutputTokens: {type: integer, minimum: 0}
         temperature: {type: number}
     EvaluationRequest:
@@ -309,13 +389,29 @@ components:
         workspacePath: {type: string}
     AdmissionEvidence:
       type: object
-      additionalProperties: true
-      required: [id, modelId, modelVersion, evidenceDigest]
+      additionalProperties: false
       properties:
         id: {type: string}
         modelId: {type: string}
         modelVersion: {type: string}
+        status: {type: string, enum: [evidence-collected, reviewed, approved, restricted, rejected, revoked]}
+        licenseId: {type: string}
+        licenseTextRef: {type: string}
+        sourceRef: {type: string}
+        upstreamModels: {type: array, items: {type: string}}
+        datasetRefs: {type: array, items: {type: string}}
+        commercialUseAllowed: {type: boolean}
+        hostedServiceAllowed: {type: boolean}
+        redistributionAllowed: {type: boolean}
+        noticeRequired: {type: boolean}
+        noticeRef: {type: string}
+        artifactDigest: {type: string}
+        artifactSignature: {type: string}
+        securityScanRef: {type: string}
+        reviewer: {type: string}
+        reviewedAt: {type: [string, 'null'], format: date-time}
         evidenceDigest: {type: string}
+        createdAt: {type: string, format: date-time}
     ErrorEnvelope:
       type: object
       additionalProperties: false
