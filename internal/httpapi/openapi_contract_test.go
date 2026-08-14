@@ -31,12 +31,12 @@ func TestOpenAPIOperations(t *testing.T) {
 
 func TestEveryOpenAPIOperationResolvesThroughRuntimeAccessMap(t *testing.T) {
 	principal := identity.Principal{
-		Type:       identity.PrincipalUser,
-		SubjectID:  "contract-user",
-		TenantID:   "tenant-contract",
-		ProjectID:  "project-contract",
+		Type:        identity.PrincipalUser,
+		SubjectID:   "contract-user",
+		TenantID:    "tenant-contract",
+		ProjectID:   "project-contract",
 		AuthnMethod: "test",
-		Issuer:     "test",
+		Issuer:      "test",
 	}
 	for _, operation := range parseOperations(t, readOpenAPI(t)) {
 		parts := strings.SplitN(operation, " ", 2)
@@ -71,9 +71,17 @@ func TestOpenAPITaskStatesAndCommandHeaders(t *testing.T) {
 	}
 }
 
-func TestOpenAPICoreRequestsAreClosed(t *testing.T) {
+func TestOpenAPIRequestObjectsAreClosed(t *testing.T) {
 	body := readOpenAPI(t)
-	for _, name := range []string{"CreateTaskRequest:", "RouteRequest:", "ModelExecutionRequest:", "EvaluationRequest:", "ToolExecutionRequest:"} {
+	for _, name := range []string{
+		"CreateTaskRequest:",
+		"ModelWriteRequest:",
+		"RouteRequest:",
+		"ModelExecutionRequest:",
+		"EvaluationRequest:",
+		"ToolExecutionRequest:",
+		"AdmissionEvidence:",
+	} {
 		marker := "    " + name + "\n      type: object\n      additionalProperties: false"
 		if !strings.Contains(body, marker) {
 			t.Fatalf("%s accepts undocumented top-level fields", name)
