@@ -131,8 +131,8 @@ func (s *Service) CancelTaskIdempotent(
 	}
 
 	commit := repository.TaskCommandCommit{
-		Task:            next,
-		ExpectedVersion: expectedVersion,
+		Task:       next,
+		Transition: transition,
 		Event: domain.TaskEvent{
 			EventID:   tracepkg.NewID("task-event"),
 			EventType: "TaskCancelled",
