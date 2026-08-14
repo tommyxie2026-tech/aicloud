@@ -69,14 +69,9 @@ func (s *Service) CreateTaskIdempotent(ctx context.Context, input, agentID strin
 		return TaskCommandResult{}, err
 	}
 
-	payload, err := json.Marshal(map[string]any{
-		"taskId":  task.ID,
-		"traceId": task.TraceID,
-		"status":  task.Status,
-		"agentId": task.AgentID,
-	})
+	payload, err := taskCreatedPayload(task)
 	if err != nil {
-		return TaskCommandResult{}, fmt.Errorf("encode TaskCreated payload: %w", err)
+		return TaskCommandResult{}, err
 	}
 
 	commit := repository.TaskCreateCommit{
@@ -101,7 +96,7 @@ func (s *Service) CreateTaskIdempotent(ctx context.Context, input, agentID strin
 			EventType:      "TaskCreated",
 			Payload:        payload,
 			Destination:    "workflow.start",
-			IdempotencyKey: "workflow-start:" + principal.TenantID + ":" + task.ID,
+			IdempotencyKey: workflowStartDeliveryKey(principal.TenantID, task.ID),
 			Status:         domain.OutboxPending,
 			AvailableAt:    now,
 			CreatedAt:      now,
@@ -134,6 +129,23 @@ func (s *Service) CreateTaskIdempotent(ctx context.Context, input, agentID strin
 		})
 	}
 	return TaskCommandResult{Task: result.Task, Replayed: result.Replayed}, nil
+}
+
+func taskCreatedPayload(task domain.Task) (json.RawMessage, error) {
+	payload, err := json.Marshal(map[string]any{
+		"taskId":  task.ID,
+		"traceId": task.TraceID,
+		"status":  task.Status,
+		"agentId": task.AgentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encode TaskCreated payload: %w", err)
+	}
+	return payload, nil
+}
+
+func workflowStartDeliveryKey(tenantID, taskID string) string {
+	return "workflow-start:" + strings.TrimSpace(tenantID) + ":" + strings.TrimSpace(taskID)
 }
 
 func (s *Service) taskCommandStore() repository.TaskCommandStore {
