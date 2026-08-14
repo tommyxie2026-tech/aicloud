@@ -26,6 +26,19 @@ func TestWorkflowIDRejectsMissingTask(t *testing.T) {
 	}
 }
 
+func TestStartRequestRejectsNonCanonicalWorkflowType(t *testing.T) {
+	request := StartRequest{
+		TenantID:     "tenant-a",
+		ProjectID:    "project-a",
+		TaskID:       "task-a",
+		TraceID:      "trace-a",
+		WorkflowType: "other-workflow",
+	}
+	if err := request.Validate(); !errors.Is(err, ErrInvalidStartRequest) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
 func TestNoopDurableEngineValidatesTrustedScope(t *testing.T) {
 	engine := NoopDurableEngine{}
 	request := StartRequest{
