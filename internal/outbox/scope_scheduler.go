@@ -77,7 +77,7 @@ func (s *ScopeScheduler) ProcessOnce(ctx context.Context, limit int) (ScopeDispa
 			AuthnMethod: OutboxDispatcherAuthnMethod,
 			Issuer:      OutboxDispatcherIssuer,
 		}
-		if err := principal.Validate(); err != nil || principal.ProjectID == "" {
+		if err := identity.Validate(principal); err != nil || principal.ProjectID == "" {
 			failures = append(failures, fmt.Errorf("invalid Outbox dispatch scope: tenant/project identity is incomplete"))
 			continue
 		}
