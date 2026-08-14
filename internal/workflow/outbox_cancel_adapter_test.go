@@ -107,14 +107,8 @@ func TestCancelDeliveryAdapterValidatesTraceBeforeEngineCall(t *testing.T) {
 	if err := adapter.Deliver(context.Background(), message); err == nil {
 		t.Fatal("missing trace identity was accepted")
 	}
-	if engine.cancelCalls != 1 {
-		// DurableEngine owns CancelRequest validation; the adapter must never
-		// invent a trace ID. A real engine rejects the empty trace. This recorder
-		// intentionally exposes the exact request propagation contract.
-		t.Fatalf("cancel calls=%d", engine.cancelCalls)
-	}
-	if engine.cancelRequest.TraceID != "" {
-		t.Fatalf("adapter invented trace identity: %+v", engine.cancelRequest)
+	if engine.cancelCalls != 0 {
+		t.Fatalf("invalid cancellation reached DurableEngine.Cancel, calls=%d", engine.cancelCalls)
 	}
 }
 
