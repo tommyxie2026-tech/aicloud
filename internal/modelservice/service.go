@@ -20,7 +20,14 @@ func (s *Service) Get(ctx context.Context, id string) (domain.Model, error) {
 func (s *Service) Create(ctx context.Context, model domain.Model) (domain.Model, error) {
 	now := time.Now().UTC()
 	applyDefaults(&model, now)
-	return s.repo.Create(ctx, model)
+	created, err := s.repo.Create(ctx, model)
+	if err != nil {
+		return domain.Model{}, err
+	}
+	if err := s.syncVersionedLicenseEvidence(ctx, created); err != nil {
+		return created, err
+	}
+	return created, nil
 }
 
 func (s *Service) Update(ctx context.Context, model domain.Model) (domain.Model, error) {
@@ -32,7 +39,14 @@ func (s *Service) Update(ctx context.Context, model domain.Model) (domain.Model,
 		model.CreatedAt = current.CreatedAt
 	}
 	applyDefaults(&model, time.Now().UTC())
-	return s.repo.Update(ctx, model)
+	updated, err := s.repo.Update(ctx, model)
+	if err != nil {
+		return domain.Model{}, err
+	}
+	if err := s.syncVersionedLicenseEvidence(ctx, updated); err != nil {
+		return updated, err
+	}
+	return updated, nil
 }
 
 func (s *Service) ModelVersionRepository() domain.ModelVersionRepository {
