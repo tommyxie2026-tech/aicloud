@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -14,6 +15,46 @@ type Config struct {
 	RunMigrations  bool
 	Auth           AuthConfig
 	Provider       ProviderConfig
+	Temporal       TemporalConfig
+}
+
+type TemporalConfig struct {
+	Enabled                  bool
+	Address                  string
+	Namespace                string
+	TaskQueue                string
+	WorkerStopTimeoutSeconds int
+}
+
+func (c TemporalConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(c.Address) == "" {
+		return &ConfigError{Field: "AICLOUD_TEMPORAL_ADDRESS", Message: "is required when Temporal is enabled"}
+	}
+	if strings.TrimSpace(c.Namespace) == "" {
+		return &ConfigError{Field: "AICLOUD_TEMPORAL_NAMESPACE", Message: "is required when Temporal is enabled"}
+	}
+	if strings.TrimSpace(c.TaskQueue) == "" {
+		return &ConfigError{Field: "AICLOUD_TEMPORAL_TASK_QUEUE", Message: "is required when Temporal is enabled"}
+	}
+	if c.WorkerStopTimeoutSeconds <= 0 {
+		return &ConfigError{Field: "AICLOUD_TEMPORAL_WORKER_STOP_TIMEOUT_SECONDS", Message: "must be greater than zero when Temporal is enabled"}
+	}
+	return nil
+}
+
+type ConfigError struct {
+	Field   string
+	Message string
+}
+
+func (e *ConfigError) Error() string {
+	if e == nil {
+		return "invalid configuration"
+	}
+	return e.Field + " " + e.Message
 }
 
 type ProviderConfig struct {
@@ -47,6 +88,13 @@ func Load() Config {
 		RepositoryMode: env("AICLOUD_REPOSITORY_MODE", "memory"),
 		RunMigrations:  envBool("AICLOUD_RUN_MIGRATIONS", false),
 		Auth:           loadAuthConfig(),
+		Temporal: TemporalConfig{
+			Enabled:                  envBool("AICLOUD_TEMPORAL_ENABLED", false),
+			Address:                  env("AICLOUD_TEMPORAL_ADDRESS", "localhost:7233"),
+			Namespace:                env("AICLOUD_TEMPORAL_NAMESPACE", "default"),
+			TaskQueue:                env("AICLOUD_TEMPORAL_TASK_QUEUE", "aicloud-task-v1"),
+			WorkerStopTimeoutSeconds: envInt("AICLOUD_TEMPORAL_WORKER_STOP_TIMEOUT_SECONDS", 30),
+		},
 		Provider: ProviderConfig{
 			Enabled:          envBool("AICLOUD_PROVIDER_ENABLED", false),
 			Name:             env("AICLOUD_PROVIDER_NAME", "openai-compatible"),
