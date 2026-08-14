@@ -6,7 +6,7 @@ import (
 )
 
 func TestOutboxRedriveMigrationIsScopedAndAppendOnly(t *testing.T) {
-	body, err := migrationFiles.ReadFile("011_outbox_redrive_events.sql")
+	body, err := migrationFiles.ReadFile("018_outbox_redrive_events.sql")
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}
