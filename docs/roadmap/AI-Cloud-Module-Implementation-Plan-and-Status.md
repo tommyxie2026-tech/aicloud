@@ -1,6 +1,6 @@
 # AI Cloud Module Implementation Plan and Status
 
-> Status date: 2026-07-23  
+> Status date: 2026-08-24
 > Repository: `tommyxie2026-tech/aicloud`  
 > Target: AI Cloud v0.1 Developer AI Cloud MVP
 
@@ -25,24 +25,21 @@ Percentages are engineering estimates used for planning. A module is not conside
 | Product and strategic positioning | 100% | Completed |
 | Architecture and ADRs | 90% | Completed; minor consolidation remains |
 | Engineering design | 85% | Core API, schema, state-machine, deployment and repository structure are documented |
-| Skeleton code | 80% | Implemented in Draft PR #1, pending merge |
-| Runnable v0.1 platform | 20% | Minimal Model and Task APIs exist in Draft PR #1; real execution path is not implemented |
-| Enterprise governance | 5% | Mostly design only |
-| End-to-end Developer AI Cloud MVP | 10% | Scenario and interfaces are defined; full GitHub Issue-to-PR workflow is not implemented |
-| Overall AI Cloud v0.1 | 25% | Architecture is mature; implementation remains early |
+| Skeleton code | 95% | Go API/worker, repositories, migrations, Compose and Helm baseline are implemented |
+| Runnable v0.1 platform | 60% | Governed routing, model runtime, fallback, circuit breaker, trace, evaluation and cost foundations are implemented |
+| Enterprise governance | 25% | Model admission, policy/tool/sandbox seams and evidence APIs exist; identity and tenant enforcement remain |
+| End-to-end Developer AI Cloud MVP | 20% | Model-backed task execution is runnable; GitHub Issue-to-PR and durable sandbox workflow remain |
+| Overall AI Cloud v0.1 | 55% | Core execution control path exists; durable workflow and enterprise boundary are next |
 
 ### Important repository state
 
-The architecture and roadmap documents are available on `main`.
+The architecture, routing, security and evaluation work is available on `main`.
+The current development branch extends that baseline with the governed model
+execution API and remains under review in Draft PR #11.
 
-The first runnable skeleton is currently in:
-
-```text
-Draft PR #1
-branch: agent/aicloud-v01-skeleton
-```
-
-It includes API and worker entrypoints, modular packages, in-memory repositories, migration contracts, Docker Compose and a minimal Helm chart. It must be reviewed and merged before it can be counted as completed on the main development line.
+The implementation is intentionally a modular monolith: control plane, model
+runtime, routing, policy and tool boundaries are separate packages, but are not
+artificially split into independently deployed services yet.
 
 ## 3. Module implementation plan
 
@@ -85,9 +82,10 @@ It includes API and worker entrypoints, modular packages, in-memory repositories
 
 | Item | Status | Progress |
 |---|---|---:|
-| Health and readiness endpoints | Implemented, pending merge | 90% |
-| Model list/create API | Implemented, pending merge | 60% |
-| Task list/create/get API | Implemented, pending merge | 60% |
+| Health and readiness endpoints | Completed | 100% |
+| Model list/create/update API | Completed | 90% |
+| Task list/create/get API | Completed | 85% |
+| Governed model execution API | In progress | 75% |
 | Agent API | Planned | 10% |
 | Tool and Policy API | Planned | 5% |
 | API versioning and error model | In progress | 35% |
@@ -256,8 +254,9 @@ CREATED -> PLANNING -> EXECUTING -> WAITING_APPROVAL
 
 | Item | Status | Progress |
 |---|---|---:|
-| Evaluation platform design | Completed | 65% |
-| Telemetry interface seam | Implemented, pending merge | 15% |
+| Evaluation platform design and evidence API | In progress | 75% |
+| Telemetry interface seam | Completed | 40% |
+| Task trace store and execution events | In progress | 55% |
 | OpenTelemetry SDK wiring | Planned | 0% |
 | Task trace hierarchy | Planned | 10% |
 | Model/tool/sandbox span conventions | Planned | 0% |
@@ -295,11 +294,11 @@ Request -> Task -> Workflow -> Agent Run
 
 | Item | Status | Progress |
 |---|---|---:|
-| Cost-governance ADR and roadmap | Completed | 65% |
-| Task cost field | Implemented, pending merge | 15% |
-| Token accounting | Planned | 5% |
+| Cost-governance ADR and roadmap | Completed | 80% |
+| Task cost field and model-call ledger | In progress | 70% |
+| Token accounting | In progress | 65% |
+| Retry and failed-attempt cost | In progress | 35% |
 | Tool and sandbox cost accounting | Planned | 0% |
-| Retry and failed-attempt cost | Planned | 0% |
 | Budget policies and pre-checks | Planned | 0% |
 | Showback/chargeback reports | Planned | 0% |
 | Cost-aware routing | Planned | 0% |
@@ -341,11 +340,11 @@ Task total cost
 | Item | Status | Progress |
 |---|---|---:|
 | Hybrid deployment architecture | Completed | 60% |
-| Provider abstraction foundation | In progress | 35% |
-| Routing policy | Planned | 5% |
-| Health and capacity probes | Planned | 0% |
-| Circuit breaker | Planned | 0% |
-| Fallback chains | Planned | 0% |
+| Provider abstraction foundation | Completed | 85% |
+| Routing policy | In progress | 75% |
+| Health and capacity probes | In progress | 35% |
+| Circuit breaker | Completed | 75% |
+| Fallback chains | Completed | 70% |
 | Quota-aware routing | Planned | 0% |
 | Data-residency-aware routing | Planned | 0% |
 | Reason recording and replay | Planned | 0% |
@@ -437,7 +436,8 @@ Task total cost
 
 | Item | Status | Progress |
 |---|---|---:|
-| Scenario and architecture | Completed | 75% |
+| Scenario and architecture | Completed | 90% |
+| Model-backed task execution | In progress | 50% |
 | GitHub connector/tool | Planned | 10% |
 | Repository checkout and workspace | Planned | 5% |
 | Planning and code modification workflow | Planned | 5% |
@@ -493,7 +493,7 @@ Deliverables:
 - PostgreSQL migration runner;
 - development and Helm smoke tests.
 
-**Exit condition:** the repository has a reproducible, tested baseline on `main`.
+**Exit condition:** completed on the current `main` baseline.
 
 ### Stage 1: Persistence and real model connectivity
 
@@ -508,7 +508,8 @@ Deliverables:
 - model health, pricing and basic usage records;
 - first routing policy with deterministic fallback.
 
-**Exit condition:** one API Task can call a real model and persist the full result.
+**Exit condition:** substantially complete for the normalized provider path;
+durable provider invocation and broader private-model coverage remain.
 
 ### Stage 2: Durable task and Agent execution
 
@@ -523,7 +524,8 @@ Deliverables:
 - OpenTelemetry trace foundation;
 - immutable Task event and cost records.
 
-**Exit condition:** a long-running task survives component restart and can be reconstructed from trace and event history.
+**Exit condition:** not yet met. The current model runtime is synchronous and
+restart-safe durable workflow execution has not been connected.
 
 ### Stage 3: Secure tools and sandbox
 
@@ -538,7 +540,8 @@ Deliverables:
 - GitHub, filesystem and restricted shell tools;
 - Kubernetes Job sandbox with network-deny and resource limits.
 
-**Exit condition:** the Agent can safely modify and test code without direct infrastructure credentials.
+**Exit condition:** partially met at the policy/tool boundary; Kubernetes Job
+sandbox execution and the complete Developer Agent path remain.
 
 ### Stage 4: Evaluation, FinOps, supply chain and reliable routing
 
@@ -595,26 +598,27 @@ Multi-tenancy and identity
 
 ### Sprint objective
 
-Move from a branch-only skeleton to a durable baseline on `main` and begin the first real model-backed task path.
+Move from synchronous model execution to a recoverable task workflow while
+keeping the modular-monolith deployment boundary.
 
 ### Sprint backlog
 
-1. Review, fix and merge Draft PR #1.
-2. Add CI and branch protection requirements.
-3. Implement migration runner and PostgreSQL Model/Task repositories.
-4. Finalize Model and Task API schemas.
-5. Add one commercial model adapter and retain the deterministic mock adapter.
-6. Record model version, usage, latency, cost estimate and trace ID.
-7. Add the first routing policy and a deterministic fallback test.
+1. Review and merge the current Draft PR for the governed execution API.
+2. Persist Task state transitions and task event history.
+3. Introduce the first Temporal workflow and worker activity boundary.
+4. Add cancellation, timeout, retry and resume semantics.
+5. Connect model, tool, policy and evaluation events under one task trace.
+6. Add the first Kubernetes Job sandbox integration test.
+7. Update the Developer Agent acceptance test toward GitHub Issue-to-PR.
 
 ### Sprint success criteria
 
 - all checks pass on `main`;
-- API creates and retrieves persisted Models and Tasks;
-- a Task can invoke one real provider through the unified protocol;
-- the selected model and routing reason are stored;
-- restart does not lose Model or Task data;
-- tests cover provider failure and fallback behavior.
+- API creates, routes and executes Tasks through the unified protocol;
+- model runtime records fallback, trace and cost evidence;
+- Task transitions and retries are persisted;
+- a workflow survives API/worker restart;
+- tests cover provider failure, fallback, cancellation and policy boundaries.
 
 ## 7. Progress reporting cadence
 
