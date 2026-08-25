@@ -639,3 +639,11 @@ Update this document at the end of each sprint using the following rules:
 - Distinguished design completion from branch implementation and main-line completion.
 - Recorded Draft PR #1 as the first runnable skeleton, pending merge.
 - Added market-driven workstreams for task-level FinOps, capacity-aware failover, hybrid deployment and model supply-chain governance.
+
+### 2026-08-25
+
+- Added the durable task workflow implementation plan.
+- Reframed the next sprint around Task Event History, Temporal workflow boundaries,
+  cancellation, timeout, resume, trace continuity and Sandbox integration tests.
+- Deferred real GitHub writes, automatic merge, multi-tenant billing and broad Agent
+  autonomy until the recoverable execution path is stable.
