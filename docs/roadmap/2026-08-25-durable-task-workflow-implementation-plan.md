@@ -477,7 +477,11 @@ workflow core.
 ## 10. Related documents
 
 - [AI Cloud Module Implementation Plan and Status](AI-Cloud-Module-Implementation-Plan-and-Status.md)
+- [Durable Task Workflow Engineering Contract](../design/durable-task-workflow-engineering-contract.md)
 - [Agent State Machine Design](../design/agent-state-machine.md)
+- [Durable Task Workflow API v1](../api/task-workflow-api-v1.md)
+- [Database Schema Design](../design/database-schema.md)
+- [Temporal Development and Test Plan](../development/temporal-development-and-test-plan.md)
 - [AI Cloud API Specification v1](../api/api-spec-v1.md)
 - [Agent Runtime Design](../design/Agent-Runtime-Design.md)
 - [Sandbox Architecture](../design/Sandbox-Architecture.md)

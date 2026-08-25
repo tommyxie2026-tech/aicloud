@@ -1,6 +1,6 @@
 # AI Cloud Module Implementation Plan and Status
 
-> Status date: 2026-08-24
+> Status date: 2026-08-25
 > Repository: `tommyxie2026-tech/aicloud`  
 > Target: AI Cloud v0.1 Developer AI Cloud MVP
 
@@ -35,7 +35,8 @@ Percentages are engineering estimates used for planning. A module is not conside
 
 The architecture, routing, security and evaluation work is available on `main`.
 The current development branch extends that baseline with the governed model
-execution API and remains under review in Draft PR #11.
+execution API and the reviewed durable Task workflow implementation contracts.
+It remains under review in Draft PR #48.
 
 The implementation is intentionally a modular monolith: control plane, model
 runtime, routing, policy and tool boundaries are separate packages, but are not
@@ -61,10 +62,10 @@ artificially split into independently deployed services yet.
 
 **Next actions:**
 
-1. Review and merge Draft PR #1.
-2. Add GitHub Actions for `gofmt`, `go test`, `go vet`, build and Helm lint.
-3. Add version information and reproducible image tags.
-4. Add development bootstrap and migration commands.
+1. Keep `gofmt`, `go test`, `go vet`, build and Helm validation green.
+2. Add version information and reproducible image tags.
+3. Add Temporal as an optional Compose profile without changing default startup.
+4. Add durable-workflow integration and restart test jobs.
 
 **Acceptance criteria:**
 
@@ -487,7 +488,7 @@ The order below follows dependencies and avoids building enterprise features bef
 
 Deliverables:
 
-- merge Draft PR #1;
+- initial skeleton merged to `main`;
 - green CI on `main`;
 - stable API resource schemas;
 - PostgreSQL migration runner;
@@ -601,15 +602,27 @@ Multi-tenancy and identity
 Move from synchronous model execution to a recoverable task workflow while
 keeping the modular-monolith deployment boundary.
 
+The detailed implementation baseline is:
+
+- [Durable Task Workflow Implementation Plan](2026-08-25-durable-task-workflow-implementation-plan.md)
+- [Durable Workflow Engineering Contract](../design/durable-task-workflow-engineering-contract.md)
+- [Task State Machine](../design/agent-state-machine.md)
+- [Database Schema](../design/database-schema.md)
+- [Task Workflow API v1](../api/task-workflow-api-v1.md)
+- [Temporal Development and Test Plan](../development/temporal-development-and-test-plan.md)
+
 ### Sprint backlog
 
-1. Review and merge the current Draft PR for the governed execution API.
-2. Persist Task state transitions and task event history.
-3. Introduce the first Temporal workflow and worker activity boundary.
-4. Add cancellation, timeout, retry and resume semantics.
-5. Connect model, tool, policy and evaluation events under one task trace.
-6. Add the first Kubernetes Job sandbox integration test.
-7. Update the Developer Agent acceptance test toward GitHub Issue-to-PR.
+1. Complete Week 0 contract freeze and merge Draft PR #48.
+2. Implement transactional Task transitions, optimistic concurrency and event history.
+3. Implement Task creation Outbox, idempotent dispatcher and orphan reconciliation.
+4. Introduce separate Workflow Client, Temporal workflow and Activity boundaries.
+5. Add cancellation, timeout, retry, resume and source-event deduplication.
+6. Connect model, tool, policy, cost and evaluation events under one task trace.
+7. Implement the fake Sandbox core contract and deterministic Developer Agent contract.
+
+Cluster-backed Kubernetes Sandbox testing and the complete review-ready Developer
+Agent fixture are stretch targets after the durable workflow core exits.
 
 ### Sprint success criteria
 
@@ -617,6 +630,8 @@ keeping the modular-monolith deployment boundary.
 - API creates, routes and executes Tasks through the unified protocol;
 - model runtime records fallback, trace and cost evidence;
 - Task transitions and retries are persisted;
+- Task/event writes are atomic and workflow-start failures are reconciled;
+- duplicate Task, Activity and cost delivery is idempotent;
 - a workflow survives API/worker restart;
 - tests cover provider failure, fallback, cancellation and policy boundaries.
 
@@ -647,3 +662,7 @@ Update this document at the end of each sprint using the following rules:
   cancellation, timeout, resume, trace continuity and Sandbox integration tests.
 - Deferred real GitHub writes, automatic merge, multi-tenant billing and broad Agent
   autonomy until the recoverable execution path is stable.
+- Added Week 0 engineering contracts for Task transition transactions, workflow-start
+  Outbox, Temporal separation, idempotency, asynchronous API behavior and failure tests.
+- Reclassified cluster-backed Sandbox and complete Developer Agent acceptance as stretch
+  goals so consistency and recovery remain the critical path.
