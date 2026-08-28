@@ -10,23 +10,23 @@ It connects public general-purpose models, enterprise private models, self-hoste
 
 ## Current Core Positioning
 
-~~~text
+```text
 Hybrid Private AI Cloud Platform + AI-native Infrastructure Control Plane
-~~~
+```
 
 Product center:
 
-~~~text
+```text
 Governed hybrid model access + policy-aware agent workflows
-~~~
+```
 
 ## Documents
 
-~~~text
+```text
 aicloud-positioning.md          product positioning and boundaries
 aicloud-product-architecture.md five-layer product architecture
 aicloud-implementation-plan.md  executable milestone and backlog plan
-~~~
+```
 
 ## Strategic Outlook
 
@@ -37,7 +37,7 @@ aicloud-implementation-plan.md  executable milestone and backlog plan
 
 The current MVP focuses on the model layer:
 
-~~~text
+```text
 model/provider
 model/schema
 model/mock
@@ -47,11 +47,11 @@ model/eval
 model/routing
 model/openai
 model/registry
-~~~
+```
 
 The first working flow is:
 
-~~~text
+```text
 MockProvider
   ↓
 Gateway.GeneratePlan
@@ -63,13 +63,13 @@ BasicValidator
 EvalRunner
   ↓
 Router / Registry
-~~~
+```
 
 ## Design Principle
 
-~~~text
+```text
 Models propose.
 Policy decides.
 Humans approve when required.
 Controllers execute.
-~~~
+```
