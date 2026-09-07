@@ -8,7 +8,7 @@ import (
 )
 
 type InvocationResult struct {
-    Usage       Usage
+    Usage        Usage
     ArtifactRefs []ArtifactID
 }
 
@@ -78,7 +78,7 @@ func (r *AttemptRunner) Run(ctx context.Context, execution Execution, ready Read
         TargetRevision: ready.Target.Revision,
         TargetSnapshot: ready.Target.Snapshot.Digest,
         AttemptNumber:  attemptNumber,
-        Status:         "RUNNING",
+        Status:         AttemptRunning,
         IdempotencyKey: ready.Node.Effect.IdempotencyKey,
         StartedAt:      started,
     }
@@ -95,21 +95,19 @@ func (r *AttemptRunner) Run(ctx context.Context, execution Execution, ready Read
     if ready.Target.Type == TargetTool {
         actual.ToolCalls = 1
     }
-    // Frontier classification will later be driven by target metadata rather than
-    // hard-coded model names. R1 keeps this counter at zero until that contract exists.
 
     if settleErr := r.budget.Settle(ready.Reservation.ID, actual); settleErr != nil {
-        attempt.Status = "FAILED"
+        attempt.Status = AttemptFailed
         attempt.ErrorClass = ErrorUnknown
         return attempt, result, fmt.Errorf("settle budget reservation: %w", settleErr)
     }
 
     if err == nil {
-        attempt.Status = "SUCCEEDED"
+        attempt.Status = AttemptSucceeded
         return attempt, result, nil
     }
 
-    attempt.Status = "FAILED"
+    attempt.Status = AttemptFailed
     var invocationErr *InvocationError
     if errors.As(err, &invocationErr) && invocationErr.Class != "" {
         attempt.ErrorClass = invocationErr.Class
