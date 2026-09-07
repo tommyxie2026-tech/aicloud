@@ -31,17 +31,17 @@ type CostEstimator interface {
 }
 
 type ReadyNode struct {
-    Node        ExecutionNode
-    Target      ExecutionTarget
-    Policy      PolicyDecisionRecord
-    Reservation *BudgetReservation
+    Node         ExecutionNode
+    Target       ExecutionTarget
+    Policy       PolicyDecisionRecord
+    Reservation  *BudgetReservation
 }
 
 type Supervisor struct {
-    policy   PolicyEvaluator
-    resolver TargetResolver
+    policy    PolicyEvaluator
+    resolver  TargetResolver
     estimator CostEstimator
-    budget   *BudgetLedger
+    budget    *BudgetLedger
 }
 
 func NewSupervisor(policy PolicyEvaluator, resolver TargetResolver, estimator CostEstimator, budget *BudgetLedger) *Supervisor {
@@ -78,18 +78,18 @@ func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, run
         switch policy.Decision {
         case PolicyDeny:
             conditions = append(conditions, ExecutionCondition{
-                Type:   ConditionPartiallyBlocked,
-                Status: true,
+                Type:    ConditionPartiallyBlocked,
+                Status:  true,
                 NodeRef: node.ID,
-                Reason: ErrPolicyRejected.Error(),
+                Reason:  ErrPolicyRejected.Error(),
             })
             continue
         case PolicyRequireApproval:
             conditions = append(conditions, ExecutionCondition{
-                Type:   ConditionApprovalRequired,
-                Status: true,
+                Type:    ConditionApprovalRequired,
+                Status:  true,
                 NodeRef: node.ID,
-                Reason: ErrPolicyApproval.Error(),
+                Reason:  ErrPolicyApproval.Error(),
             })
             continue
         case PolicyAllow:
@@ -100,10 +100,10 @@ func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, run
         target, err := s.resolver.Resolve(execution, node)
         if err != nil {
             conditions = append(conditions, ExecutionCondition{
-                Type:   ConditionTargetDegraded,
-                Status: true,
+                Type:    ConditionTargetDegraded,
+                Status:  true,
                 NodeRef: node.ID,
-                Reason: err.Error(),
+                Reason:  err.Error(),
             })
             continue
         }
@@ -118,10 +118,10 @@ func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, run
         if err != nil {
             if errors.Is(err, ErrBudgetExceeded) {
                 conditions = append(conditions, ExecutionCondition{
-                    Type:   ConditionBudgetPressure,
-                    Status: true,
+                    Type:    ConditionBudgetPressure,
+                    Status:  true,
                     NodeRef: node.ID,
-                    Reason: err.Error(),
+                    Reason:  err.Error(),
                 })
                 continue
             }
@@ -129,14 +129,17 @@ func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, run
         }
 
         ready = append(ready, ReadyNode{
-            Node:         node,
-            Target:       target,
-            Policy:       policy,
-            Reservation:  reservation,
+            Node:        node,
+            Target:      target,
+            Policy:      policy,
+            Reservation: reservation,
         })
     }
 
     if len(ready) == 0 && len(conditions) == 0 {
+        if hasActiveOrWaitingNodes(runtimes) {
+            return nil, nil, nil
+        }
         return nil, nil, ErrPlanNotReady
     }
     return ready, conditions, nil
@@ -149,6 +152,16 @@ func dependenciesSucceeded(node ExecutionNode, runtimes map[NodeID]NodeState) bo
         }
     }
     return true
+}
+
+func hasActiveOrWaitingNodes(runtimes map[NodeID]NodeState) bool {
+    for _, state := range runtimes {
+        switch state {
+        case NodeRunning, NodeWaitingApproval, NodeBlocked:
+            return true
+        }
+    }
+    return false
 }
 
 // Attempt numbering is intentionally a persistence concern in later R1 steps.
