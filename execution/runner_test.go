@@ -23,8 +23,8 @@ func TestAttemptRunnerSuccessSettlesBudget(t *testing.T) {
     }
 
     ready := ReadyNode{
-        Node: ExecutionNode{ID: "node-1", Type: NodeModel},
-        Target: ExecutionTarget{ID: "target-1", Revision: 2, Type: TargetModel, Snapshot: TargetSnapshot{Digest: "sha256:abc"}},
+        Node:        ExecutionNode{ID: "node-1", Type: NodeModel},
+        Target:      ExecutionTarget{ID: "target-1", Revision: 2, Type: TargetModel, Snapshot: TargetSnapshot{Digest: "sha256:abc"}},
         Reservation: reservation,
     }
     runner := NewAttemptRunner(fakeInvoker{result: InvocationResult{Usage: Usage{Cost: 3}}}, ledger)
@@ -33,7 +33,7 @@ func TestAttemptRunnerSuccessSettlesBudget(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    if attempt.Status != "SUCCEEDED" {
+    if attempt.Status != AttemptSucceeded {
         t.Fatalf("expected SUCCEEDED, got %s", attempt.Status)
     }
     if attempt.TargetRevision != 2 || attempt.TargetSnapshot != "sha256:abc" {
@@ -68,7 +68,7 @@ func TestAttemptRunnerClassifiesInvocationFailure(t *testing.T) {
     if !errors.Is(err, expected) {
         t.Fatalf("expected wrapped target error, got %v", err)
     }
-    if attempt.Status != "FAILED" || attempt.ErrorClass != ErrorTargetUnavailable {
+    if attempt.Status != AttemptFailed || attempt.ErrorClass != ErrorTargetUnavailable {
         t.Fatalf("unexpected attempt result: %+v", attempt)
     }
 
