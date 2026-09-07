@@ -218,12 +218,12 @@ type TargetHealth struct {
 }
 
 type TargetSnapshot struct {
-	Digest          string
-	EndpointClass   string
-	ModelVersion    string
-	RuntimeVersion  string
-	DeploymentRef   string
-	CapabilityHash  string
+	Digest         string
+	EndpointClass  string
+	ModelVersion   string
+	RuntimeVersion string
+	DeploymentRef  string
+	CapabilityHash string
 }
 
 type ErrorClass string
@@ -240,22 +240,32 @@ const (
 	ErrorUnknown            ErrorClass = "UNKNOWN"
 )
 
+type AttemptStatus string
+
+const (
+	AttemptPending   AttemptStatus = "PENDING"
+	AttemptRunning   AttemptStatus = "RUNNING"
+	AttemptSucceeded AttemptStatus = "SUCCEEDED"
+	AttemptFailed    AttemptStatus = "FAILED"
+	AttemptCancelled AttemptStatus = "CANCELLED"
+)
+
 type ExecutionAttempt struct {
-	ID               AttemptID
-	ExecutionRef     ExecutionID
-	NodeRef          NodeID
-	TargetRef        TargetID
-	TargetRevision   int64
-	TargetSnapshot   string
-	AttemptNumber    int
-	Status           string
-	ErrorClass       ErrorClass
-	Usage            Usage
-	IdempotencyKey   string
-	EffectStartedAt  *time.Time
+	ID                AttemptID
+	ExecutionRef      ExecutionID
+	NodeRef           NodeID
+	TargetRef         TargetID
+	TargetRevision    int64
+	TargetSnapshot    string
+	AttemptNumber     int
+	Status            AttemptStatus
+	ErrorClass        ErrorClass
+	Usage             Usage
+	IdempotencyKey    string
+	EffectStartedAt   *time.Time
 	EffectCommittedAt *time.Time
-	StartedAt        time.Time
-	FinishedAt       *time.Time
+	StartedAt         time.Time
+	FinishedAt        *time.Time
 }
 
 type Usage struct {
@@ -272,11 +282,11 @@ type Accounting struct {
 }
 
 type BudgetLimit struct {
-	MaxCost         float64
-	MaxDuration     time.Duration
-	MaxNodeAttempts int
+	MaxCost          float64
+	MaxDuration      time.Duration
+	MaxNodeAttempts  int
 	MaxFrontierCalls int
-	MaxToolCalls    int
+	MaxToolCalls     int
 }
 
 type BudgetState struct {
@@ -301,19 +311,19 @@ const (
 )
 
 type PolicyDecisionRecord struct {
-	ID            PolicyDecisionID
-	PolicySetRef  string
-	PolicyVersion string
-	ExecutionRef  ExecutionID
-	PlanRevision  int64
-	NodeRef       NodeID
-	Principal     string
-	Action        string
-	Resource      string
+	ID             PolicyDecisionID
+	PolicySetRef   string
+	PolicyVersion  string
+	ExecutionRef   ExecutionID
+	PlanRevision   int64
+	NodeRef        NodeID
+	Principal      string
+	Action         string
+	Resource       string
 	RequestedScope string
-	Decision      PolicyDecision
-	ReasonCodes   []string
-	ExpiresAt     *time.Time
+	Decision       PolicyDecision
+	ReasonCodes    []string
+	ExpiresAt      *time.Time
 }
 
 type Artifact struct {
@@ -328,19 +338,19 @@ type Artifact struct {
 }
 
 type Evidence struct {
-	ID               EvidenceID
-	ExecutionRef     ExecutionID
-	SourceNodeRef    NodeID
-	Type             string
-	ClaimID          string
-	SourceRef        string
-	SourceVersion    string
-	ObservedAt       time.Time
-	ContentDigest    string
-	ArtifactRef      ArtifactID
-	TargetSnapshot   string
-	Strength         string
-	Confidence       float64
+	ID             EvidenceID
+	ExecutionRef   ExecutionID
+	SourceNodeRef  NodeID
+	Type           string
+	ClaimID        string
+	SourceRef      string
+	SourceVersion  string
+	ObservedAt     time.Time
+	ContentDigest  string
+	ArtifactRef    ArtifactID
+	TargetSnapshot string
+	Strength       string
+	Confidence     float64
 }
 
 type VerifierVerdict string
@@ -371,8 +381,8 @@ const (
 )
 
 type AcceptanceResult struct {
-	CriterionID string
-	Result      VerifierVerdict
+	CriterionID  string
+	Result       VerifierVerdict
 	EvidenceRefs []EvidenceID
 }
 
