@@ -19,7 +19,7 @@ The existing hybrid model gateway, provider abstraction, evaluation, policy and 
 
 ## Current R1 Kernel Work
 
-The active R1 kernel introduces:
+The active R1 kernel now includes:
 
 ```text
 Execution / Node state models
@@ -27,9 +27,10 @@ bounded DAG validation
 Execution Conditions for parallel workflows
 atomic budget reservation + settlement
 Policy gating
-scoped approvals
+scoped approvals with expiry/revocation
 ExecutionTarget resolution
-Attempt lifecycle
+Supervisor runnable-node selection
+Attempt lifecycle and Target invocation
 Target snapshot/version lineage
 Evidence / Outcome domain types
 ```
