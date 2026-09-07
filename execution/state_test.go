@@ -40,8 +40,8 @@ func TestExecutionDoesNotHaveWaitingApprovalPhase(t *testing.T) {
 	status := ExecutionStatus{
 		Phase: ExecutionRunning,
 		Conditions: []ExecutionCondition{{
-			Type:   ConditionApprovalRequired,
-			Status: true,
+			Type:    ConditionApprovalRequired,
+			Status:  true,
 			NodeRef: "mutating-node",
 		}},
 	}
