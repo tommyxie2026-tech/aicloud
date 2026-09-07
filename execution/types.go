@@ -155,10 +155,10 @@ type ExecutionNode struct {
 	Type                  NodeType
 	DependsOn             []NodeID
 	CapabilityRequirement CapabilityRequirement
-	Timeout                time.Duration
-	RetryPolicy            RetryPolicy
-	Effect                 EffectSpec
-	VerificationRequired   bool
+	Timeout               time.Duration
+	RetryPolicy           RetryPolicy
+	Effect                EffectSpec
+	VerificationRequired  bool
 }
 
 type CapabilityRequirement struct {
@@ -208,7 +208,7 @@ type ExecutionTarget struct {
 }
 
 type TargetPolicy struct {
-	DataLocality        string
+	DataLocality       string
 	AllowedSensitivity []string
 }
 
