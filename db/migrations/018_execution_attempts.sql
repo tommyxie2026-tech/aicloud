@@ -78,7 +78,11 @@ CREATE TABLE IF NOT EXISTS execution_attempts (
     CONSTRAINT execution_attempt_lifecycle_contract CHECK (
         (status = 'PENDING' AND started_at IS NULL AND finished_at IS NULL)
         OR (status = 'RUNNING' AND started_at IS NOT NULL AND finished_at IS NULL)
-        OR (status IN ('SUCCEEDED','FAILED','CANCELLED','ABANDONED') AND finished_at IS NOT NULL)
+        OR (
+            status IN ('SUCCEEDED','FAILED','CANCELLED')
+            AND started_at IS NOT NULL AND finished_at IS NOT NULL
+        )
+        OR (status = 'ABANDONED' AND finished_at IS NOT NULL)
     ),
     CONSTRAINT execution_attempt_started_target_contract CHECK (
         started_at IS NULL OR (
