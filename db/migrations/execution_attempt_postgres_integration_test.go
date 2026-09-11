@@ -63,10 +63,11 @@ func TestExecutionAttemptMigrationPostgresConstraints(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
 		tenant_id, project_id, attempt_id, execution_id, plan_revision, node_id,
 		attempt_number, lease_fence, lease_owner, status, claimed_at, started_at,
-		target_id, target_revision, target_snapshot_digest
+		target_id, target_revision, target_snapshot_digest,
+		policy_decision_id, budget_reservation_id
 	) VALUES (
 		'tenant-a','project-a','att-bad-pending','exec-2',1,'node-1',1,1,'worker-a','PENDING',
-		NOW(),NOW(),'target-1',1,'sha256:x'
+		NOW(),NOW(),'target-1',1,'sha256:x','policy-1','budget-1'
 	)`); err == nil {
 		t.Fatal("PENDING attempt with started_at must be rejected")
 	}
@@ -74,10 +75,11 @@ func TestExecutionAttemptMigrationPostgresConstraints(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
 		tenant_id, project_id, attempt_id, execution_id, plan_revision, node_id,
 		attempt_number, lease_fence, lease_owner, status, claimed_at,
-		target_id, target_revision, target_snapshot_digest
+		target_id, target_revision, target_snapshot_digest,
+		policy_decision_id, budget_reservation_id
 	) VALUES (
 		'tenant-a','project-a','att-bad-running','exec-3',1,'node-1',1,1,'worker-a','RUNNING',
-		NOW(),'target-1',1,'sha256:x'
+		NOW(),'target-1',1,'sha256:x','policy-1','budget-1'
 	)`); err == nil {
 		t.Fatal("RUNNING attempt without started_at must be rejected")
 	}
@@ -87,17 +89,41 @@ func TestExecutionAttemptMigrationPostgresConstraints(t *testing.T) {
 		attempt_number, lease_fence, lease_owner, status, claimed_at, started_at,
 		target_id, target_revision, target_snapshot_digest
 	) VALUES (
-		'tenant-a','project-a','att-running','exec-4',1,'node-1',1,1,'worker-a','RUNNING',
+		'tenant-a','project-a','att-missing-governance','exec-gov',1,'node-1',1,1,'worker-a','RUNNING',
 		NOW(),NOW(),'target-1',1,'sha256:x'
+	)`); err == nil {
+		t.Fatal("RUNNING attempt without policy/budget governance refs must be rejected")
+	}
+
+	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
+		tenant_id, project_id, attempt_id, execution_id, plan_revision, node_id,
+		attempt_number, lease_fence, lease_owner, status, claimed_at, started_at,
+		target_id, target_revision, target_snapshot_digest,
+		policy_decision_id, budget_reservation_id
+	) VALUES (
+		'tenant-a','project-a','att-running','exec-4',1,'node-1',1,1,'worker-a','RUNNING',
+		NOW(),NOW(),'target-1',1,'sha256:x','policy-1','budget-1'
 	)`); err != nil {
 		t.Fatalf("valid RUNNING attempt rejected: %v", err)
 	}
 
 	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
 		tenant_id, project_id, attempt_id, execution_id, plan_revision, node_id,
-		attempt_number, lease_fence, lease_owner, status, claimed_at
-	) VALUES ('tenant-a','project-a','att-bad-terminal','exec-5',1,'node-1',1,1,'worker-a','FAILED',NOW())`); err == nil {
-		t.Fatal("terminal attempt without finished_at must be rejected")
+		attempt_number, lease_fence, lease_owner, status, claimed_at, finished_at
+	) VALUES ('tenant-a','project-a','att-bad-failed','exec-5',1,'node-1',1,1,'worker-a','FAILED',NOW(),NOW())`); err == nil {
+		t.Fatal("FAILED attempt without error_class must be rejected")
+	}
+
+	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
+		tenant_id, project_id, attempt_id, execution_id, plan_revision, node_id,
+		attempt_number, lease_fence, lease_owner, status, claimed_at, started_at,
+		finished_at, target_id, target_revision, target_snapshot_digest,
+		policy_decision_id, budget_reservation_id, error_class
+	) VALUES (
+		'tenant-a','project-a','att-failed','exec-5b',1,'node-1',1,1,'worker-a','FAILED',
+		NOW(),NOW(),NOW(),'target-1',1,'sha256:x','policy-1','budget-1','TIMEOUT'
+	)`); err != nil {
+		t.Fatalf("valid FAILED attempt rejected: %v", err)
 	}
 
 	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
