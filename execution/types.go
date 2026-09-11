@@ -297,6 +297,7 @@ type BudgetState struct {
 
 type AccountingCounters struct {
 	Cost          float64
+	Duration      time.Duration
 	NodeAttempts  int
 	FrontierCalls int
 	ToolCalls     int
