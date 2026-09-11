@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS execution_attempts (
         (
             target_id IS NULL AND target_revision IS NULL AND target_snapshot_digest IS NULL
         ) OR (
-            target_id IS NOT NULL AND target_revision IS NOT NULL AND target_revision >= 1
+            NULLIF(target_id, '') IS NOT NULL
+            AND target_revision IS NOT NULL AND target_revision >= 1
             AND NULLIF(target_snapshot_digest, '') IS NOT NULL
         )
     ),
@@ -81,9 +82,19 @@ CREATE TABLE IF NOT EXISTS execution_attempts (
     ),
     CONSTRAINT execution_attempt_started_target_contract CHECK (
         started_at IS NULL OR (
-            target_id IS NOT NULL AND target_revision IS NOT NULL
+            NULLIF(target_id, '') IS NOT NULL
+            AND target_revision IS NOT NULL AND target_revision >= 1
             AND NULLIF(target_snapshot_digest, '') IS NOT NULL
         )
+    ),
+    CONSTRAINT execution_attempt_started_governance_contract CHECK (
+        started_at IS NULL OR (
+            NULLIF(policy_decision_id, '') IS NOT NULL
+            AND NULLIF(budget_reservation_id, '') IS NOT NULL
+        )
+    ),
+    CONSTRAINT execution_attempt_failure_error_contract CHECK (
+        status <> 'FAILED' OR NULLIF(error_class, '') IS NOT NULL
     ),
     CONSTRAINT execution_attempt_effect_commit_contract CHECK (
         effect_committed_at IS NULL OR effect_started_at IS NOT NULL
