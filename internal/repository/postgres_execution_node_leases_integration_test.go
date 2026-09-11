@@ -33,7 +33,6 @@ func TestPostgresExecutionNodeLeaseConcurrentClaimAndFencing(t *testing.T) {
 		t.Fatalf("register node: %v", err)
 	}
 
-	now := time.Now().UTC()
 	var wg sync.WaitGroup
 	type result struct {
 		lease execution.NodeLease
@@ -44,7 +43,7 @@ func TestPostgresExecutionNodeLeaseConcurrentClaimAndFencing(t *testing.T) {
 		wg.Add(1)
 		go func(owner string) {
 			defer wg.Done()
-			lease, err := repo.Claim(projectCtx, "exec-1", 1, "node-1", owner, now, time.Minute)
+			lease, err := repo.Claim(projectCtx, "exec-1", 1, "node-1", owner, time.Minute)
 			results <- result{lease: lease, err: err}
 		}(owner)
 	}
@@ -73,7 +72,8 @@ func TestPostgresExecutionNodeLeaseConcurrentClaimAndFencing(t *testing.T) {
 		t.Fatalf("unexpected first lease: %+v", winner)
 	}
 
-	reclaimed, err := repo.Claim(projectCtx, "exec-1", 1, "node-1", "worker-c", now.Add(2*time.Minute), time.Minute)
+	expireExecutionNodeLease(t, ctx, db, "exec-1", 1, "node-1")
+	reclaimed, err := repo.Claim(projectCtx, "exec-1", 1, "node-1", "worker-c", time.Minute)
 	if err != nil {
 		t.Fatalf("reclaim expired lease: %v", err)
 	}
@@ -81,10 +81,10 @@ func TestPostgresExecutionNodeLeaseConcurrentClaimAndFencing(t *testing.T) {
 		t.Fatalf("reclaim must issue new token/fence/attempt: old=%+v new=%+v", winner, reclaimed)
 	}
 
-	if err := repo.Complete(projectCtx, winner, execution.NodeSucceeded, now.Add(2*time.Minute+10*time.Second)); !errors.Is(err, ErrNodeLeaseLost) {
+	if err := repo.Complete(projectCtx, winner, execution.NodeSucceeded); !errors.Is(err, ErrNodeLeaseLost) {
 		t.Fatalf("stale worker completion error=%v want ErrNodeLeaseLost", err)
 	}
-	if err := repo.Complete(projectCtx, reclaimed, execution.NodeSucceeded, now.Add(2*time.Minute+10*time.Second)); err != nil {
+	if err := repo.Complete(projectCtx, reclaimed, execution.NodeSucceeded); err != nil {
 		t.Fatalf("current lease completion: %v", err)
 	}
 
@@ -113,19 +113,19 @@ func TestPostgresExecutionNodeLeaseNonIdempotentExpiryRequiresRecovery(t *testin
 		t.Fatalf("register node: %v", err)
 	}
 
-	now := time.Now().UTC()
-	lease, err := repo.Claim(projectCtx, "exec-2", 1, "restart-prod", "worker-a", now, 30*time.Second)
+	lease, err := repo.Claim(projectCtx, "exec-2", 1, "restart-prod", "worker-a", time.Minute)
 	if err != nil {
 		t.Fatalf("claim non-idempotent node: %v", err)
 	}
-	if err := repo.MarkEffectStarted(projectCtx, lease, now.Add(time.Second)); err != nil {
+	if err := repo.MarkEffectStarted(projectCtx, lease); err != nil {
 		t.Fatalf("mark effect started: %v", err)
 	}
-	if err := repo.ReleaseBeforeEffect(projectCtx, lease, now.Add(2*time.Second)); !errors.Is(err, ErrNodeLeaseLost) {
+	if err := repo.ReleaseBeforeEffect(projectCtx, lease); !errors.Is(err, ErrNodeLeaseLost) {
 		t.Fatalf("release after effect started error=%v want ErrNodeLeaseLost", err)
 	}
 
-	_, err = repo.Claim(projectCtx, "exec-2", 1, "restart-prod", "worker-b", now.Add(time.Minute), 30*time.Second)
+	expireExecutionNodeLease(t, ctx, db, "exec-2", 1, "restart-prod")
+	_, err = repo.Claim(projectCtx, "exec-2", 1, "restart-prod", "worker-b", time.Minute)
 	if !errors.Is(err, ErrNodeRecoveryRequired) {
 		t.Fatalf("expired non-idempotent claim error=%v want ErrNodeRecoveryRequired", err)
 	}
@@ -148,21 +148,20 @@ func TestPostgresExecutionNodeLeaseMutationRequiresCommittedEffectForSuccess(t *
 		t.Fatalf("register mutation node: %v", err)
 	}
 
-	now := time.Now().UTC()
-	lease, err := repo.Claim(projectCtx, "exec-4", 1, "apply-change", "worker-a", now, time.Minute)
+	lease, err := repo.Claim(projectCtx, "exec-4", 1, "apply-change", "worker-a", time.Minute)
 	if err != nil {
 		t.Fatalf("claim mutation: %v", err)
 	}
-	if err := repo.MarkEffectStarted(projectCtx, lease, now.Add(time.Second)); err != nil {
+	if err := repo.MarkEffectStarted(projectCtx, lease); err != nil {
 		t.Fatalf("mark effect started: %v", err)
 	}
-	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded, now.Add(2*time.Second)); !errors.Is(err, ErrNodeEffectNotCommitted) {
+	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded); !errors.Is(err, ErrNodeEffectNotCommitted) {
 		t.Fatalf("success before commit error=%v want ErrNodeEffectNotCommitted", err)
 	}
-	if err := repo.MarkEffectCommitted(projectCtx, lease, now.Add(3*time.Second)); err != nil {
+	if err := repo.MarkEffectCommitted(projectCtx, lease); err != nil {
 		t.Fatalf("mark effect committed: %v", err)
 	}
-	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded, now.Add(4*time.Second)); err != nil {
+	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded); err != nil {
 		t.Fatalf("complete committed mutation: %v", err)
 	}
 }
@@ -183,20 +182,32 @@ func TestPostgresExecutionNodeLeaseRenewCannotReviveExpiredLease(t *testing.T) {
 		t.Fatalf("register node: %v", err)
 	}
 
-	now := time.Now().UTC()
-	lease, err := repo.Claim(projectCtx, "exec-3", 2, "analyze", "worker-a", now, 30*time.Second)
+	lease, err := repo.Claim(projectCtx, "exec-3", 2, "analyze", "worker-a", time.Minute)
 	if err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	renewed, err := repo.Renew(projectCtx, lease, now.Add(10*time.Second), time.Minute)
+	renewed, err := repo.Renew(projectCtx, lease, 2*time.Minute)
 	if err != nil {
 		t.Fatalf("renew active lease: %v", err)
 	}
-	if !renewed.ExpiresAt.Equal(now.Add(70 * time.Second)) {
-		t.Fatalf("renewed expiry=%s", renewed.ExpiresAt)
+	if !renewed.ExpiresAt.After(lease.ExpiresAt) {
+		t.Fatalf("renewal must extend expiry: old=%s new=%s", lease.ExpiresAt, renewed.ExpiresAt)
 	}
-	if _, err := repo.Renew(projectCtx, renewed, now.Add(2*time.Minute), time.Minute); !errors.Is(err, ErrNodeLeaseLost) {
+
+	expireExecutionNodeLease(t, ctx, db, "exec-3", 2, "analyze")
+	if _, err := repo.Renew(projectCtx, renewed, time.Minute); !errors.Is(err, ErrNodeLeaseLost) {
 		t.Fatalf("expired renewal error=%v want ErrNodeLeaseLost", err)
+	}
+}
+
+func expireExecutionNodeLease(t *testing.T, ctx context.Context, db *sql.DB, executionID string, planRevision int64, nodeID string) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx, `UPDATE execution_node_runtime
+		SET claimed_at=clock_timestamp()-INTERVAL '2 minutes',
+			heartbeat_at=clock_timestamp()-INTERVAL '90 seconds',
+			lease_expires_at=clock_timestamp()-INTERVAL '1 minute'
+		WHERE execution_id=$1 AND plan_revision=$2 AND node_id=$3`, executionID, planRevision, nodeID); err != nil {
+		t.Fatalf("expire execution node lease: %v", err)
 	}
 }
 
