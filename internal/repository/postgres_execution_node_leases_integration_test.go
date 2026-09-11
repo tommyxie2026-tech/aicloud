@@ -297,7 +297,7 @@ func testAttemptBinding() execution.AttemptBinding {
 func successCompletion() execution.AttemptCompletion {
 	return execution.AttemptCompletion{
 		Status: execution.AttemptSucceeded,
-		Usage: execution.Usage{InputTokens: 10, OutputTokens: 5, Cost: 0.25, Duration: time.Second},
+		Usage:  execution.Usage{InputTokens: 10, OutputTokens: 5, Cost: 0.25, Duration: time.Second},
 	}
 }
 
