@@ -3,6 +3,22 @@
 -- One row is created atomically with every successful node claim. It is never
 -- reused by a later fence. Retry/reclaim creates a new attempt and preserves the
 -- prior attempt as historical execution evidence.
+--
+-- First-time deployment of this migration requires execution workers to be
+-- drained. A RUNNING row created by the pre-018 runtime has a fence but no
+-- durable Attempt, so silently hot-migrating it would create an audit gap.
+DO $$
+BEGIN
+    IF to_regclass('execution_attempts') IS NULL THEN
+        IF to_regclass('execution_node_runtime') IS NULL THEN
+            RAISE EXCEPTION 'migration 018 requires execution_node_runtime from migration 017';
+        END IF;
+        IF EXISTS (SELECT 1 FROM execution_node_runtime WHERE state = 'RUNNING') THEN
+            RAISE EXCEPTION 'migration 018 requires all execution node leases to be drained before first apply';
+        END IF;
+    END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS execution_attempts (
     tenant_id TEXT NOT NULL,
