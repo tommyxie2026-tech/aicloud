@@ -131,6 +131,42 @@ func TestPostgresExecutionNodeLeaseNonIdempotentExpiryRequiresRecovery(t *testin
 	}
 }
 
+func TestPostgresExecutionNodeLeaseMutationRequiresCommittedEffectForSuccess(t *testing.T) {
+	db, ctx := openExecutionLeaseTestDB(t)
+	defer db.Close()
+	cleanupExecutionLeaseFixture(t, context.Background(), db)
+	defer cleanupExecutionLeaseFixture(t, context.Background(), db)
+	createExecutionLeaseFixture(t, ctx, db)
+
+	projectCtx := executionLeaseProjectContext(ctx)
+	repo := NewPostgresExecutionNodeLeases(db)
+	if err := repo.Register(projectCtx, execution.NodeRuntimeRecord{
+		ExecutionRef: "exec-4", PlanRevision: 1, NodeRef: "apply-change",
+		State: execution.NodeReady, EffectClass: execution.EffectIdempotentMutation,
+		RetrySafe: true, IdempotencyKey: "exec-4/apply-change",
+	}); err != nil {
+		t.Fatalf("register mutation node: %v", err)
+	}
+
+	now := time.Now().UTC()
+	lease, err := repo.Claim(projectCtx, "exec-4", 1, "apply-change", "worker-a", now, time.Minute)
+	if err != nil {
+		t.Fatalf("claim mutation: %v", err)
+	}
+	if err := repo.MarkEffectStarted(projectCtx, lease, now.Add(time.Second)); err != nil {
+		t.Fatalf("mark effect started: %v", err)
+	}
+	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded, now.Add(2*time.Second)); !errors.Is(err, ErrNodeEffectNotCommitted) {
+		t.Fatalf("success before commit error=%v want ErrNodeEffectNotCommitted", err)
+	}
+	if err := repo.MarkEffectCommitted(projectCtx, lease, now.Add(3*time.Second)); err != nil {
+		t.Fatalf("mark effect committed: %v", err)
+	}
+	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded, now.Add(4*time.Second)); err != nil {
+		t.Fatalf("complete committed mutation: %v", err)
+	}
+}
+
 func TestPostgresExecutionNodeLeaseRenewCannotReviveExpiredLease(t *testing.T) {
 	db, ctx := openExecutionLeaseTestDB(t)
 	defer db.Close()
