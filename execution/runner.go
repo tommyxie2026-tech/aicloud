@@ -121,6 +121,7 @@ func (r *AttemptRunner) Run(ctx context.Context, execution Execution, ready Read
 func actualBudgetForInvocation(target ExecutionTarget, usage Usage) BudgetEstimate {
 	actual := BudgetEstimate{
 		Cost:         usage.Cost,
+		Duration:     usage.Duration,
 		NodeAttempts: 1,
 	}
 	if target.Type == TargetTool {
