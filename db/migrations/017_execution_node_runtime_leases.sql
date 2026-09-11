@@ -2,8 +2,9 @@
 --
 -- A row represents the mutable runtime state for one node in one immutable plan
 -- revision. Lease token + monotonically increasing fence prevent stale workers
--- from mutating a newer attempt. This is fencing, not exactly-once execution;
--- side-effect safety still depends on EffectClass and idempotency semantics.
+-- from mutating a newer control-plane attempt. This is fencing, not exactly-once
+-- execution; external side-effect safety still depends on target-side fencing or
+-- EffectClass and idempotency semantics.
 
 CREATE TABLE IF NOT EXISTS execution_node_runtime (
     tenant_id TEXT NOT NULL,
@@ -46,14 +47,17 @@ CREATE TABLE IF NOT EXISTS execution_node_runtime (
     CONSTRAINT execution_node_non_idempotent_retry_contract CHECK (
         effect_class <> 'NON_IDEMPOTENT_MUTATION' OR retry_safe = FALSE
     ),
-    CONSTRAINT execution_node_lease_tuple_contract CHECK (
+    CONSTRAINT execution_node_lease_state_contract CHECK (
         (
-            lease_owner IS NULL AND lease_token IS NULL AND claimed_at IS NULL
-            AND heartbeat_at IS NULL AND lease_expires_at IS NULL
+            state = 'RUNNING'
+            AND lease_owner IS NOT NULL AND lease_token IS NOT NULL
+            AND claimed_at IS NOT NULL AND heartbeat_at IS NOT NULL
+            AND lease_expires_at IS NOT NULL AND lease_expires_at > claimed_at
         ) OR (
-            lease_owner IS NOT NULL AND lease_token IS NOT NULL AND claimed_at IS NOT NULL
-            AND heartbeat_at IS NOT NULL AND lease_expires_at IS NOT NULL
-            AND lease_expires_at > claimed_at
+            state <> 'RUNNING'
+            AND lease_owner IS NULL AND lease_token IS NULL
+            AND claimed_at IS NULL AND heartbeat_at IS NULL
+            AND lease_expires_at IS NULL
         )
     ),
     CONSTRAINT execution_node_effect_commit_contract CHECK (
@@ -84,6 +88,6 @@ CREATE POLICY execution_node_runtime_scope_policy ON execution_node_runtime
     );
 
 COMMENT ON COLUMN execution_node_runtime.lease_fence IS
-    'Monotonically increases on every successful claim/reclaim. Stale workers must not mutate rows protected by a newer fence.';
+    'Monotonically increases on every successful claim/reclaim. Stale workers must not mutate control-plane rows protected by a newer fence.';
 COMMENT ON COLUMN execution_node_runtime.retry_safe IS
     'Whether an expired attempt may be automatically reclaimed according to the frozen plan/effect semantics.';
