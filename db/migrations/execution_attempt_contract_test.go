@@ -20,6 +20,8 @@ func TestExecutionAttemptMigrationDefinesDurableHistoryInvariants(t *testing.T) 
 		"execution_attempts_scope_fence_unique",
 		"execution_attempt_lifecycle_contract",
 		"execution_attempt_started_target_contract",
+		"execution_attempt_started_governance_contract",
+		"execution_attempt_failure_error_contract",
 		"execution_attempt_usage_nonnegative",
 		"requires all execution node leases to be drained",
 		"ALTER TABLE execution_attempts FORCE ROW LEVEL SECURITY",
