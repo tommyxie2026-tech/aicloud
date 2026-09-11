@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 )
 
 var (
@@ -14,6 +15,7 @@ var (
 
 type BudgetEstimate struct {
 	Cost          float64
+	Duration      time.Duration
 	NodeAttempts  int
 	FrontierCalls int
 	ToolCalls     int
@@ -56,12 +58,13 @@ func (l *BudgetLedger) Reserve(id string, executionRef ExecutionID, nodeRef Node
 	if _, exists := l.reservations[id]; exists {
 		return nil, fmt.Errorf("reservation %q already exists", id)
 	}
-	if estimate.Cost < 0 || estimate.NodeAttempts < 0 || estimate.FrontierCalls < 0 || estimate.ToolCalls < 0 {
-		return nil, errors.New("budget estimate cannot contain negative values")
+	if err := validateBudgetEstimate(estimate); err != nil {
+		return nil, err
 	}
 
 	next := AccountingCounters{
 		Cost:          l.state.Reserved.Cost + l.state.Consumed.Cost + estimate.Cost,
+		Duration:      l.state.Reserved.Duration + l.state.Consumed.Duration + estimate.Duration,
 		NodeAttempts:  l.state.Reserved.NodeAttempts + l.state.Consumed.NodeAttempts + estimate.NodeAttempts,
 		FrontierCalls: l.state.Reserved.FrontierCalls + l.state.Consumed.FrontierCalls + estimate.FrontierCalls,
 		ToolCalls:     l.state.Reserved.ToolCalls + l.state.Consumed.ToolCalls + estimate.ToolCalls,
@@ -92,8 +95,8 @@ func (l *BudgetLedger) Settle(id string, actual BudgetEstimate) error {
 	if reservation.Closed {
 		return ErrReservationClosed
 	}
-	if actual.Cost < 0 || actual.NodeAttempts < 0 || actual.FrontierCalls < 0 || actual.ToolCalls < 0 {
-		return errors.New("actual usage cannot contain negative values")
+	if err := validateBudgetEstimate(actual); err != nil {
+		return fmt.Errorf("actual usage: %w", err)
 	}
 
 	// Release the estimate first, then atomically account actual usage.
@@ -101,8 +104,8 @@ func (l *BudgetLedger) Settle(id string, actual BudgetEstimate) error {
 	applyEstimate(&l.state.Consumed, actual, 1)
 	reservation.Closed = true
 
-	// Actual usage may exceed the estimate. We still account truthfully; the caller
-	// can observe exhaustion and prevent future attempts.
+	// Actual usage may exceed the estimate or even the configured limit. We still
+	// account truthfully; the caller can observe exhaustion and prevent new work.
 	return nil
 }
 
@@ -127,6 +130,7 @@ func (l *BudgetLedger) Exhausted() bool {
 	defer l.mu.Unlock()
 	combined := AccountingCounters{
 		Cost:          l.state.Reserved.Cost + l.state.Consumed.Cost,
+		Duration:      l.state.Reserved.Duration + l.state.Consumed.Duration,
 		NodeAttempts:  l.state.Reserved.NodeAttempts + l.state.Consumed.NodeAttempts,
 		FrontierCalls: l.state.Reserved.FrontierCalls + l.state.Consumed.FrontierCalls,
 		ToolCalls:     l.state.Reserved.ToolCalls + l.state.Consumed.ToolCalls,
@@ -134,9 +138,19 @@ func (l *BudgetLedger) Exhausted() bool {
 	return validateCountersAgainstLimit(combined, l.state.Limit) != nil
 }
 
+func validateBudgetEstimate(v BudgetEstimate) error {
+	if v.Cost < 0 || v.Duration < 0 || v.NodeAttempts < 0 || v.FrontierCalls < 0 || v.ToolCalls < 0 {
+		return errors.New("budget estimate cannot contain negative values")
+	}
+	return nil
+}
+
 func validateCountersAgainstLimit(c AccountingCounters, limit BudgetLimit) error {
 	if limit.MaxCost > 0 && c.Cost > limit.MaxCost {
 		return fmt.Errorf("%w: cost %.4f > %.4f", ErrBudgetExceeded, c.Cost, limit.MaxCost)
+	}
+	if limit.MaxDuration > 0 && c.Duration > limit.MaxDuration {
+		return fmt.Errorf("%w: duration %s > %s", ErrBudgetExceeded, c.Duration, limit.MaxDuration)
 	}
 	if limit.MaxNodeAttempts > 0 && c.NodeAttempts > limit.MaxNodeAttempts {
 		return fmt.Errorf("%w: node attempts %d > %d", ErrBudgetExceeded, c.NodeAttempts, limit.MaxNodeAttempts)
@@ -152,6 +166,7 @@ func validateCountersAgainstLimit(c AccountingCounters, limit BudgetLimit) error
 
 func applyEstimate(dst *AccountingCounters, v BudgetEstimate, sign int) {
 	dst.Cost += float64(sign) * v.Cost
+	dst.Duration += time.Duration(sign) * v.Duration
 	dst.NodeAttempts += sign * v.NodeAttempts
 	dst.FrontierCalls += sign * v.FrontierCalls
 	dst.ToolCalls += sign * v.ToolCalls
