@@ -26,14 +26,14 @@ type AttemptExecutionCoordinator interface {
 	Complete(ctx context.Context, lease NodeLease, terminal NodeState, completion AttemptCompletion) error
 }
 
-// BudgetCoordinator intentionally abstracts the current in-memory BudgetLedger.
-// A distributed production worker must inject a shared/durable implementation;
-// the interface prevents the worker lifecycle from depending on process-local
-// reservation state.
+// BudgetCoordinator is the request-scoped accounting boundary used by the
+// persistent worker. Context is explicit because production implementations
+// must preserve cancellation/deadline and tenant/project identity into storage
+// transactions. Request identity must never be hidden in coordinator state.
 type BudgetCoordinator interface {
-	Reserve(id string, executionRef ExecutionID, nodeRef NodeID, estimate BudgetEstimate) (*BudgetReservation, error)
-	Settle(id string, actual BudgetEstimate) error
-	Release(id string) error
+	Reserve(ctx context.Context, id string, executionRef ExecutionID, nodeRef NodeID, estimate BudgetEstimate) (*BudgetReservation, error)
+	Settle(ctx context.Context, id string, actual BudgetEstimate) error
+	Release(ctx context.Context, id string) error
 }
 
 type PersistentWorker struct {
@@ -87,7 +87,7 @@ func (w *PersistentWorker) Execute(ctx context.Context, execution Execution, can
 	result := WorkerExecutionResult{Lease: lease}
 
 	reservationID := "attempt/" + string(lease.AttemptRef)
-	reservation, err := w.budget.Reserve(reservationID, execution.ID, candidate.Node.ID, candidate.Estimate)
+	reservation, err := w.budget.Reserve(ctx, reservationID, execution.ID, candidate.Node.ID, candidate.Estimate)
 	if err != nil {
 		cleanupErr := w.coordinator.ReleaseBeforeEffect(ctx, lease)
 		return result, errors.Join(err, cleanupErr)
@@ -102,7 +102,7 @@ func (w *PersistentWorker) Execute(ctx context.Context, execution Execution, can
 		BudgetReservationRef: reservation.ID,
 	}
 	if _, err := w.coordinator.StartAttempt(ctx, lease, binding); err != nil {
-		budgetErr := w.budget.Release(reservation.ID)
+		budgetErr := w.budget.Release(ctx, reservation.ID)
 		leaseErr := w.coordinator.ReleaseBeforeEffect(ctx, lease)
 		return result, errors.Join(err, budgetErr, leaseErr)
 	}
@@ -112,7 +112,7 @@ func (w *PersistentWorker) Execute(ctx context.Context, execution Execution, can
 		if err := w.coordinator.MarkEffectStarted(ctx, lease); err != nil {
 			// No external target call has happened yet. Account the started
 			// technical attempt and try to close it as FAILED.
-			settleErr := w.budget.Settle(reservation.ID, BudgetEstimate{NodeAttempts: 1})
+			settleErr := w.budget.Settle(ctx, reservation.ID, BudgetEstimate{NodeAttempts: 1})
 			completeErr := w.coordinator.Complete(ctx, lease, NodeFailed, AttemptCompletion{
 				Status:     AttemptFailed,
 				ErrorClass: ErrorUnknown,
@@ -124,7 +124,7 @@ func (w *PersistentWorker) Execute(ctx context.Context, execution Execution, can
 	invocation, invokeErr := w.invoker.Invoke(ctx, execution, candidate.Node, candidate.Target)
 	result.Invocation = invocation
 
-	if err := w.budget.Settle(reservation.ID, actualBudgetForInvocation(candidate.Target, invocation.Usage)); err != nil {
+	if err := w.budget.Settle(ctx, reservation.ID, actualBudgetForInvocation(candidate.Target, invocation.Usage)); err != nil {
 		// Invocation may already have produced a real-world effect. Do not
 		// manufacture a terminal Attempt when accounting durability is unknown.
 		return result, fmt.Errorf("settle attempt budget: %w", err)
