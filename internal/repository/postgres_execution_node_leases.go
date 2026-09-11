@@ -15,13 +15,13 @@ import (
 )
 
 var (
-	ErrNodeRuntimeNotFound = errors.New("execution node runtime not found")
-	ErrNodeRuntimeExists   = errors.New("execution node runtime already exists")
-	ErrNodeNotClaimable    = errors.New("execution node is not claimable")
-	ErrNodeLeaseHeld       = errors.New("execution node lease is held by another worker")
-	ErrNodeLeaseLost       = errors.New("execution node lease is no longer valid")
+	ErrNodeRuntimeNotFound  = errors.New("execution node runtime not found")
+	ErrNodeRuntimeExists    = errors.New("execution node runtime already exists")
+	ErrNodeNotClaimable     = errors.New("execution node is not claimable")
+	ErrNodeLeaseHeld        = errors.New("execution node lease is held by another worker")
+	ErrNodeLeaseLost        = errors.New("execution node lease is no longer valid")
 	ErrNodeRecoveryRequired = errors.New("execution node requires recovery review before retry")
-	ErrNodeEffectStarted   = errors.New("execution node side effect has already started")
+	ErrNodeEffectStarted    = errors.New("execution node side effect has already started")
 )
 
 type PostgresExecutionNodeLeases struct {
