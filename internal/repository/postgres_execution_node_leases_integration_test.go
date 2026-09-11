@@ -68,8 +68,15 @@ func TestPostgresExecutionNodeLeaseConcurrentClaimAndFencing(t *testing.T) {
 	if successes != 1 || held != 1 {
 		t.Fatalf("expected one winner and one held error, successes=%d held=%d", successes, held)
 	}
-	if winner.Fence != 1 || winner.AttemptNumber != 1 || winner.Token == "" {
+	if winner.Fence != 1 || winner.AttemptNumber != 1 || winner.Token == "" || winner.AttemptRef == "" {
 		t.Fatalf("unexpected first lease: %+v", winner)
+	}
+	firstAttempt, err := repo.GetAttempt(projectCtx, winner.AttemptRef)
+	if err != nil {
+		t.Fatalf("get first attempt: %v", err)
+	}
+	if firstAttempt.Attempt.Status != execution.AttemptPending || firstAttempt.LeaseFence != 1 {
+		t.Fatalf("claim must atomically create pending attempt: %+v", firstAttempt)
 	}
 
 	expireExecutionNodeLease(t, ctx, db, "exec-1", 1, "node-1")
@@ -77,14 +84,25 @@ func TestPostgresExecutionNodeLeaseConcurrentClaimAndFencing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reclaim expired lease: %v", err)
 	}
-	if reclaimed.Fence != 2 || reclaimed.AttemptNumber != 2 || reclaimed.Token == winner.Token {
+	if reclaimed.Fence != 2 || reclaimed.AttemptNumber != 2 || reclaimed.Token == winner.Token || reclaimed.AttemptRef == winner.AttemptRef {
 		t.Fatalf("reclaim must issue new token/fence/attempt: old=%+v new=%+v", winner, reclaimed)
 	}
 
-	if err := repo.Complete(projectCtx, winner, execution.NodeSucceeded); !errors.Is(err, ErrNodeLeaseLost) {
+	history, err := repo.ListAttempts(projectCtx, "exec-1", 1, "node-1")
+	if err != nil {
+		t.Fatalf("list attempts after reclaim: %v", err)
+	}
+	if len(history) != 2 || history[0].Attempt.Status != execution.AttemptAbandoned || history[1].Attempt.Status != execution.AttemptPending {
+		t.Fatalf("expected ABANDONED then PENDING attempts, got %+v", history)
+	}
+
+	if err := repo.Complete(projectCtx, winner, execution.NodeSucceeded, successCompletion()); !errors.Is(err, ErrNodeLeaseLost) {
 		t.Fatalf("stale worker completion error=%v want ErrNodeLeaseLost", err)
 	}
-	if err := repo.Complete(projectCtx, reclaimed, execution.NodeSucceeded); err != nil {
+	if _, err := repo.StartAttempt(projectCtx, reclaimed, testAttemptBinding()); err != nil {
+		t.Fatalf("start reclaimed attempt: %v", err)
+	}
+	if err := repo.Complete(projectCtx, reclaimed, execution.NodeSucceeded, successCompletion()); err != nil {
 		t.Fatalf("current lease completion: %v", err)
 	}
 
@@ -94,6 +112,13 @@ func TestPostgresExecutionNodeLeaseConcurrentClaimAndFencing(t *testing.T) {
 	}
 	if record.State != execution.NodeSucceeded || lease != nil {
 		t.Fatalf("completed runtime state=%+v lease=%+v", record, lease)
+	}
+	history, err = repo.ListAttempts(projectCtx, "exec-1", 1, "node-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if history[1].Attempt.Status != execution.AttemptSucceeded {
+		t.Fatalf("current attempt should be durable SUCCEEDED, got %+v", history[1])
 	}
 }
 
@@ -117,6 +142,9 @@ func TestPostgresExecutionNodeLeaseNonIdempotentExpiryRequiresRecovery(t *testin
 	if err != nil {
 		t.Fatalf("claim non-idempotent node: %v", err)
 	}
+	if _, err := repo.StartAttempt(projectCtx, lease, testAttemptBinding()); err != nil {
+		t.Fatalf("start attempt: %v", err)
+	}
 	if err := repo.MarkEffectStarted(projectCtx, lease); err != nil {
 		t.Fatalf("mark effect started: %v", err)
 	}
@@ -128,6 +156,13 @@ func TestPostgresExecutionNodeLeaseNonIdempotentExpiryRequiresRecovery(t *testin
 	_, err = repo.Claim(projectCtx, "exec-2", 1, "restart-prod", "worker-b", time.Minute)
 	if !errors.Is(err, ErrNodeRecoveryRequired) {
 		t.Fatalf("expired non-idempotent claim error=%v want ErrNodeRecoveryRequired", err)
+	}
+	attempt, err := repo.GetAttempt(projectCtx, lease.AttemptRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempt.Attempt.Status != execution.AttemptRunning {
+		t.Fatalf("recovery-required attempt must remain RUNNING for explicit recovery, got %s", attempt.Attempt.Status)
 	}
 }
 
@@ -152,17 +187,69 @@ func TestPostgresExecutionNodeLeaseMutationRequiresCommittedEffectForSuccess(t *
 	if err != nil {
 		t.Fatalf("claim mutation: %v", err)
 	}
+	started, err := repo.StartAttempt(projectCtx, lease, testAttemptBinding())
+	if err != nil {
+		t.Fatalf("start mutation attempt: %v", err)
+	}
+	if started.Attempt.Status != execution.AttemptRunning || started.Attempt.TargetSnapshot == "" {
+		t.Fatalf("unexpected started attempt: %+v", started)
+	}
 	if err := repo.MarkEffectStarted(projectCtx, lease); err != nil {
 		t.Fatalf("mark effect started: %v", err)
 	}
-	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded); !errors.Is(err, ErrNodeEffectNotCommitted) {
+	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded, successCompletion()); !errors.Is(err, ErrNodeEffectNotCommitted) {
 		t.Fatalf("success before commit error=%v want ErrNodeEffectNotCommitted", err)
 	}
 	if err := repo.MarkEffectCommitted(projectCtx, lease); err != nil {
 		t.Fatalf("mark effect committed: %v", err)
 	}
-	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded); err != nil {
+	if err := repo.Complete(projectCtx, lease, execution.NodeSucceeded, successCompletion()); err != nil {
 		t.Fatalf("complete committed mutation: %v", err)
+	}
+	attempt, err := repo.GetAttempt(projectCtx, lease.AttemptRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempt.Attempt.Status != execution.AttemptSucceeded || attempt.Attempt.EffectStartedAt == nil || attempt.Attempt.EffectCommittedAt == nil {
+		t.Fatalf("attempt must retain durable effect lineage: %+v", attempt)
+	}
+}
+
+func TestPostgresExecutionNodeLeaseReleaseBeforeEffectAbandonsAttempt(t *testing.T) {
+	db, ctx := openExecutionLeaseTestDB(t)
+	defer db.Close()
+	cleanupExecutionLeaseFixture(t, context.Background(), db)
+	defer cleanupExecutionLeaseFixture(t, context.Background(), db)
+	createExecutionLeaseFixture(t, ctx, db)
+
+	projectCtx := executionLeaseProjectContext(ctx)
+	repo := NewPostgresExecutionNodeLeases(db)
+	if err := repo.Register(projectCtx, execution.NodeRuntimeRecord{
+		ExecutionRef: "exec-release", PlanRevision: 1, NodeRef: "read",
+		State: execution.NodeReady, EffectClass: execution.EffectReadOnly, RetrySafe: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := repo.Claim(projectCtx, "exec-release", 1, "read", "worker-a", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ReleaseBeforeEffect(projectCtx, lease); err != nil {
+		t.Fatalf("release before effect: %v", err)
+	}
+	attempt, err := repo.GetAttempt(projectCtx, lease.AttemptRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempt.Attempt.Status != execution.AttemptAbandoned || attempt.Attempt.FinishedAt == nil {
+		t.Fatalf("released attempt must become ABANDONED: %+v", attempt)
+	}
+	runtime, activeLease, err := repo.Get(projectCtx, "exec-release", 1, "read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.State != execution.NodeReady || activeLease != nil {
+		t.Fatalf("released node must return READY without lease: runtime=%+v lease=%+v", runtime, activeLease)
 	}
 }
 
@@ -197,6 +284,20 @@ func TestPostgresExecutionNodeLeaseRenewCannotReviveExpiredLease(t *testing.T) {
 	expireExecutionNodeLease(t, ctx, db, "exec-3", 2, "analyze")
 	if _, err := repo.Renew(projectCtx, renewed, time.Minute); !errors.Is(err, ErrNodeLeaseLost) {
 		t.Fatalf("expired renewal error=%v want ErrNodeLeaseLost", err)
+	}
+}
+
+func testAttemptBinding() execution.AttemptBinding {
+	return execution.AttemptBinding{
+		TargetRef: "target-1", TargetRevision: 1, TargetSnapshot: "sha256:test-target",
+		PolicyDecisionRef: "policy-1", BudgetReservationRef: "budget-1",
+	}
+}
+
+func successCompletion() execution.AttemptCompletion {
+	return execution.AttemptCompletion{
+		Status: execution.AttemptSucceeded,
+		Usage:  execution.Usage{InputTokens: 10, OutputTokens: 5, Cost: 0.25, Duration: time.Second},
 	}
 }
 
@@ -263,6 +364,40 @@ func createExecutionLeaseFixture(t *testing.T, ctx context.Context, db *sql.DB) 
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (tenant_id, project_id, execution_id, plan_revision, node_id)
 		);
+
+		CREATE TABLE execution_attempts (
+			tenant_id TEXT NOT NULL,
+			project_id TEXT NOT NULL,
+			attempt_id TEXT NOT NULL,
+			execution_id TEXT NOT NULL,
+			plan_revision BIGINT NOT NULL,
+			node_id TEXT NOT NULL,
+			attempt_number INTEGER NOT NULL,
+			lease_fence BIGINT NOT NULL,
+			lease_owner TEXT NOT NULL,
+			status TEXT NOT NULL,
+			target_id TEXT,
+			target_revision BIGINT,
+			target_snapshot_digest TEXT,
+			policy_decision_id TEXT,
+			budget_reservation_id TEXT,
+			idempotency_key TEXT,
+			error_class TEXT,
+			input_tokens BIGINT NOT NULL DEFAULT 0,
+			output_tokens BIGINT NOT NULL DEFAULT 0,
+			cost NUMERIC(20,8) NOT NULL DEFAULT 0,
+			duration_ms BIGINT NOT NULL DEFAULT 0,
+			claimed_at TIMESTAMPTZ NOT NULL,
+			started_at TIMESTAMPTZ,
+			effect_started_at TIMESTAMPTZ,
+			effect_committed_at TIMESTAMPTZ,
+			finished_at TIMESTAMPTZ,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL,
+			PRIMARY KEY (tenant_id, project_id, attempt_id),
+			UNIQUE (tenant_id, project_id, execution_id, plan_revision, node_id, attempt_number),
+			UNIQUE (tenant_id, project_id, execution_id, plan_revision, node_id, lease_fence)
+		);
 	`)
 	if err != nil {
 		t.Fatalf("create execution lease fixture: %v", err)
@@ -271,5 +406,5 @@ func createExecutionLeaseFixture(t *testing.T, ctx context.Context, db *sql.DB) 
 
 func cleanupExecutionLeaseFixture(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
-	_, _ = db.ExecContext(ctx, `DROP TABLE IF EXISTS execution_node_runtime CASCADE`)
+	_, _ = db.ExecContext(ctx, `DROP TABLE IF EXISTS execution_attempts CASCADE; DROP TABLE IF EXISTS execution_node_runtime CASCADE`)
 }

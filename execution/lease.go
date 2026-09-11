@@ -3,14 +3,17 @@ package execution
 import "time"
 
 // NodeLease is the durable authorization held by one worker to execute one
-// node attempt. The token/fence prevents stale workers from mutating newer
-// control-plane state. External side effects are fenced only when the target
-// can enforce the fence; otherwise EffectClass and target-side idempotency are
-// still required. A lease does not provide exactly-once side-effect semantics.
+// node attempt. AttemptRef is created atomically with the claim so every valid
+// fence has a durable history record. The token/fence prevents stale workers
+// from mutating newer control-plane state. External side effects are fenced
+// only when the target can enforce the fence; otherwise EffectClass and
+// target-side idempotency are still required. A lease does not provide
+// exactly-once side-effect semantics.
 type NodeLease struct {
 	ExecutionRef  ExecutionID
 	PlanRevision  int64
 	NodeRef       NodeID
+	AttemptRef    AttemptID
 	OwnerWorkerID string
 	Token         string
 	Fence         int64
