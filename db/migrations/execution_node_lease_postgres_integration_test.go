@@ -4,6 +4,7 @@ package migrations
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 )
 
@@ -75,10 +76,7 @@ func TestExecutionNodeLeaseMigrationPostgresConstraints(t *testing.T) {
 	}
 }
 
-func cleanupExecutionNodeLeaseMigrationFixture(t *testing.T, ctx context.Context, db interface {
-	ExecContext(context.Context, string, ...any) (interface{ RowsAffected() (int64, error) }, error)
-}) {
+func cleanupExecutionNodeLeaseMigrationFixture(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
-	// This helper intentionally cannot use the generic interface above with
-	// database/sql's concrete Result type; keep cleanup in the test body instead.
+	_, _ = db.ExecContext(ctx, `DROP TABLE IF EXISTS execution_node_runtime CASCADE`)
 }
