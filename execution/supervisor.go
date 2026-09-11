@@ -30,6 +30,19 @@ type CostEstimator interface {
 	Estimate(execution Execution, node ExecutionNode, target ExecutionTarget) (BudgetEstimate, error)
 }
 
+// PreparedNode is a side-effect-free execution candidate. Policy eligibility,
+// target selection and cost estimation are resolved, but no budget reservation
+// has been created yet. Distributed workers must Claim first, then reserve
+// budget using the durable AttemptRef so losing workers cannot leak reservations.
+type PreparedNode struct {
+	Node     ExecutionNode
+	Target   ExecutionTarget
+	Policy   PolicyDecisionRecord
+	Estimate BudgetEstimate
+}
+
+// ReadyNode is the legacy in-memory bootstrap shape where budget is reserved by
+// the Supervisor before execution. Persistent workers should use PreparedNode.
 type ReadyNode struct {
 	Node        ExecutionNode
 	Target      ExecutionTarget
@@ -48,7 +61,10 @@ func NewSupervisor(policy PolicyEvaluator, resolver TargetResolver, estimator Co
 	return &Supervisor{policy: policy, resolver: resolver, estimator: estimator, budget: budget}
 }
 
-func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, runtimes map[NodeID]NodeState) ([]ReadyNode, []ExecutionCondition, error) {
+// PrepareRunnable performs only deterministic/side-effect-free scheduling work.
+// It deliberately does not reserve budget. This method is the entry point for
+// the persistent worker path.
+func (s *Supervisor) PrepareRunnable(execution Execution, plan ExecutionPlan, runtimes map[NodeID]NodeState) ([]PreparedNode, []ExecutionCondition, error) {
 	if execution.Status.Phase != ExecutionRunning && execution.Status.Phase != ExecutionReady {
 		return nil, nil, ErrExecutionNotRunnable
 	}
@@ -56,7 +72,7 @@ func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, run
 	nodes := append([]ExecutionNode(nil), plan.Nodes...)
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
 
-	var ready []ReadyNode
+	var prepared []PreparedNode
 	var conditions []ExecutionCondition
 
 	for _, node := range nodes {
@@ -113,34 +129,54 @@ func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, run
 			return nil, conditions, fmt.Errorf("estimate node %s: %w", node.ID, err)
 		}
 
-		reservationID := fmt.Sprintf("%s/%s/%d", execution.ID, node.ID, nextAttemptNumber(node.ID, runtimes))
-		reservation, err := s.budget.Reserve(reservationID, execution.ID, node.ID, estimate)
+		prepared = append(prepared, PreparedNode{
+			Node:     node,
+			Target:   target,
+			Policy:   policy,
+			Estimate: estimate,
+		})
+	}
+
+	if len(prepared) == 0 && len(conditions) == 0 {
+		if hasActiveOrWaitingNodes(runtimes) {
+			return nil, nil, nil
+		}
+		return nil, nil, ErrPlanNotReady
+	}
+	return prepared, conditions, nil
+}
+
+// SelectRunnable preserves the original in-memory bootstrap behavior. It is not
+// safe as a distributed scheduling primitive because reservation happens before
+// durable Claim. New worker code must use PrepareRunnable instead.
+func (s *Supervisor) SelectRunnable(execution Execution, plan ExecutionPlan, runtimes map[NodeID]NodeState) ([]ReadyNode, []ExecutionCondition, error) {
+	prepared, conditions, err := s.PrepareRunnable(execution, plan, runtimes)
+	if err != nil {
+		return nil, conditions, err
+	}
+
+	var ready []ReadyNode
+	for _, candidate := range prepared {
+		reservationID := fmt.Sprintf("%s/%s/%d", execution.ID, candidate.Node.ID, nextAttemptNumber(candidate.Node.ID, runtimes))
+		reservation, err := s.budget.Reserve(reservationID, execution.ID, candidate.Node.ID, candidate.Estimate)
 		if err != nil {
 			if errors.Is(err, ErrBudgetExceeded) {
 				conditions = append(conditions, ExecutionCondition{
 					Type:    ConditionBudgetPressure,
 					Status:  true,
-					NodeRef: node.ID,
+					NodeRef: candidate.Node.ID,
 					Reason:  err.Error(),
 				})
 				continue
 			}
 			return nil, conditions, err
 		}
-
 		ready = append(ready, ReadyNode{
-			Node:        node,
-			Target:      target,
-			Policy:      policy,
+			Node:        candidate.Node,
+			Target:      candidate.Target,
+			Policy:      candidate.Policy,
 			Reservation: reservation,
 		})
-	}
-
-	if len(ready) == 0 && len(conditions) == 0 {
-		if hasActiveOrWaitingNodes(runtimes) {
-			return nil, nil, nil
-		}
-		return nil, nil, ErrPlanNotReady
 	}
 	return ready, conditions, nil
 }
@@ -164,8 +200,8 @@ func hasActiveOrWaitingNodes(runtimes map[NodeID]NodeState) bool {
 	return false
 }
 
-// Attempt numbering is intentionally a persistence concern in later R1 steps.
-// For the in-memory bootstrap, a runnable PENDING/READY node starts at attempt 1.
+// Attempt numbering is a persistence concern for the persistent worker path.
+// The legacy in-memory bootstrap still assumes attempt 1.
 func nextAttemptNumber(_ NodeID, _ map[NodeID]NodeState) int {
 	return 1
 }
