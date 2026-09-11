@@ -21,7 +21,6 @@ var (
 	ErrNodeLeaseHeld          = errors.New("execution node lease is held by another worker")
 	ErrNodeLeaseLost          = errors.New("execution node lease is no longer valid")
 	ErrNodeRecoveryRequired   = errors.New("execution node requires recovery review before retry")
-	ErrNodeEffectStarted      = errors.New("execution node side effect has already started")
 	ErrNodeEffectNotCommitted = errors.New("execution node mutation effect is not committed")
 )
 
@@ -63,25 +62,27 @@ func (r *PostgresExecutionNodeLeases) Register(ctx context.Context, record execu
 	})
 }
 
-// Claim atomically authorizes one worker to execute the next attempt. READY
-// nodes may be claimed immediately. Expired RUNNING nodes may be reclaimed only
-// when the frozen retry semantics say retry_safe and there is no evidence that
-// the previous attempt committed its effect.
+// Claim atomically authorizes one worker to execute the next attempt. PostgreSQL
+// is the authoritative clock for claim/expiry decisions so worker clock skew
+// cannot cause premature reclaim or lease revival.
 func (r *PostgresExecutionNodeLeases) Claim(
 	ctx context.Context,
 	executionID execution.ExecutionID,
 	planRevision int64,
 	nodeID execution.NodeID,
 	owner string,
-	now time.Time,
 	leaseDuration time.Duration,
 ) (execution.NodeLease, error) {
-	if err := validateLeaseIdentity(executionID, planRevision, nodeID, owner, now, leaseDuration); err != nil {
+	if err := validateLeaseIdentity(executionID, planRevision, nodeID, owner, leaseDuration); err != nil {
 		return execution.NodeLease{}, err
 	}
 
 	var lease execution.NodeLease
 	err := r.withScopedTx(ctx, func(tx *sql.Tx, _ identity.Principal) error {
+		now, err := databaseNow(ctx, tx)
+		if err != nil {
+			return err
+		}
 		row, err := loadNodeRuntimeForUpdate(ctx, tx, executionID, planRevision, nodeID)
 		if err != nil {
 			return err
@@ -139,14 +140,20 @@ func (r *PostgresExecutionNodeLeases) Claim(
 	return lease, err
 }
 
-// Renew extends a currently active lease. An expired lease cannot be revived;
-// the node must go through Claim/recovery so a new fence is issued.
-func (r *PostgresExecutionNodeLeases) Renew(ctx context.Context, lease execution.NodeLease, now time.Time, leaseDuration time.Duration) (execution.NodeLease, error) {
-	if err := validateHeldLease(lease, now, leaseDuration); err != nil {
+// Renew extends a currently active lease using PostgreSQL time. An expired lease
+// cannot be revived; the node must go through Claim/recovery so a new fence is issued.
+func (r *PostgresExecutionNodeLeases) Renew(ctx context.Context, lease execution.NodeLease, leaseDuration time.Duration) (execution.NodeLease, error) {
+	if err := validateHeldLease(lease, leaseDuration); err != nil {
 		return execution.NodeLease{}, err
 	}
-	expiresAt := now.Add(leaseDuration)
+	var databaseTime time.Time
 	err := r.withScopedTx(ctx, func(tx *sql.Tx, _ identity.Principal) error {
+		now, err := databaseNow(ctx, tx)
+		if err != nil {
+			return err
+		}
+		databaseTime = now
+		expiresAt := now.Add(leaseDuration)
 		result, err := tx.ExecContext(ctx, `UPDATE execution_node_runtime
 			SET heartbeat_at=$7, lease_expires_at=$8, updated_at=$7
 			WHERE execution_id=$1 AND plan_revision=$2 AND node_id=$3
@@ -164,21 +171,18 @@ func (r *PostgresExecutionNodeLeases) Renew(ctx context.Context, lease execution
 		if affected != 1 {
 			return ErrNodeLeaseLost
 		}
+		lease.ExpiresAt = expiresAt
 		return nil
 	})
 	if err != nil {
 		return execution.NodeLease{}, err
 	}
-	lease.HeartbeatAt = now
-	lease.ExpiresAt = expiresAt
+	lease.HeartbeatAt = databaseTime
 	return lease, nil
 }
 
-func (r *PostgresExecutionNodeLeases) MarkEffectStarted(ctx context.Context, lease execution.NodeLease, at time.Time) error {
-	if at.IsZero() {
-		return fmt.Errorf("effect start time is required")
-	}
-	return r.fencedUpdate(ctx, lease, at, `
+func (r *PostgresExecutionNodeLeases) MarkEffectStarted(ctx context.Context, lease execution.NodeLease) error {
+	return r.fencedUpdate(ctx, lease, `
 		UPDATE execution_node_runtime
 		SET effect_started_at=$7, updated_at=$7
 		WHERE execution_id=$1 AND plan_revision=$2 AND node_id=$3
@@ -186,11 +190,8 @@ func (r *PostgresExecutionNodeLeases) MarkEffectStarted(ctx context.Context, lea
 			AND lease_expires_at > $7 AND effect_started_at IS NULL`)
 }
 
-func (r *PostgresExecutionNodeLeases) MarkEffectCommitted(ctx context.Context, lease execution.NodeLease, at time.Time) error {
-	if at.IsZero() {
-		return fmt.Errorf("effect commit time is required")
-	}
-	return r.fencedUpdate(ctx, lease, at, `
+func (r *PostgresExecutionNodeLeases) MarkEffectCommitted(ctx context.Context, lease execution.NodeLease) error {
+	return r.fencedUpdate(ctx, lease, `
 		UPDATE execution_node_runtime
 		SET effect_committed_at=$7, updated_at=$7
 		WHERE execution_id=$1 AND plan_revision=$2 AND node_id=$3
@@ -202,19 +203,20 @@ func (r *PostgresExecutionNodeLeases) MarkEffectCommitted(ctx context.Context, l
 // ReleaseBeforeEffect returns a claimed node to READY only if no side effect was
 // marked as started. Once an effect starts, retry/recovery must use the explicit
 // failure and idempotency semantics instead of silently releasing the claim.
-func (r *PostgresExecutionNodeLeases) ReleaseBeforeEffect(ctx context.Context, lease execution.NodeLease, at time.Time) error {
-	if at.IsZero() {
-		return fmt.Errorf("release time is required")
-	}
+func (r *PostgresExecutionNodeLeases) ReleaseBeforeEffect(ctx context.Context, lease execution.NodeLease) error {
 	return r.withScopedTx(ctx, func(tx *sql.Tx, _ identity.Principal) error {
+		now, err := databaseNow(ctx, tx)
+		if err != nil {
+			return err
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE execution_node_runtime
 			SET state='READY', lease_owner=NULL, lease_token=NULL, claimed_at=NULL,
 				heartbeat_at=NULL, lease_expires_at=NULL, updated_at=$7
 			WHERE execution_id=$1 AND plan_revision=$2 AND node_id=$3
 				AND state='RUNNING' AND lease_owner=$4 AND lease_token=$5 AND lease_fence=$6
-				AND effect_started_at IS NULL`,
+				AND lease_expires_at > $7 AND effect_started_at IS NULL`,
 			lease.ExecutionRef, lease.PlanRevision, lease.NodeRef, lease.OwnerWorkerID,
-			lease.Token, lease.Fence, at)
+			lease.Token, lease.Fence, now)
 		if err != nil {
 			return fmt.Errorf("release execution node lease: %w", err)
 		}
@@ -232,19 +234,20 @@ func (r *PostgresExecutionNodeLeases) ReleaseBeforeEffect(ctx context.Context, l
 // Complete transitions the node to a terminal state under the current active
 // fence and clears the lease. A worker cannot complete after lease expiry. A
 // mutation cannot be marked SUCCEEDED until its effect has been committed.
-func (r *PostgresExecutionNodeLeases) Complete(ctx context.Context, lease execution.NodeLease, terminal execution.NodeState, at time.Time) error {
-	if at.IsZero() {
-		return fmt.Errorf("completion time is required")
-	}
+func (r *PostgresExecutionNodeLeases) Complete(ctx context.Context, lease execution.NodeLease, terminal execution.NodeState) error {
 	if !((execution.NodeRuntimeRecord{State: terminal}).Terminal()) {
 		return fmt.Errorf("terminal node state is required")
 	}
 	return r.withScopedTx(ctx, func(tx *sql.Tx, _ identity.Principal) error {
+		now, err := databaseNow(ctx, tx)
+		if err != nil {
+			return err
+		}
 		row, err := loadNodeRuntimeForUpdate(ctx, tx, lease.ExecutionRef, lease.PlanRevision, lease.NodeRef)
 		if err != nil {
 			return err
 		}
-		if !leaseOwnsRow(row, lease, at) {
+		if !leaseOwnsRow(row, lease, now) {
 			return ErrNodeLeaseLost
 		}
 		if terminal == execution.NodeSucceeded && isMutation(row.record.EffectClass) && row.record.EffectCommittedAt == nil {
@@ -258,7 +261,7 @@ func (r *PostgresExecutionNodeLeases) Complete(ctx context.Context, lease execut
 				AND state='RUNNING' AND lease_owner=$4 AND lease_token=$5 AND lease_fence=$6
 				AND lease_expires_at > $8`,
 			lease.ExecutionRef, lease.PlanRevision, lease.NodeRef, lease.OwnerWorkerID,
-			lease.Token, lease.Fence, terminal, at)
+			lease.Token, lease.Fence, terminal, now)
 		if err != nil {
 			return fmt.Errorf("complete execution node: %w", err)
 		}
@@ -296,11 +299,15 @@ func (r *PostgresExecutionNodeLeases) Get(ctx context.Context, executionID execu
 	return record, lease, err
 }
 
-func (r *PostgresExecutionNodeLeases) fencedUpdate(ctx context.Context, lease execution.NodeLease, at time.Time, query string) error {
+func (r *PostgresExecutionNodeLeases) fencedUpdate(ctx context.Context, lease execution.NodeLease, query string) error {
 	return r.withScopedTx(ctx, func(tx *sql.Tx, _ identity.Principal) error {
+		now, err := databaseNow(ctx, tx)
+		if err != nil {
+			return err
+		}
 		result, err := tx.ExecContext(ctx, query,
 			lease.ExecutionRef, lease.PlanRevision, lease.NodeRef, lease.OwnerWorkerID,
-			lease.Token, lease.Fence, at)
+			lease.Token, lease.Fence, now)
 		if err != nil {
 			return fmt.Errorf("fenced execution node update: %w", err)
 		}
@@ -363,16 +370,24 @@ func loadNodeRuntime(ctx context.Context, tx *sql.Tx, executionID execution.Exec
 	return row, nil
 }
 
-func leaseOwnsRow(row nodeRuntimeRow, lease execution.NodeLease, at time.Time) bool {
+func leaseOwnsRow(row nodeRuntimeRow, lease execution.NodeLease, now time.Time) bool {
 	return row.record.State == execution.NodeRunning &&
 		row.leaseOwner.Valid && row.leaseOwner.String == lease.OwnerWorkerID &&
 		row.leaseToken.Valid && row.leaseToken.String == lease.Token &&
 		row.record.LeaseFence == lease.Fence &&
-		row.leaseExpiresAt.Valid && at.Before(row.leaseExpiresAt.Time)
+		row.leaseExpiresAt.Valid && now.Before(row.leaseExpiresAt.Time)
 }
 
 func isMutation(effect execution.EffectClass) bool {
 	return effect == execution.EffectIdempotentMutation || effect == execution.EffectNonIdempotentMutation
+}
+
+func databaseNow(ctx context.Context, tx *sql.Tx) (time.Time, error) {
+	var now time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return time.Time{}, fmt.Errorf("read PostgreSQL clock: %w", err)
+	}
+	return now.UTC(), nil
 }
 
 func (r *PostgresExecutionNodeLeases) withScopedTx(ctx context.Context, fn func(*sql.Tx, identity.Principal) error) error {
@@ -421,18 +436,18 @@ func validateNodeRuntimeRecord(record execution.NodeRuntimeRecord) error {
 	return nil
 }
 
-func validateLeaseIdentity(executionID execution.ExecutionID, planRevision int64, nodeID execution.NodeID, owner string, now time.Time, leaseDuration time.Duration) error {
+func validateLeaseIdentity(executionID execution.ExecutionID, planRevision int64, nodeID execution.NodeID, owner string, leaseDuration time.Duration) error {
 	if executionID == "" || planRevision < 1 || nodeID == "" || strings.TrimSpace(owner) == "" {
 		return fmt.Errorf("execution, positive plan revision, node and lease owner are required")
 	}
-	if now.IsZero() || leaseDuration <= 0 {
-		return fmt.Errorf("current time and positive lease duration are required")
+	if leaseDuration <= 0 {
+		return fmt.Errorf("positive lease duration is required")
 	}
 	return nil
 }
 
-func validateHeldLease(lease execution.NodeLease, now time.Time, leaseDuration time.Duration) error {
-	if err := validateLeaseIdentity(lease.ExecutionRef, lease.PlanRevision, lease.NodeRef, lease.OwnerWorkerID, now, leaseDuration); err != nil {
+func validateHeldLease(lease execution.NodeLease, leaseDuration time.Duration) error {
+	if err := validateLeaseIdentity(lease.ExecutionRef, lease.PlanRevision, lease.NodeRef, lease.OwnerWorkerID, leaseDuration); err != nil {
 		return err
 	}
 	if strings.TrimSpace(lease.Token) == "" || lease.Fence < 1 {
