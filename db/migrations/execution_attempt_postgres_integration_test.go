@@ -110,7 +110,22 @@ func TestExecutionAttemptMigrationPostgresConstraints(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
 		tenant_id, project_id, attempt_id, execution_id, plan_revision, node_id,
 		attempt_number, lease_fence, lease_owner, status, claimed_at, finished_at
-	) VALUES ('tenant-a','project-a','att-bad-failed','exec-5',1,'node-1',1,1,'worker-a','FAILED',NOW(),NOW())`); err == nil {
+	) VALUES (
+		'tenant-a','project-a','att-terminal-before-start','exec-terminal',1,'node-1',1,1,'worker-a','SUCCEEDED',
+		NOW(),NOW()
+	)`); err == nil {
+		t.Fatal("known terminal attempt without started_at must be rejected")
+	}
+
+	if _, err := db.ExecContext(ctx, `INSERT INTO execution_attempts(
+		tenant_id, project_id, attempt_id, execution_id, plan_revision, node_id,
+		attempt_number, lease_fence, lease_owner, status, claimed_at, started_at,
+		finished_at, target_id, target_revision, target_snapshot_digest,
+		policy_decision_id, budget_reservation_id
+	) VALUES (
+		'tenant-a','project-a','att-bad-failed','exec-5',1,'node-1',1,1,'worker-a','FAILED',
+		NOW(),NOW(),NOW(),'target-1',1,'sha256:x','policy-1','budget-1'
+	)`); err == nil {
 		t.Fatal("FAILED attempt without error_class must be rejected")
 	}
 
