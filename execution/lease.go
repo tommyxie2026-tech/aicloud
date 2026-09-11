@@ -20,6 +20,9 @@ type NodeLease struct {
 	ExpiresAt     time.Time
 }
 
+// ActiveAt is an advisory local-clock check for observability/UI purposes.
+// Authorization decisions must be made by the persistent lease repository,
+// which uses the PostgreSQL clock as the authoritative time source.
 func (l NodeLease) ActiveAt(now time.Time) bool {
 	return l.Token != "" && l.Fence > 0 && !now.Before(l.ClaimedAt) && now.Before(l.ExpiresAt)
 }
