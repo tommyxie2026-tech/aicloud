@@ -79,10 +79,10 @@ CREATE TABLE IF NOT EXISTS execution_attempts (
         (status = 'PENDING' AND started_at IS NULL AND finished_at IS NULL)
         OR (status = 'RUNNING' AND started_at IS NOT NULL AND finished_at IS NULL)
         OR (
-            status IN ('SUCCEEDED','FAILED','CANCELLED')
+            status IN ('SUCCEEDED','FAILED')
             AND started_at IS NOT NULL AND finished_at IS NOT NULL
         )
-        OR (status = 'ABANDONED' AND finished_at IS NOT NULL)
+        OR (status IN ('CANCELLED','ABANDONED') AND finished_at IS NOT NULL)
     ),
     CONSTRAINT execution_attempt_started_target_contract CHECK (
         started_at IS NULL OR (
@@ -133,4 +133,4 @@ CREATE POLICY execution_attempts_scope_policy ON execution_attempts
 COMMENT ON TABLE execution_attempts IS
     'Durable append-oriented node attempt history. Each successful claim/fence receives a distinct attempt row.';
 COMMENT ON COLUMN execution_attempts.status IS
-    'ABANDONED means the attempt lost execution authority before terminal completion; it is not equivalent to FAILED.';
+    'CANCELLED may occur before or after target start; ABANDONED means execution authority was lost and is not equivalent to FAILED.';
