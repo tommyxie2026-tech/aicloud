@@ -7,9 +7,23 @@ import (
 	"time"
 )
 
+type EffectDisposition string
+
+const (
+	// Empty/NOT_APPLICABLE is expected for PURE and READ_ONLY work.
+	EffectDispositionNotApplicable EffectDisposition = ""
+	// NOT_APPLIED means the target can positively prove no external mutation was committed.
+	EffectDispositionNotApplied EffectDisposition = "NOT_APPLIED"
+	// COMMITTED means the target can positively prove the intended mutation was committed.
+	EffectDispositionCommitted EffectDisposition = "COMMITTED"
+	// UNKNOWN means the target started mutation work but cannot prove whether it committed.
+	EffectDispositionUnknown EffectDisposition = "UNKNOWN"
+)
+
 type InvocationResult struct {
-	Usage        Usage
-	ArtifactRefs []ArtifactID
+	Usage             Usage
+	ArtifactRefs      []ArtifactID
+	EffectDisposition EffectDisposition
 }
 
 type TargetInvoker interface {
@@ -88,15 +102,7 @@ func (r *AttemptRunner) Run(ctx context.Context, execution Execution, ready Read
 	attempt.FinishedAt = &finished
 	attempt.Usage = result.Usage
 
-	actual := BudgetEstimate{
-		Cost:         result.Usage.Cost,
-		NodeAttempts: 1,
-	}
-	if ready.Target.Type == TargetTool {
-		actual.ToolCalls = 1
-	}
-
-	if settleErr := r.budget.Settle(ready.Reservation.ID, actual); settleErr != nil {
+	if settleErr := r.budget.Settle(ready.Reservation.ID, actualBudgetForInvocation(ready.Target, result.Usage)); settleErr != nil {
 		attempt.Status = AttemptFailed
 		attempt.ErrorClass = ErrorUnknown
 		return attempt, result, fmt.Errorf("settle budget reservation: %w", settleErr)
@@ -108,15 +114,34 @@ func (r *AttemptRunner) Run(ctx context.Context, execution Execution, ready Read
 	}
 
 	attempt.Status = AttemptFailed
+	attempt.ErrorClass = classifyInvocationError(err)
+	return attempt, result, err
+}
+
+func actualBudgetForInvocation(target ExecutionTarget, usage Usage) BudgetEstimate {
+	actual := BudgetEstimate{
+		Cost:         usage.Cost,
+		NodeAttempts: 1,
+	}
+	if target.Type == TargetTool {
+		actual.ToolCalls = 1
+	}
+	return actual
+}
+
+func classifyInvocationError(err error) ErrorClass {
+	if err == nil {
+		return ""
+	}
 	var invocationErr *InvocationError
 	if errors.As(err, &invocationErr) && invocationErr.Class != "" {
-		attempt.ErrorClass = invocationErr.Class
-	} else if errors.Is(err, context.DeadlineExceeded) {
-		attempt.ErrorClass = ErrorTimeout
-	} else if errors.Is(err, context.Canceled) {
-		attempt.ErrorClass = ErrorTransient
-	} else {
-		attempt.ErrorClass = ErrorUnknown
+		return invocationErr.Class
 	}
-	return attempt, result, err
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ErrorTimeout
+	}
+	if errors.Is(err, context.Canceled) {
+		return ErrorTransient
+	}
+	return ErrorUnknown
 }
