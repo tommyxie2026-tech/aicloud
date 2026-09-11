@@ -186,7 +186,11 @@ func completeAttemptTx(ctx context.Context, tx *sql.Tx, lease execution.NodeLeas
 			output_tokens=$10, cost=$11, duration_ms=$12,
 			finished_at=$13, updated_at=$13
 		WHERE attempt_id=$1 AND execution_id=$2 AND plan_revision=$3 AND node_id=$4
-			AND lease_fence=$5 AND attempt_number=$6 AND status='RUNNING'`,
+			AND lease_fence=$5 AND attempt_number=$6
+			AND (
+				status='RUNNING'
+				OR ($7='CANCELLED' AND status='PENDING')
+			)`,
 		lease.AttemptRef, lease.ExecutionRef, lease.PlanRevision, lease.NodeRef,
 		lease.Fence, lease.AttemptNumber, completion.Status, completion.ErrorClass,
 		completion.Usage.InputTokens, completion.Usage.OutputTokens, completion.Usage.Cost,
