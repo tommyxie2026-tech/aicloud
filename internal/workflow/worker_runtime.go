@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ type WorkerConfig struct {
 	Namespace   string
 	TaskQueue   string
 	StopTimeout time.Duration
+	TLSConfig   *tls.Config
 }
 
 func (c WorkerConfig) Validate() error {
@@ -64,10 +66,7 @@ func runTemporalWorker(
 		return fmt.Errorf("Temporal worker dependencies are required")
 	}
 
-	temporalClient, err := dial(ctx, client.Options{
-		HostPort:  strings.TrimSpace(config.Address),
-		Namespace: strings.TrimSpace(config.Namespace),
-	})
+	temporalClient, err := dial(ctx, temporalClientOptions(config))
 	if err != nil {
 		return fmt.Errorf("dial Temporal: %w", err)
 	}
@@ -91,6 +90,16 @@ func runTemporalWorker(
 	<-ctx.Done()
 	temporalWorker.Stop()
 	return nil
+}
+
+func temporalClientOptions(config WorkerConfig) client.Options {
+	return client.Options{
+		HostPort:  strings.TrimSpace(config.Address),
+		Namespace: strings.TrimSpace(config.Namespace),
+		ConnectionOptions: client.ConnectionOptions{
+			TLS: config.TLSConfig,
+		},
+	}
 }
 
 func temporalWorkerOptions(config WorkerConfig) worker.Options {

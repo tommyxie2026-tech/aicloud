@@ -1,9 +1,31 @@
 package migrations
 
 import (
+	"io/fs"
 	"strings"
 	"testing"
 )
+
+func TestMigrationVersionPrefixesAreUnique(t *testing.T) {
+	entries, err := fs.ReadDir(migrationFiles, ".")
+	if err != nil {
+		t.Fatalf("read migrations: %v", err)
+	}
+	seen := map[string]string{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		parts := strings.SplitN(entry.Name(), "_", 2)
+		if len(parts) != 2 || len(parts[0]) != 3 {
+			t.Fatalf("migration %q must use a three-digit version prefix", entry.Name())
+		}
+		if previous, ok := seen[parts[0]]; ok {
+			t.Fatalf("migration version %s is duplicated by %q and %q", parts[0], previous, entry.Name())
+		}
+		seen[parts[0]] = entry.Name()
+	}
+}
 
 func TestTaskScopeIdentityMigrationRemovesSessionPrivilegeBypass(t *testing.T) {
 	body, err := migrationFiles.ReadFile("005_task_scope_identity.sql")
