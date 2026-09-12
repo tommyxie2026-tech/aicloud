@@ -21,6 +21,11 @@
 13. DB/Event Dual Write 必须使用 Transactional Outbox 消除。
 14. 各层 Retry 必须拥有 Stable Idempotency Identity 与 Bounded Attempt Budget。
 15. 历史 Evidence 必须不可变并且 Versioned。
+16. 运行时演进遵循 `Task -> ExecutionPlan -> model/deployment/tool/subagent graph`；Task 继续作为聚合根，ExecutionPlan 是版本化执行契约。
+17. 每个可路由 Graph Node 都必须保持 Model Identity 与 Deployment Identity 分离。
+18. 为事后重建所需的 Route-time Policy、Evaluation、Signal 与 Pricing Context 必须固化为 Decision Evidence。
+19. Subagent 只能获得 Bounded Delegation，不能获得 Ambient Authority。
+20. 第一阶段 Execution Graph 必须是有边界 DAG；无边界 Autonomous Cycle 需要单独冻结契约。
 
 ## 运行时责任边界
 
@@ -62,6 +67,7 @@ audit-evidence-contract.md
 cost-accounting-contract.md
 evaluation-release-gate-contract.md
 pre-code-architecture-gate.md
+execution-plan-graph-contract.md
 ```
 
 以上文档均维护同步的 `.zh-CN.md` 中文版本。
@@ -102,6 +108,8 @@ R1 Explicit Principal Model
   -> R7 OpenAPI / OIDC / RBAC / ABAC Convergence
 ```
 
+ExecutionPlan / Graph 实现属于 R7 之后的演进，必须继承以上 Frozen Invariant，不能绕过现有安全、证据、成本和身份边界。
+
 PR #12 在 R1-R4 完成前继续保持 Draft。
 
 ## 非目标
@@ -113,7 +121,8 @@ v0.1 不做：
 - Domain Code 中的 Provider-specific Business Logic；
 - Agent 直接访问 Enterprise Resource；
 - 把 Workflow History 当作 Business Database；
-- 把 Missing Scope 当成 Administrative Privilege。
+- 把 Missing Scope 当成 Administrative Privilege；
+- 无边界循环式 Agent Execution。
 
 ## Change Control
 

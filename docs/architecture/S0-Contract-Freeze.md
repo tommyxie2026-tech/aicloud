@@ -21,6 +21,11 @@ Before additional implementation, freeze the contracts that prevent architectura
 13. Unsafe DB/event dual writes are replaced by a transactional Outbox.
 14. Retry layers require stable idempotency identities and bounded attempt budgets.
 15. Historical evidence is immutable and versioned.
+16. Runtime evolution follows `Task -> ExecutionPlan -> model/deployment/tool/subagent graph`; Task remains the aggregate root and ExecutionPlan is a versioned execution contract.
+17. Model and Deployment identity remain separate at every routable graph node.
+18. Route-time policy, evaluation, signal and pricing context required for reconstruction is persisted as decision evidence.
+19. Subagents receive bounded delegation rather than ambient authority.
+20. Initial execution graphs are bounded DAGs; unbounded autonomous cycles require a separate frozen contract.
 
 ## Runtime Ownership
 
@@ -62,6 +67,7 @@ audit-evidence-contract.md
 cost-accounting-contract.md
 evaluation-release-gate-contract.md
 pre-code-architecture-gate.md
+execution-plan-graph-contract.md
 ```
 
 Every document has a synchronized `.zh-CN.md` version.
@@ -102,6 +108,8 @@ R1 Explicit Principal model
   -> R7 OpenAPI / OIDC / RBAC / ABAC convergence
 ```
 
+ExecutionPlan/graph implementation is a post-R7 evolution and must preserve the frozen invariants above rather than bypass them.
+
 PR #12 remains Draft until R1-R4 are complete.
 
 ## Non-Goals
@@ -113,7 +121,8 @@ v0.1 does not attempt:
 - provider-specific business logic in domain code;
 - direct Agent access to enterprise resources;
 - treating workflow history as the business database;
-- treating missing scope as administrative privilege.
+- treating missing scope as administrative privilege;
+- unbounded cyclic agent execution.
 
 ## Change Control
 
