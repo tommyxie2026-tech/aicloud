@@ -52,13 +52,14 @@ AI Cloud 的 `devdocs/` 同时维护英文和简体中文版本。
 
 ## 目录
 
-```text
-devdocs/
-└── models/
-    └── kimi-k3/
-```
+| 目录 | 内容 |
+| --- | --- |
+| [models/](models/README.zh-CN.md) | 模型架构、部署与集成研究 |
+| [deployment/](deployment/01-carrier-neutral-multi-model-serving.zh-CN.md) | 载体无关的模型服务与 GPU 资源管理设计 |
 
 ## 当前研究
 
+- [载体无关的多模型部署与 GPU 调度](deployment/01-carrier-neutral-multi-model-serving.zh-CN.md)
+- [Carrier-Neutral Multi-Model Serving and GPU Scheduling](deployment/01-carrier-neutral-multi-model-serving.md)
 - [Kimi K3 技术架构研究](models/kimi-k3/README.zh-CN.md)
 - [Kimi K3 Technical Architecture Study](models/kimi-k3/README.md)

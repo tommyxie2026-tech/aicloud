@@ -50,13 +50,14 @@ Research documents should:
 
 ## Directory
 
-```text
-devdocs/
-└── models/
-    └── kimi-k3/
-```
+| Directory | Contents |
+| --- | --- |
+| [models/](models/README.md) | Model architecture, deployment, and integration studies |
+| [deployment/](deployment/01-carrier-neutral-multi-model-serving.md) | Carrier-neutral model serving and GPU resource management design |
 
 ## Current studies
 
+- [Carrier-neutral multi-model serving and GPU scheduling — English](deployment/01-carrier-neutral-multi-model-serving.md)
+- [载体无关的多模型部署与 GPU 调度 — 简体中文](deployment/01-carrier-neutral-multi-model-serving.zh-CN.md)
 - [Kimi K3 technical architecture — English](models/kimi-k3/README.md)
 - [Kimi K3 技术架构研究 — 简体中文](models/kimi-k3/README.zh-CN.md)
