@@ -125,7 +125,7 @@ func TestDurableRoutingActivityReplaySkipsVolatilePolicyAndRouter(t *testing.T) 
 	selection.replay = repository.RouteSelectionResult{
 		Decision: domain.RouteDecision{ID: "route-frozen", TaskID: task.ID},
 		Target: execution.ExecutionTarget{
-			ID: execution.TargetID("model/model-a@v1"),
+			ID:       execution.TargetID("model/model-a@v1"),
 			Snapshot: execution.TargetSnapshot{Digest: "sha256:frozen"},
 		},
 		Replayed: true,
