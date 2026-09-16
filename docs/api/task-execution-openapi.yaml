@@ -1,42 +1,71 @@
 openapi: 3.1.0
 info:
   title: AI Cloud Task Execution API
-  version: 0.1.0
+  version: 0.1.1
+  description: >-
+    Draft R1 execution extension. The existing /api/v1/tasks Task aggregate is
+    canonical; this document adds versioned ExecutionPlan and ExecutionRun
+    resources without defining a second Task domain model.
+x-aicloud-status: draft
 paths:
-  /v1/tasks:
-    post:
-      operationId: createTask
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/TaskDefinition'}
-      responses:
-        '201':
-          description: Created
-  /v1/tasks/{task_id}:plan:
+  /api/v1/tasks/{task_id}/plan:
     post:
       operationId: planTask
       parameters:
         - {name: task_id, in: path, required: true, schema: {type: string}}
       responses:
         '200':
-          description: Plan generated
+          description: Versioned execution plan generated
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ExecutionPlan'}
-  /v1/tasks/{task_id}:run:
+  /api/v1/tasks/{task_id}/plans:
+    get:
+      operationId: listTaskPlans
+      parameters:
+        - {name: task_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Plan revisions
+  /api/v1/tasks/{task_id}/runs:
     post:
       operationId: runTask
       parameters:
         - {name: task_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planId]
+              properties:
+                planId: {type: string}
       responses:
         '202':
-          description: Run accepted
+          description: Execution run accepted
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ExecutionRun'}
-  /v1/runs/{run_id}:cancel:
+    get:
+      operationId: listTaskRuns
+      parameters:
+        - {name: task_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Execution attempts for the task
+  /api/v1/runs/{run_id}:
+    get:
+      operationId: getExecutionRun
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Execution run
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExecutionRun'}
+  /api/v1/runs/{run_id}/cancel:
     post:
       operationId: cancelRun
       parameters:
@@ -45,39 +74,9 @@ paths:
         '202': {description: Cancellation accepted}
 components:
   schemas:
-    TaskDefinition:
-      type: object
-      required: [goal, taskType]
-      properties:
-        id: {type: string}
-        tenant: {type: string}
-        project: {type: string}
-        goal: {type: string}
-        taskType: {type: string}
-        inputs:
-          type: array
-          items: {$ref: '#/components/schemas/TaskInput'}
-        constraints: {$ref: '#/components/schemas/TaskConstraints'}
-        successCriteria:
-          type: array
-          items: {type: string}
-    TaskInput:
-      type: object
-      required: [type, ref]
-      properties:
-        type: {type: string}
-        ref: {type: string}
-    TaskConstraints:
-      type: object
-      properties:
-        maxCostUsd: {type: number, minimum: 0}
-        timeoutSeconds: {type: integer, minimum: 1}
-        dataClass: {type: string}
-        regionPolicy: {type: string}
-        humanApproval: {type: string}
     ExecutionPlan:
       type: object
-      required: [id, taskId, revision, steps]
+      required: [id, taskId, revision, steps, createdAt]
       properties:
         id: {type: string}
         taskId: {type: string}
@@ -86,6 +85,7 @@ components:
           type: array
           items: {$ref: '#/components/schemas/PlanStep'}
         policyDecision: {$ref: '#/components/schemas/PolicyDecision'}
+        createdAt: {type: string, format: date-time}
     PlanStep:
       type: object
       required: [id, type]
@@ -106,7 +106,7 @@ components:
         reason: {type: string}
     ExecutionRun:
       type: object
-      required: [id, taskId, planId, phase]
+      required: [id, taskId, planId, attempt, phase]
       properties:
         id: {type: string}
         taskId: {type: string}
@@ -115,6 +115,14 @@ components:
         phase:
           type: string
           enum: [accepted, running, suspended, succeeded, failed, cancelled]
-        costUsd: {type: number}
-        durationMs: {type: integer}
+        usage:
+          type: object
+          properties:
+            inputTokens: {type: integer, minimum: 0}
+            outputTokens: {type: integer, minimum: 0}
+            cacheReadTokens: {type: integer, minimum: 0}
+            costUsd: {type: number, minimum: 0}
+            latencyMs: {type: integer, minimum: 0}
         outcomeSuccess: {type: boolean}
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
