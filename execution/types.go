@@ -17,8 +17,12 @@ type (
 	OutcomeID        string
 )
 
+// Goal is an immutable execution-time snapshot of a canonical business Task's
+// intent. TaskRef preserves lineage without making execution depend on the
+// internal/domain package or introducing a second Task aggregate.
 type Goal struct {
 	ID                 GoalID
+	TaskRef            string
 	Objective          string
 	AcceptanceCriteria []AcceptanceCriterion
 	Constraints        GoalConstraints
@@ -36,8 +40,12 @@ type GoalConstraints struct {
 	AllowedDataScopes      []string
 }
 
+// Execution is one execution strategy/attempt lineage for a canonical Task.
+// Multiple Executions may belong to one Task when replanning, recovery or an
+// alternate strategy is required.
 type Execution struct {
 	ID            ExecutionID
+	TaskRef       string
 	GoalRef       GoalID
 	PlanRef       PlanRevisionRef
 	Identity      Identity
