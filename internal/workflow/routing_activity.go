@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	RoutingActivityVersion             = "ecp-route-v1"
-	ErrorTypeRoutePolicyDenied         = "ROUTE_POLICY_DENIED"
-	ErrorTypeRouteApprovalRequired     = "ROUTE_POLICY_APPROVAL_REQUIRED"
+	RoutingActivityVersion              = "ecp-route-v1"
+	ErrorTypeRoutePolicyDenied          = "ROUTE_POLICY_DENIED"
+	ErrorTypeRouteApprovalRequired      = "ROUTE_POLICY_APPROVAL_REQUIRED"
 	ErrorTypeRouteSelectionInconsistent = "ROUTE_SELECTION_INCONSISTENT"
 )
 
@@ -140,9 +140,9 @@ func (a DurableRoutingActivity) Route(ctx context.Context, input StepInput) erro
 	if replay, found, err := a.Selection.ResolveRouteSelection(ctx, lookup); err != nil {
 		return err
 	} else if found {
-		if replay.Decision.TaskID != input.TaskID || replay.Target.ID == "" || replay.Target.Snapshot.Digest == "" {
+		if replay.Decision.TaskID != input.TaskID || replay.Policy.ID == "" || replay.Policy.Decision != execution.PolicyAllow || replay.Target.ID == "" || replay.Target.Snapshot.Digest == "" {
 			return temporal.NewNonRetryableApplicationError(
-				"durable route selection replay does not match workflow Task",
+				"durable route selection replay does not match workflow Task or approved policy",
 				ErrorTypeRouteSelectionInconsistent,
 				nil,
 			)
@@ -254,6 +254,7 @@ func (a DurableRoutingActivity) Route(ctx context.Context, input StepInput) erro
 	result, err := a.Selection.CommitRouteSelection(ctx, repository.RouteSelectionCommit{
 		Task:     task,
 		Decision: decision,
+		Policy:   policy,
 		Target:   target,
 		Event: domain.TaskEvent{
 			EventID:       tracepkg.NewID("task-event"),
@@ -277,12 +278,12 @@ func (a DurableRoutingActivity) Route(ctx context.Context, input StepInput) erro
 	})
 	if err != nil {
 		// A concurrent Activity may have won after the advisory replay lookup.
-		if replay, found, replayErr := a.Selection.ResolveRouteSelection(ctx, lookup); replayErr == nil && found && replay.Decision.TaskID == task.ID {
+		if replay, found, replayErr := a.Selection.ResolveRouteSelection(ctx, lookup); replayErr == nil && found && replay.Decision.TaskID == task.ID && replay.Policy.ID != "" && replay.Policy.Decision == execution.PolicyAllow {
 			return nil
 		}
 		return fmt.Errorf("commit route selection: %w", err)
 	}
-	if result.Decision.TaskID != task.ID || result.Target.Snapshot.Digest == "" {
+	if result.Decision.TaskID != task.ID || result.Policy.ID == "" || result.Policy.Decision != execution.PolicyAllow || result.Target.Snapshot.Digest == "" {
 		return temporal.NewNonRetryableApplicationError(
 			"committed route selection is incomplete",
 			ErrorTypeRouteSelectionInconsistent,
