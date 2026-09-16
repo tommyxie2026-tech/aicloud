@@ -9,18 +9,14 @@ import (
 	"strings"
 	"time"
 
+	execution "github.com/tommyxie2026-tech/aicloud/execution"
 	"github.com/tommyxie2026-tech/aicloud/internal/domain"
 	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 )
 
 type routeSelectionReplayPayload struct {
-	Decision domain.RouteDecision `json:"decision"`
-	Target   any                  `json:"target"`
-}
-
-type persistedRouteSelectionPayload struct {
-	Decision json.RawMessage `json:"decision"`
-	Target   json.RawMessage `json:"target"`
+	Decision domain.RouteDecision        `json:"decision"`
+	Target   execution.ExecutionTarget   `json:"target"`
 }
 
 var _ RouteSelectionStore = (*ScopedPostgresTaskCommands)(nil)
@@ -176,10 +172,10 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 		return RouteSelectionResult{}, fmt.Errorf("append route selection TaskEvent: %w", err)
 	}
 
-	responsePayload, err := json.Marshal(struct {
-		Decision domain.RouteDecision `json:"decision"`
-		Target   any                  `json:"target"`
-	}{Decision: command.Decision, Target: command.Target})
+	responsePayload, err := json.Marshal(routeSelectionReplayPayload{
+		Decision: command.Decision,
+		Target:   command.Target,
+	})
 	if err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("encode route selection result: %w", err)
 	}
@@ -204,45 +200,12 @@ func replayRouteSelection(ctx context.Context, tx *sql.Tx, record domain.Idempot
 	if record.Status != domain.IdempotencyCompleted || record.ResourceID == "" || len(record.ResponsePayload) == 0 {
 		return RouteSelectionResult{}, fmt.Errorf("completed route selection replay is incomplete")
 	}
-	var payload struct {
-		Decision domain.RouteDecision `json:"decision"`
-		Target   json.RawMessage       `json:"target"`
-	}
+	var payload routeSelectionReplayPayload
 	if err := json.Unmarshal(record.ResponsePayload, &payload); err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("decode route selection replay: %w", err)
 	}
-	var target map[string]any
-	if err := json.Unmarshal(payload.Target, &target); err != nil {
-		return RouteSelectionResult{}, fmt.Errorf("decode frozen route target: %w", err)
-	}
-	encodedTarget, err := json.Marshal(target)
-	if err != nil {
-		return RouteSelectionResult{}, fmt.Errorf("re-encode frozen route target: %w", err)
-	}
-	var typedTarget struct {
-		ID           string            `json:"ID"`
-		Revision     int64             `json:"Revision"`
-		Type         string            `json:"Type"`
-		Capabilities map[string]string `json:"Capabilities"`
-		Policy       struct {
-			DataLocality       string   `json:"DataLocality"`
-			AllowedSensitivity []string `json:"AllowedSensitivity"`
-		} `json:"Policy"`
-		Health struct {
-			State      string    `json:"State"`
-			ObservedAt time.Time `json:"ObservedAt"`
-		} `json:"Health"`
-		Snapshot struct {
-			Digest         string `json:"Digest"`
-			EndpointClass  string `json:"EndpointClass"`
-			ModelVersion   string `json:"ModelVersion"`
-			RuntimeVersion string `json:"RuntimeVersion"`
-			DeploymentRef  string `json:"DeploymentRef"`
-			CapabilityHash string `json:"CapabilityHash"`
-		} `json:"Snapshot"`
-	}
-	if err := json.Unmarshal(encodedTarget, &typedTarget); err != nil {
-		return RouteSelectionResult{}, fmt.Errorf("decode typed route target: %w", err)
+	if payload.Target.ID == "" || payload.Target.Snapshot.Digest == "" {
+		return RouteSelectionResult{}, fmt.Errorf("route selection replay is missing frozen target evidence")
 	}
 	task, err := scanScopedTask(tx.QueryRowContext(ctx, `SELECT `+scopedTaskColumns+` FROM tasks WHERE id=$1`, record.ResourceID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -251,15 +214,8 @@ func replayRouteSelection(ctx context.Context, tx *sql.Tx, record domain.Idempot
 	if err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("load task for route selection replay: %w", err)
 	}
-
-	// Re-decode through JSON into the execution type without exposing the
-	// execution package in helper structs above.
-	var result RouteSelectionResult
-	result.Task = task
-	result.Decision = payload.Decision
-	result.Idempotency = record
-	if err := json.Unmarshal(encodedTarget, &result.Target); err != nil {
-		return RouteSelectionResult{}, fmt.Errorf("decode execution target replay: %w", err)
-	}
-	return result, nil
+	return RouteSelectionResult{
+		Task: task, Decision: payload.Decision, Target: payload.Target,
+		Idempotency: record,
+	}, nil
 }
