@@ -110,6 +110,7 @@ func (s *routeSelectionStub) CommitRouteSelection(_ context.Context, command rep
 	return repository.RouteSelectionResult{
 		Task:        command.Task,
 		Decision:    command.Decision,
+		Policy:      command.Policy,
 		Target:      command.Target,
 		Event:       command.Event,
 		Idempotency: command.Idempotency,
@@ -117,15 +118,22 @@ func (s *routeSelectionStub) CommitRouteSelection(_ context.Context, command rep
 }
 
 func TestDurableRoutingActivityReplaySkipsVolatilePolicyAndRouter(t *testing.T) {
-	activity, task, _, _ := routingActivityFixture(t)
+	activity, task, plan, _ := routingActivityFixture(t)
 	policy := activity.Policy.(*routingPolicyStub)
 	planner := activity.Planner.(*routingPlannerStub)
 	selection := activity.Selection.(*routeSelectionStub)
 	selection.found = true
 	selection.replay = repository.RouteSelectionResult{
 		Decision: domain.RouteDecision{ID: "route-frozen", TaskID: task.ID},
+		Policy: execution.PolicyDecisionRecord{
+			ID:           execution.PolicyDecisionID("policy-frozen"),
+			PlanRevision: plan.Revision,
+			NodeRef:      plan.Nodes[0].ID,
+			Decision:     execution.PolicyAllow,
+		},
 		Target: execution.ExecutionTarget{
 			ID:       execution.TargetID("model/model-a@v1"),
+			Revision: 1,
 			Snapshot: execution.TargetSnapshot{Digest: "sha256:frozen"},
 		},
 		Replayed: true,
@@ -190,7 +198,7 @@ func TestDurableRoutingActivityAllowFreezesTargetAndCommits(t *testing.T) {
 		t.Fatalf("router request evidence version=%q", planner.last.EvidenceVersion)
 	}
 	committed := selection.committed
-	if committed.Decision.ID != "route-test" || committed.Target.ID == "" {
+	if committed.Decision.ID != "route-test" || committed.Policy.ID != "policy-test" || committed.Policy.Decision != execution.PolicyAllow || committed.Target.ID == "" {
 		t.Fatalf("route selection evidence incomplete: %+v", committed)
 	}
 	if !strings.HasPrefix(committed.Target.Snapshot.Digest, "sha256:") || len(committed.Target.Snapshot.Digest) <= len("sha256:") {
