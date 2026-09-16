@@ -258,7 +258,7 @@ func routingActivityFixture(t *testing.T) (DurableRoutingActivity, domain.Task, 
 				Class:     execution.EffectPure,
 				RetrySafe: true,
 			},
-		},
+		}},
 		CreatedAt: fixed.Add(-30 * time.Second),
 	}
 	if err := execution.ValidatePlan(plan); err != nil {
