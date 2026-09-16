@@ -13,6 +13,7 @@ import (
 type RouteSelectionCommit struct {
 	Task        domain.Task
 	Decision    domain.RouteDecision
+	Policy      execution.PolicyDecisionRecord
 	Target      execution.ExecutionTarget
 	Event       domain.TaskEvent
 	Idempotency domain.IdempotencyRecord
@@ -21,6 +22,7 @@ type RouteSelectionCommit struct {
 type RouteSelectionResult struct {
 	Task        domain.Task
 	Decision    domain.RouteDecision
+	Policy      execution.PolicyDecisionRecord
 	Target      execution.ExecutionTarget
 	Event       domain.TaskEvent
 	Idempotency domain.IdempotencyRecord
@@ -29,10 +31,11 @@ type RouteSelectionResult struct {
 
 // RouteSelectionStore closes the ECP routing dual-write boundary without
 // replacing the existing PLANNING -> ROUTING command. Implementations must
-// atomically persist Task projection metadata, RouteDecision, TaskEvent and
-// idempotency response. ResolveRouteSelection must be called before volatile
-// routing work so commit-before-ack retries replay the frozen target instead of
-// recomputing against changed health/capacity/pricing signals.
+// atomically persist Task projection metadata, RouteDecision, frozen policy and
+// target evidence, TaskEvent and idempotency response. ResolveRouteSelection
+// must be called before volatile routing work so commit-before-ack retries replay
+// the exact approved target instead of recomputing policy, health, capacity or
+// pricing signals.
 type RouteSelectionStore interface {
 	ResolveRouteSelection(context.Context, IdempotencyLookup) (RouteSelectionResult, bool, error)
 	CommitRouteSelection(context.Context, RouteSelectionCommit) (RouteSelectionResult, error)
