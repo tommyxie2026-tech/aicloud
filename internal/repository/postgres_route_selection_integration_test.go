@@ -70,7 +70,7 @@ func TestScopedPostgresRouteSelectionAtomicCommitReplayAndRollback(t *testing.T)
 		},
 		Event: domain.TaskEvent{
 			EventID: "event-select-plan", EventType: "TaskPlanningStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
+			Actor:   domain.TaskEventActor{PrincipalType: "user", SubjectID: "user-a"},
 			Payload: json.RawMessage(`{"to":"PLANNING"}`), SchemaVersion: 1,
 		},
 		Idempotency: domain.IdempotencyRecord{
@@ -94,7 +94,7 @@ func TestScopedPostgresRouteSelectionAtomicCommitReplayAndRollback(t *testing.T)
 		},
 		Event: domain.TaskEvent{
 			EventID: "event-select-routing", EventType: "TaskRoutingStarted",
-			Actor: domain.TaskEventActor{PrincipalType: "system", SubjectID: "temporal"},
+			Actor:   domain.TaskEventActor{PrincipalType: "system", SubjectID: "temporal"},
 			Payload: json.RawMessage(`{"to":"ROUTING"}`), SchemaVersion: 1,
 		},
 		Idempotency: domain.IdempotencyRecord{
@@ -114,7 +114,7 @@ func TestScopedPostgresRouteSelectionAtomicCommitReplayAndRollback(t *testing.T)
 			RouteClass: domain.RouteEfficient, EstimatedCost: 0.02,
 		},
 		Candidates: []domain.RouteCandidate{{ModelID: "model-a", ModelVersion: "v1", DeploymentID: "dep-a"}},
-		Reason: "best policy-approved deployment", EvidenceVersion: "evidence-v2", PolicyVersion: "policy-v2",
+		Reason:     "best policy-approved deployment", EvidenceVersion: "evidence-v2", PolicyVersion: "policy-v2",
 		CreatedAt: now.Add(3 * time.Second),
 	}
 	target := execution.ExecutionTarget{
@@ -125,18 +125,18 @@ func TestScopedPostgresRouteSelectionAtomicCommitReplayAndRollback(t *testing.T)
 	}
 	payload, err := json.Marshal(map[string]any{
 		"routeDecisionId": decision.ID,
-		"target": target,
+		"target":          target,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	command := RouteSelectionCommit{
-		Task: routing.Task,
+		Task:     routing.Task,
 		Decision: decision,
-		Target: target,
+		Target:   target,
 		Event: domain.TaskEvent{
 			EventID: "event-route-selected", EventType: "TaskRouteSelected",
-			Actor: domain.TaskEventActor{PrincipalType: "system", SubjectID: "temporal-task-lifecycle"},
+			Actor:   domain.TaskEventActor{PrincipalType: "system", SubjectID: "temporal-task-lifecycle"},
 			Payload: payload, SchemaVersion: 1,
 		},
 		Idempotency: domain.IdempotencyRecord{
