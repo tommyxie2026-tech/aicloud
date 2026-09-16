@@ -15,8 +15,9 @@ import (
 )
 
 type routeSelectionReplayPayload struct {
-	Decision domain.RouteDecision      `json:"decision"`
-	Target   execution.ExecutionTarget `json:"target"`
+	Decision domain.RouteDecision             `json:"decision"`
+	Policy   execution.PolicyDecisionRecord   `json:"policy"`
+	Target   execution.ExecutionTarget        `json:"target"`
 }
 
 var _ RouteSelectionStore = (*ScopedPostgresTaskCommands)(nil)
@@ -48,6 +49,7 @@ func (r *ScopedPostgresTaskCommands) ResolveRouteSelection(ctx context.Context, 
 	}
 	return RouteSelectionResult{
 		Decision:    payload.Decision,
+		Policy:      payload.Policy,
 		Target:      payload.Target,
 		Idempotency: record,
 		Replayed:    true,
@@ -55,8 +57,8 @@ func (r *ScopedPostgresTaskCommands) ResolveRouteSelection(ctx context.Context, 
 }
 
 // CommitRouteSelection stores routing evidence while preserving TaskStatus=ROUTING.
-// RouteDecision, frozen ExecutionTarget, Task projection metadata, TaskEvent and
-// command idempotency are committed in one PostgreSQL transaction.
+// RouteDecision, frozen policy/ExecutionTarget, Task projection metadata,
+// TaskEvent and command idempotency are committed in one PostgreSQL transaction.
 func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, command RouteSelectionCommit) (RouteSelectionResult, error) {
 	if r == nil || r.db == nil {
 		return RouteSelectionResult{}, fmt.Errorf("database is required")
@@ -207,6 +209,7 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 
 	responsePayload, err := json.Marshal(routeSelectionReplayPayload{
 		Decision: command.Decision,
+		Policy:   command.Policy,
 		Target:   command.Target,
 	})
 	if err != nil {
@@ -224,7 +227,7 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 		return RouteSelectionResult{}, fmt.Errorf("commit route selection transaction: %w", err)
 	}
 	return RouteSelectionResult{
-		Task: command.Task, Decision: command.Decision, Target: command.Target,
+		Task: command.Task, Decision: command.Decision, Policy: command.Policy, Target: command.Target,
 		Event: command.Event, Idempotency: command.Idempotency,
 	}, nil
 }
@@ -248,7 +251,7 @@ func replayRouteSelection(ctx context.Context, tx *sql.Tx, record domain.Idempot
 		return RouteSelectionResult{}, fmt.Errorf("load task for route selection replay: %w", err)
 	}
 	return RouteSelectionResult{
-		Task: task, Decision: payload.Decision, Target: payload.Target,
+		Task: task, Decision: payload.Decision, Policy: payload.Policy, Target: payload.Target,
 		Idempotency: record,
 	}, nil
 }
