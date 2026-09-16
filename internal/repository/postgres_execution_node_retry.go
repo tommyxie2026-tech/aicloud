@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	execution "github.com/tommyxie2026-tech/aicloud/execution"
+	"github.com/tommyxie2026-tech/aicloud/internal/identity"
 )
 
 // RequeueFailed transitions one failed retry-safe read-only node back to READY.
