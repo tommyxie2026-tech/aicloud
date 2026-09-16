@@ -14,7 +14,9 @@ import (
 
 type executionTaskRepository struct{ task domain.Task }
 
-func (r *executionTaskRepository) List(context.Context) ([]domain.Task, error) { return []domain.Task{r.task}, nil }
+func (r *executionTaskRepository) List(context.Context) ([]domain.Task, error) {
+	return []domain.Task{r.task}, nil
+}
 func (r *executionTaskRepository) Get(_ context.Context, id string) (domain.Task, error) {
 	if r.task.ID != id {
 		return domain.Task{}, repository.ErrNotFound
@@ -31,10 +33,10 @@ func (r *executionTaskRepository) Update(_ context.Context, task domain.Task) (d
 }
 
 type executionLineageStub struct {
-	goal       execution.Goal
-	plan       execution.ExecutionPlan
-	execution  execution.Execution
-	created    int
+	goal      execution.Goal
+	plan      execution.ExecutionPlan
+	execution execution.Execution
+	created   int
 }
 
 func (s *executionLineageStub) GetGoal(_ context.Context, id execution.GoalID) (execution.Goal, error) {
@@ -61,7 +63,9 @@ func (s *executionLineageStub) GetExecution(_ context.Context, id execution.Exec
 	return s.execution, nil
 }
 
-type executionSelectionStub struct{ result repository.RouteSelectionResult }
+type executionSelectionStub struct {
+	result repository.RouteSelectionResult
+}
 
 func (s *executionSelectionStub) ResolveRouteSelection(context.Context, repository.IdempotencyLookup) (repository.RouteSelectionResult, bool, error) {
 	return s.result, true, nil
@@ -71,11 +75,11 @@ func (s *executionSelectionStub) CommitRouteSelection(context.Context, repositor
 }
 
 type executionRuntimeStub struct {
-	record       execution.NodeRuntimeRecord
-	getMissing   bool
-	attempts     []execution.AttemptRecord
-	registers    int
-	requeues     int
+	record     execution.NodeRuntimeRecord
+	getMissing bool
+	attempts   []execution.AttemptRecord
+	registers  int
+	requeues   int
 }
 
 func (s *executionRuntimeStub) Register(_ context.Context, record execution.NodeRuntimeRecord) error {
@@ -106,11 +110,11 @@ func (s *executionRuntimeStub) ListAttempts(context.Context, execution.Execution
 }
 
 type executionWorkerStub struct {
-	calls     int
-	lastExec  execution.Execution
-	lastNode  execution.PreparedNode
-	runtime   *executionRuntimeStub
-	err       error
+	calls    int
+	lastExec execution.Execution
+	lastNode execution.PreparedNode
+	runtime  *executionRuntimeStub
+	err      error
 }
 
 func (s *executionWorkerStub) Execute(_ context.Context, item execution.Execution, node execution.PreparedNode) (execution.WorkerExecutionResult, error) {
@@ -242,7 +246,7 @@ func executionActivityFixture(t *testing.T) (DurableExecutionActivity, domain.Ta
 		Nodes: []execution.ExecutionNode{{
 			ID: execution.NodeID("model/main"), Type: execution.NodeModel,
 			RetryPolicy: execution.RetryPolicy{MaxAttempts: 3, RetryOn: []execution.ErrorClass{execution.ErrorTransient, execution.ErrorTargetUnavailable, execution.ErrorTimeout}},
-			Effect: execution.EffectSpec{Class: execution.EffectPure, RetrySafe: true},
+			Effect:      execution.EffectSpec{Class: execution.EffectPure, RetrySafe: true},
 		}},
 		CreatedAt: fixed.Add(-30 * time.Second),
 	}
@@ -253,7 +257,7 @@ func executionActivityFixture(t *testing.T) (DurableExecutionActivity, domain.Ta
 		Plan: execution.PlanRevisionRef{PlanID: plan.ID, Revision: plan.Revision}, Node: plan.Nodes[0].ID,
 		Decision: domain.RouteDecision{
 			ID: "route-execute", TaskID: task.ID,
-			Selected: domain.RouteCandidate{ModelID: "model-a", ModelVersion: "v1", RouteClass: domain.RouteEfficient, EstimatedCost: 0.04},
+			Selected:  domain.RouteCandidate{ModelID: "model-a", ModelVersion: "v1", RouteClass: domain.RouteEfficient, EstimatedCost: 0.04},
 			CreatedAt: fixed.Add(-10 * time.Second),
 		},
 		Policy: execution.PolicyDecisionRecord{
@@ -267,23 +271,23 @@ func executionActivityFixture(t *testing.T) (DurableExecutionActivity, domain.Ta
 	runtime := &executionRuntimeStub{}
 	worker := &executionWorkerStub{runtime: runtime}
 	activity := DurableExecutionActivity{
-		Tasks: &executionTaskRepository{task: task},
-		Lineage: &executionLineageStub{goal: goal, plan: plan},
+		Tasks:     &executionTaskRepository{task: task},
+		Lineage:   &executionLineageStub{goal: goal, plan: plan},
 		Selection: &executionSelectionStub{result: binding},
-		Runtime: runtime,
-		Worker: worker,
-		Now: func() time.Time { return fixed },
+		Runtime:   runtime,
+		Worker:    worker,
+		Now:       func() time.Time { return fixed },
 	}
 	return activity, task, plan, runtime, worker
 }
 
 func fixtureExecution(task domain.Task, plan execution.ExecutionPlan, at time.Time) execution.Execution {
 	return execution.Execution{
-		ID: execution.ExecutionID("execution/" + task.ID + "/" + string(plan.ID) + "@1/" + ExecutionActivityVersion),
+		ID:      execution.ExecutionID("execution/" + task.ID + "/" + string(plan.ID) + "@1/" + ExecutionActivityVersion),
 		TaskRef: task.ID, GoalRef: plan.GoalRef,
-		PlanRef: execution.PlanRevisionRef{PlanID: plan.ID, Revision: plan.Revision},
-		Identity: execution.Identity{Principal: "system:temporal-task-lifecycle", Tenant: task.TenantID},
-		Status: execution.ExecutionStatus{Phase: execution.ExecutionRunning},
+		PlanRef:   execution.PlanRevisionRef{PlanID: plan.ID, Revision: plan.Revision},
+		Identity:  execution.Identity{Principal: "system:temporal-task-lifecycle", Tenant: task.TenantID},
+		Status:    execution.ExecutionStatus{Phase: execution.ExecutionRunning},
 		CreatedAt: at, UpdatedAt: at,
 	}
 }
