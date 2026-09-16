@@ -1,0 +1,120 @@
+openapi: 3.1.0
+info:
+  title: AI Cloud Task Execution API
+  version: 0.1.0
+paths:
+  /v1/tasks:
+    post:
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskDefinition'}
+      responses:
+        '201':
+          description: Created
+  /v1/tasks/{task_id}:plan:
+    post:
+      operationId: planTask
+      parameters:
+        - {name: task_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Plan generated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExecutionPlan'}
+  /v1/tasks/{task_id}:run:
+    post:
+      operationId: runTask
+      parameters:
+        - {name: task_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '202':
+          description: Run accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExecutionRun'}
+  /v1/runs/{run_id}:cancel:
+    post:
+      operationId: cancelRun
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Cancellation accepted}
+components:
+  schemas:
+    TaskDefinition:
+      type: object
+      required: [goal, taskType]
+      properties:
+        id: {type: string}
+        tenant: {type: string}
+        project: {type: string}
+        goal: {type: string}
+        taskType: {type: string}
+        inputs:
+          type: array
+          items: {$ref: '#/components/schemas/TaskInput'}
+        constraints: {$ref: '#/components/schemas/TaskConstraints'}
+        successCriteria:
+          type: array
+          items: {type: string}
+    TaskInput:
+      type: object
+      required: [type, ref]
+      properties:
+        type: {type: string}
+        ref: {type: string}
+    TaskConstraints:
+      type: object
+      properties:
+        maxCostUsd: {type: number, minimum: 0}
+        timeoutSeconds: {type: integer, minimum: 1}
+        dataClass: {type: string}
+        regionPolicy: {type: string}
+        humanApproval: {type: string}
+    ExecutionPlan:
+      type: object
+      required: [id, taskId, revision, steps]
+      properties:
+        id: {type: string}
+        taskId: {type: string}
+        revision: {type: integer, minimum: 1}
+        steps:
+          type: array
+          items: {$ref: '#/components/schemas/PlanStep'}
+        policyDecision: {$ref: '#/components/schemas/PolicyDecision'}
+    PlanStep:
+      type: object
+      required: [id, type]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [model, agent, tool, evaluator, human]}
+        capability: {type: string}
+        target: {type: string}
+        dependsOn:
+          type: array
+          items: {type: string}
+    PolicyDecision:
+      type: object
+      required: [status]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [allowed, denied, approval_required]}
+        reason: {type: string}
+    ExecutionRun:
+      type: object
+      required: [id, taskId, planId, phase]
+      properties:
+        id: {type: string}
+        taskId: {type: string}
+        planId: {type: string}
+        attempt: {type: integer, minimum: 1}
+        phase:
+          type: string
+          enum: [accepted, running, suspended, succeeded, failed, cancelled]
+        costUsd: {type: number}
+        durationMs: {type: integer}
+        outcomeSuccess: {type: boolean}
