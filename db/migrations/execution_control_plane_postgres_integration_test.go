@@ -4,6 +4,7 @@ package migrations
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 )
 
@@ -93,11 +94,7 @@ func TestExecutionControlPlaneMigrationPostgres(t *testing.T) {
 	}
 }
 
-func cleanupExecutionControlPlaneFixture(t *testing.T, ctx context.Context, db interface {
-	ExecContext(context.Context, string, ...any) (interface{ RowsAffected() (int64, error) }, error)
-}) {
-	// This deliberately uses a tiny local interface so the cleanup contract does
-	// not leak repository concerns into the migration test.
+func cleanupExecutionControlPlaneFixture(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
 	_, _ = db.ExecContext(ctx, `
 		DROP TABLE IF EXISTS executions CASCADE;
