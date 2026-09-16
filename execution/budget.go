@@ -138,7 +138,7 @@ func validateCountersAgainstLimit(c AccountingCounters, limit BudgetLimit) error
 	if limit.MaxNodeAttempts > 0 && c.NodeAttempts > limit.MaxNodeAttempts {
 		return fmt.Errorf("%w: node attempts %d > %d", ErrBudgetExceeded, c.NodeAttempts, limit.MaxNodeAttempts)
 	}
-	if limit.MaxFrontierCalls > 0 && c.FrierCalls > limit.MaxFrontierCalls {
+	if limit.MaxFrontierCalls > 0 && c.FrontierCalls > limit.MaxFrontierCalls {
 		return fmt.Errorf("%w: frontier calls %d > %d", ErrBudgetExceeded, c.FrontierCalls, limit.MaxFrontierCalls)
 	}
 	if limit.MaxToolCalls > 0 && c.ToolCalls > limit.MaxToolCalls {
