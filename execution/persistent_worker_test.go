@@ -95,11 +95,15 @@ func preparedReadOnlyNode() PreparedNode {
 	}
 }
 
+func testBudgetCoordinator(ledger *BudgetLedger) BudgetCoordinator {
+	return NewBudgetLedgerCoordinator(ledger)
+}
+
 func TestPersistentWorkerClaimsBeforeBudgetAndCompletesReadOnly(t *testing.T) {
 	coordinator := &fakeAttemptCoordinator{}
 	ledger := NewBudgetLedger(BudgetState{Limit: BudgetLimit{MaxCost: 10, MaxNodeAttempts: 2}})
 	invoker := &countingInvoker{result: InvocationResult{Usage: Usage{Cost: 1}}}
-	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, ledger, invoker)
+	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, testBudgetCoordinator(ledger), invoker)
 
 	result, err := worker.Execute(context.Background(), testExecution(), preparedReadOnlyNode())
 	if err != nil {
@@ -132,7 +136,7 @@ func TestPersistentWorkerClaimFailureCannotReserveOrInvoke(t *testing.T) {
 	coordinator := &fakeAttemptCoordinator{claimErr: claimErr}
 	ledger := NewBudgetLedger(BudgetState{Limit: BudgetLimit{MaxCost: 10, MaxNodeAttempts: 2}})
 	invoker := &countingInvoker{}
-	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, ledger, invoker)
+	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, testBudgetCoordinator(ledger), invoker)
 
 	_, err := worker.Execute(context.Background(), testExecution(), preparedReadOnlyNode())
 	if !errors.Is(err, claimErr) {
@@ -154,7 +158,7 @@ func TestPersistentWorkerBudgetFailureReleasesClaimBeforeStart(t *testing.T) {
 	coordinator := &fakeAttemptCoordinator{}
 	ledger := NewBudgetLedger(BudgetState{Limit: BudgetLimit{MaxCost: 1, MaxNodeAttempts: 2}})
 	invoker := &countingInvoker{}
-	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, ledger, invoker)
+	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, testBudgetCoordinator(ledger), invoker)
 
 	_, err := worker.Execute(context.Background(), testExecution(), preparedReadOnlyNode())
 	if !errors.Is(err, ErrBudgetExceeded) {
@@ -175,7 +179,7 @@ func TestPersistentWorkerCommittedMutationCompletesSuccess(t *testing.T) {
 		Usage:             Usage{Cost: 2},
 		EffectDisposition: EffectDispositionCommitted,
 	}}
-	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, ledger, invoker)
+	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, testBudgetCoordinator(ledger), invoker)
 	candidate := preparedReadOnlyNode()
 	candidate.Node.Type = NodeTool
 	candidate.Node.Effect = EffectSpec{Class: EffectIdempotentMutation, IdempotencyKey: "effect-1", RetrySafe: true}
@@ -201,7 +205,7 @@ func TestPersistentWorkerUnknownMutationRequiresRecovery(t *testing.T) {
 		Usage:             Usage{Cost: 2},
 		EffectDisposition: EffectDispositionUnknown,
 	}}
-	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, ledger, invoker)
+	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, testBudgetCoordinator(ledger), invoker)
 	candidate := preparedReadOnlyNode()
 	candidate.Node.Type = NodeTool
 	candidate.Node.Effect = EffectSpec{Class: EffectIdempotentMutation, IdempotencyKey: "effect-1", RetrySafe: true}
@@ -229,7 +233,7 @@ func TestPersistentWorkerMutationNotAppliedCanFailExplicitly(t *testing.T) {
 		result: InvocationResult{EffectDisposition: EffectDispositionNotApplied},
 		err:    targetErr,
 	}
-	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, ledger, invoker)
+	worker := NewPersistentWorker("worker-a", time.Minute, coordinator, testBudgetCoordinator(ledger), invoker)
 	candidate := preparedReadOnlyNode()
 	candidate.Node.Type = NodeTool
 	candidate.Node.Effect = EffectSpec{Class: EffectIdempotentMutation, IdempotencyKey: "effect-1", RetrySafe: true}
