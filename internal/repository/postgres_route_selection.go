@@ -15,26 +15,21 @@ import (
 )
 
 type routeSelectionReplayPayload struct {
-	Decision domain.RouteDecision             `json:"decision"`
-	Policy   execution.PolicyDecisionRecord   `json:"policy"`
-	Target   execution.ExecutionTarget        `json:"target"`
+	Plan     execution.PlanRevisionRef       `json:"plan"`
+	Node     execution.NodeID                `json:"node"`
+	Decision domain.RouteDecision            `json:"decision"`
+	Policy   execution.PolicyDecisionRecord  `json:"policy"`
+	Target   execution.ExecutionTarget       `json:"target"`
 }
 
 var _ RouteSelectionStore = (*ScopedPostgresTaskCommands)(nil)
 
-// ResolveRouteSelection returns a completed frozen route before any volatile
-// policy/routing computation is repeated. This is essential for Temporal
-// commit-before-ack retries: once a route was durably selected, later health,
-// price or capacity changes must not change the meaning of that same Activity.
 func (r *ScopedPostgresTaskCommands) ResolveRouteSelection(ctx context.Context, lookup IdempotencyLookup) (RouteSelectionResult, bool, error) {
 	record, found, err := r.ResolveIdempotency(ctx, lookup)
 	if err != nil || !found {
 		return RouteSelectionResult{}, false, err
 	}
-	if record.Status != domain.IdempotencyCompleted {
-		return RouteSelectionResult{}, true, fmt.Errorf("route selection replay has terminal status %q", record.Status)
-	}
-	if record.ResourceID == "" || len(record.ResponsePayload) == 0 {
+	if record.Status != domain.IdempotencyCompleted || record.ResourceID == "" || len(record.ResponsePayload) == 0 {
 		return RouteSelectionResult{}, true, fmt.Errorf("completed route selection replay is incomplete")
 	}
 	var payload routeSelectionReplayPayload
@@ -47,18 +42,9 @@ func (r *ScopedPostgresTaskCommands) ResolveRouteSelection(ctx context.Context, 
 	if payload.Target.ID == "" || payload.Target.Snapshot.Digest == "" {
 		return RouteSelectionResult{}, true, fmt.Errorf("route selection replay is missing frozen target evidence")
 	}
-	return RouteSelectionResult{
-		Decision:    payload.Decision,
-		Policy:      payload.Policy,
-		Target:      payload.Target,
-		Idempotency: record,
-		Replayed:    true,
-	}, true, nil
+	return RouteSelectionResult{Plan: payload.Plan, Node: payload.Node, Decision: payload.Decision, Policy: payload.Policy, Target: payload.Target, Idempotency: record, Replayed: true}, true, nil
 }
 
-// CommitRouteSelection stores routing evidence while preserving TaskStatus=ROUTING.
-// RouteDecision, frozen policy/ExecutionTarget, Task projection metadata,
-// TaskEvent and command idempotency are committed in one PostgreSQL transaction.
 func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, command RouteSelectionCommit) (RouteSelectionResult, error) {
 	if r == nil || r.db == nil {
 		return RouteSelectionResult{}, fmt.Errorf("database is required")
@@ -92,9 +78,7 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 		return RouteSelectionResult{}, fmt.Errorf("begin route selection transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `SELECT
-		set_config('aicloud.tenant_id', $1, true),
-		set_config('aicloud.project_id', $2, true)`, principal.TenantID, principal.ProjectID); err != nil {
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('aicloud.tenant_id', $1, true), set_config('aicloud.project_id', $2, true)`, principal.TenantID, principal.ProjectID); err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("set route selection transaction scope: %w", err)
 	}
 
@@ -139,7 +123,6 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 	if command.Decision.CreatedAt.IsZero() {
 		return RouteSelectionResult{}, fmt.Errorf("route decision created time is required")
 	}
-
 	if err := insertRouteDecisionTx(ctx, tx, command.Decision); err != nil {
 		return RouteSelectionResult{}, err
 	}
@@ -149,11 +132,7 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 		updatedAt = time.Now().UTC()
 	}
 	var nextVersion int64
-	err = tx.QueryRowContext(ctx, `UPDATE tasks SET
-		route_decision_id=$2, estimated_cost=$3, updated_at=$4, version=version+1
-		WHERE id=$1 AND version=$5 AND status=$6
-		RETURNING version`, current.ID, command.Decision.ID, command.Decision.Selected.EstimatedCost,
-		updatedAt, current.Version, domain.TaskRouting).Scan(&nextVersion)
+	err = tx.QueryRowContext(ctx, `UPDATE tasks SET route_decision_id=$2, estimated_cost=$3, updated_at=$4, version=version+1 WHERE id=$1 AND version=$5 AND status=$6 RETURNING version`, current.ID, command.Decision.ID, command.Decision.Selected.EstimatedCost, updatedAt, current.Version, domain.TaskRouting).Scan(&nextVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RouteSelectionResult{}, ErrVersionConflict
 	}
@@ -194,24 +173,11 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 	if err := command.Event.Validate(); err != nil {
 		return RouteSelectionResult{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO task_events(
-		event_id, tenant_id, project_id, task_id, sequence, event_type,
-		actor_principal_type, actor_subject_id, payload, request_id, trace_id,
-		schema_version, occurred_at, created_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,NULLIF($10,''),$11,$12,$13,$14)`,
-		command.Event.EventID, command.Event.TenantID, command.Event.ProjectID,
-		command.Event.TaskID, command.Event.Sequence, command.Event.EventType,
-		command.Event.Actor.PrincipalType, command.Event.Actor.SubjectID,
-		string(command.Event.Payload), command.Event.RequestID, command.Event.TraceID,
-		command.Event.SchemaVersion, command.Event.OccurredAt, command.Event.CreatedAt); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO task_events(event_id, tenant_id, project_id, task_id, sequence, event_type, actor_principal_type, actor_subject_id, payload, request_id, trace_id, schema_version, occurred_at, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,NULLIF($10,''),$11,$12,$13,$14)`, command.Event.EventID, command.Event.TenantID, command.Event.ProjectID, command.Event.TaskID, command.Event.Sequence, command.Event.EventType, command.Event.Actor.PrincipalType, command.Event.Actor.SubjectID, string(command.Event.Payload), command.Event.RequestID, command.Event.TraceID, command.Event.SchemaVersion, command.Event.OccurredAt, command.Event.CreatedAt); err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("append route selection TaskEvent: %w", err)
 	}
 
-	responsePayload, err := json.Marshal(routeSelectionReplayPayload{
-		Decision: command.Decision,
-		Policy:   command.Policy,
-		Target:   command.Target,
-	})
+	responsePayload, err := json.Marshal(routeSelectionReplayPayload{Plan: command.Plan, Node: command.Node, Decision: command.Decision, Policy: command.Policy, Target: command.Target})
 	if err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("encode route selection result: %w", err)
 	}
@@ -226,10 +192,7 @@ func (r *ScopedPostgresTaskCommands) CommitRouteSelection(ctx context.Context, c
 	if err := tx.Commit(); err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("commit route selection transaction: %w", err)
 	}
-	return RouteSelectionResult{
-		Task: command.Task, Decision: command.Decision, Policy: command.Policy, Target: command.Target,
-		Event: command.Event, Idempotency: command.Idempotency,
-	}, nil
+	return RouteSelectionResult{Task: command.Task, Plan: command.Plan, Node: command.Node, Decision: command.Decision, Policy: command.Policy, Target: command.Target, Event: command.Event, Idempotency: command.Idempotency}, nil
 }
 
 func replayRouteSelection(ctx context.Context, tx *sql.Tx, record domain.IdempotencyRecord) (RouteSelectionResult, error) {
@@ -250,8 +213,5 @@ func replayRouteSelection(ctx context.Context, tx *sql.Tx, record domain.Idempot
 	if err != nil {
 		return RouteSelectionResult{}, fmt.Errorf("load task for route selection replay: %w", err)
 	}
-	return RouteSelectionResult{
-		Task: task, Decision: payload.Decision, Policy: payload.Policy, Target: payload.Target,
-		Idempotency: record,
-	}, nil
+	return RouteSelectionResult{Task: task, Plan: payload.Plan, Node: payload.Node, Decision: payload.Decision, Policy: payload.Policy, Target: payload.Target, Idempotency: record}, nil
 }
