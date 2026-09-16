@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: AI Cloud Task Execution API
-  version: 0.1.1
+  version: 0.2.0
   description: >-
-    Draft R1 execution extension. The existing /api/v1/tasks Task aggregate is
-    canonical; this document adds versioned ExecutionPlan and ExecutionRun
-    resources without defining a second Task domain model.
+    ECP convergence extension. /api/v1/tasks remains the canonical business Task
+    API. This contract exposes immutable plan revisions and durable Executions;
+    node attempts remain an observability/evidence concern rather than a second
+    public Task model.
 x-aicloud-status: draft
 paths:
   /api/v1/tasks/{task_id}/plan:
@@ -15,7 +16,7 @@ paths:
         - {name: task_id, in: path, required: true, schema: {type: string}}
       responses:
         '200':
-          description: Versioned execution plan generated
+          description: A versioned execution plan was generated
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ExecutionPlan'}
@@ -26,10 +27,10 @@ paths:
         - {name: task_id, in: path, required: true, schema: {type: string}}
       responses:
         '200':
-          description: Plan revisions
-  /api/v1/tasks/{task_id}/runs:
+          description: Immutable plan revisions for the Task
+  /api/v1/tasks/{task_id}/executions:
     post:
-      operationId: runTask
+      operationId: createTaskExecution
       parameters:
         - {name: task_id, in: path, required: true, schema: {type: string}}
       requestBody:
@@ -38,91 +39,100 @@ paths:
           application/json:
             schema:
               type: object
-              required: [planId]
+              required: [goalId, planId, planRevision]
               properties:
+                goalId: {type: string}
                 planId: {type: string}
+                planRevision: {type: integer, minimum: 1}
       responses:
         '202':
-          description: Execution run accepted
+          description: Durable Execution accepted
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/ExecutionRun'}
+              schema: {$ref: '#/components/schemas/Execution'}
     get:
-      operationId: listTaskRuns
+      operationId: listTaskExecutions
       parameters:
         - {name: task_id, in: path, required: true, schema: {type: string}}
       responses:
         '200':
-          description: Execution attempts for the task
-  /api/v1/runs/{run_id}:
+          description: Execution lineage for the Task
+  /api/v1/executions/{execution_id}:
     get:
-      operationId: getExecutionRun
+      operationId: getExecution
       parameters:
-        - {name: run_id, in: path, required: true, schema: {type: string}}
+        - {name: execution_id, in: path, required: true, schema: {type: string}}
       responses:
         '200':
-          description: Execution run
+          description: Durable Execution state
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/ExecutionRun'}
-  /api/v1/runs/{run_id}/cancel:
+              schema: {$ref: '#/components/schemas/Execution'}
+  /api/v1/executions/{execution_id}/cancel:
     post:
-      operationId: cancelRun
+      operationId: cancelExecution
       parameters:
-        - {name: run_id, in: path, required: true, schema: {type: string}}
+        - {name: execution_id, in: path, required: true, schema: {type: string}}
       responses:
-        '202': {description: Cancellation accepted}
+        '202': {description: Cancellation request accepted}
 components:
   schemas:
     ExecutionPlan:
       type: object
-      required: [id, taskId, revision, steps, createdAt]
+      required: [id, goalId, revision, nodes, createdAt]
       properties:
         id: {type: string}
-        taskId: {type: string}
+        goalId: {type: string}
         revision: {type: integer, minimum: 1}
-        steps:
+        parentRevision: {type: integer, minimum: 0}
+        nodes:
           type: array
-          items: {$ref: '#/components/schemas/PlanStep'}
-        policyDecision: {$ref: '#/components/schemas/PolicyDecision'}
+          items: {$ref: '#/components/schemas/ExecutionNode'}
         createdAt: {type: string, format: date-time}
-    PlanStep:
+    ExecutionNode:
       type: object
-      required: [id, type]
+      required: [id, type, effect]
       properties:
         id: {type: string}
-        type: {type: string, enum: [model, agent, tool, evaluator, human]}
-        capability: {type: string}
-        target: {type: string}
+        type:
+          type: string
+          enum: [model, tool, code, agent, browser, retrieval, data, workflow, human, verifier]
         dependsOn:
           type: array
           items: {type: string}
-    PolicyDecision:
+        capabilityRequirement:
+          type: object
+          additionalProperties: true
+        effect:
+          type: object
+          required: [class]
+          properties:
+            class:
+              type: string
+              enum: [PURE, READ_ONLY, IDEMPOTENT_MUTATION, NON_IDEMPOTENT_MUTATION]
+            idempotencyKey: {type: string}
+            retrySafe: {type: boolean}
+        verificationRequired: {type: boolean}
+    Execution:
       type: object
-      required: [status]
-      properties:
-        id: {type: string}
-        status: {type: string, enum: [allowed, denied, approval_required]}
-        reason: {type: string}
-    ExecutionRun:
-      type: object
-      required: [id, taskId, planId, attempt, phase]
+      required: [id, taskId, goalId, planRef, phase, createdAt, updatedAt]
       properties:
         id: {type: string}
         taskId: {type: string}
-        planId: {type: string}
-        attempt: {type: integer, minimum: 1}
+        goalId: {type: string}
+        planRef:
+          type: object
+          required: [planId, revision]
+          properties:
+            planId: {type: string}
+            revision: {type: integer, minimum: 1}
         phase:
           type: string
-          enum: [accepted, running, suspended, succeeded, failed, cancelled]
-        usage:
-          type: object
-          properties:
-            inputTokens: {type: integer, minimum: 0}
-            outputTokens: {type: integer, minimum: 0}
-            cacheReadTokens: {type: integer, minimum: 0}
-            costUsd: {type: number, minimum: 0}
-            latencyMs: {type: integer, minimum: 0}
-        outcomeSuccess: {type: boolean}
-        startedAt: {type: string, format: date-time}
-        finishedAt: {type: string, format: date-time}
+          enum: [CREATED, PLANNING, READY, RUNNING, VERIFYING, REPLANNING, SUCCEEDED, FAILED, CANCELLED]
+        conditions:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
