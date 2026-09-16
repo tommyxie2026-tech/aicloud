@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS execution_goals (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT execution_goals_pk PRIMARY KEY (tenant_id, project_id, goal_id),
+    CONSTRAINT execution_goals_task_lineage_unique UNIQUE (
+        tenant_id, project_id, goal_id, task_id
+    ),
     CONSTRAINT execution_goals_objective_nonempty CHECK (length(btrim(objective)) > 0)
 );
 
@@ -51,9 +54,14 @@ CREATE TABLE IF NOT EXISTS execution_plans (
     CONSTRAINT execution_plans_pk PRIMARY KEY (
         tenant_id, project_id, plan_id, revision
     ),
+    CONSTRAINT execution_plans_task_goal_lineage_unique UNIQUE (
+        tenant_id, project_id, plan_id, revision, task_id, goal_id
+    ),
     CONSTRAINT execution_plans_goal_fk FOREIGN KEY (
-        tenant_id, project_id, goal_id
-    ) REFERENCES execution_goals(tenant_id, project_id, goal_id) ON DELETE RESTRICT,
+        tenant_id, project_id, goal_id, task_id
+    ) REFERENCES execution_goals(
+        tenant_id, project_id, goal_id, task_id
+    ) ON DELETE RESTRICT,
     CONSTRAINT execution_plans_revision_positive CHECK (revision >= 1),
     CONSTRAINT execution_plans_parent_revision_nonnegative CHECK (parent_revision >= 0),
     CONSTRAINT execution_plans_parent_revision_order CHECK (
@@ -99,11 +107,15 @@ CREATE TABLE IF NOT EXISTS executions (
 
     CONSTRAINT executions_pk PRIMARY KEY (tenant_id, project_id, execution_id),
     CONSTRAINT executions_goal_fk FOREIGN KEY (
-        tenant_id, project_id, goal_id
-    ) REFERENCES execution_goals(tenant_id, project_id, goal_id) ON DELETE RESTRICT,
+        tenant_id, project_id, goal_id, task_id
+    ) REFERENCES execution_goals(
+        tenant_id, project_id, goal_id, task_id
+    ) ON DELETE RESTRICT,
     CONSTRAINT executions_plan_fk FOREIGN KEY (
-        tenant_id, project_id, plan_id, plan_revision
-    ) REFERENCES execution_plans(tenant_id, project_id, plan_id, revision) ON DELETE RESTRICT,
+        tenant_id, project_id, plan_id, plan_revision, task_id, goal_id
+    ) REFERENCES execution_plans(
+        tenant_id, project_id, plan_id, revision, task_id, goal_id
+    ) ON DELETE RESTRICT,
     CONSTRAINT executions_plan_revision_positive CHECK (plan_revision >= 1),
     CONSTRAINT executions_principal_nonempty CHECK (length(btrim(principal)) > 0),
     CONSTRAINT executions_phase_contract CHECK (phase IN (
