@@ -15,11 +15,44 @@ import (
 )
 
 type routeSelectionReplayPayload struct {
-	Decision domain.RouteDecision        `json:"decision"`
-	Target   execution.ExecutionTarget   `json:"target"`
+	Decision domain.RouteDecision      `json:"decision"`
+	Target   execution.ExecutionTarget `json:"target"`
 }
 
 var _ RouteSelectionStore = (*ScopedPostgresTaskCommands)(nil)
+
+// ResolveRouteSelection returns a completed frozen route before any volatile
+// policy/routing computation is repeated. This is essential for Temporal
+// commit-before-ack retries: once a route was durably selected, later health,
+// price or capacity changes must not change the meaning of that same Activity.
+func (r *ScopedPostgresTaskCommands) ResolveRouteSelection(ctx context.Context, lookup IdempotencyLookup) (RouteSelectionResult, bool, error) {
+	record, found, err := r.ResolveIdempotency(ctx, lookup)
+	if err != nil || !found {
+		return RouteSelectionResult{}, false, err
+	}
+	if record.Status != domain.IdempotencyCompleted {
+		return RouteSelectionResult{}, true, fmt.Errorf("route selection replay has terminal status %q", record.Status)
+	}
+	if record.ResourceID == "" || len(record.ResponsePayload) == 0 {
+		return RouteSelectionResult{}, true, fmt.Errorf("completed route selection replay is incomplete")
+	}
+	var payload routeSelectionReplayPayload
+	if err := json.Unmarshal(record.ResponsePayload, &payload); err != nil {
+		return RouteSelectionResult{}, true, fmt.Errorf("decode route selection replay: %w", err)
+	}
+	if payload.Decision.ID == "" || payload.Decision.TaskID != record.ResourceID {
+		return RouteSelectionResult{}, true, fmt.Errorf("route selection replay decision lineage is invalid")
+	}
+	if payload.Target.ID == "" || payload.Target.Snapshot.Digest == "" {
+		return RouteSelectionResult{}, true, fmt.Errorf("route selection replay is missing frozen target evidence")
+	}
+	return RouteSelectionResult{
+		Decision:    payload.Decision,
+		Target:      payload.Target,
+		Idempotency: record,
+		Replayed:    true,
+	}, true, nil
+}
 
 // CommitRouteSelection stores routing evidence while preserving TaskStatus=ROUTING.
 // RouteDecision, frozen ExecutionTarget, Task projection metadata, TaskEvent and
