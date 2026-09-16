@@ -25,16 +25,11 @@ const (
 	ErrorTypeRouteSelectionInconsistent = "ROUTE_SELECTION_INCONSISTENT"
 )
 
-// RoutingLineageStore is the minimum immutable lineage required by routing.
-// The Activity chooses a node from the already-persisted plan; it does not
-// create or mutate planning truth.
 type RoutingLineageStore interface {
 	ListPlansByTask(context.Context, string) ([]execution.ExecutionPlan, error)
 	GetGoal(context.Context, execution.GoalID) (execution.Goal, error)
 }
 
-// RoutePlanner is deliberately narrower than router.Router. Routing can
-// optimize only after the independent policy gate has allowed the action.
 type RoutePlanner interface {
 	Plan(context.Context, router.Request) (domain.RouteDecision, error)
 }
@@ -47,9 +42,6 @@ type RouteRequestBuilder interface {
 	Build(domain.Task, execution.Goal, execution.ExecutionPlan, execution.ExecutionNode) (router.Request, error)
 }
 
-// BaselineRoutingPolicy is the fail-closed ECP bootstrap policy. It only allows
-// model target selection for PURE/READ_ONLY nodes. Any mutation-capable node is
-// denied until a real Policy Engine decision is wired in.
 type BaselineRoutingPolicy struct{}
 
 func (BaselineRoutingPolicy) Evaluate(_ context.Context, task domain.Task, goal execution.Goal, plan execution.ExecutionPlan, node execution.ExecutionNode) (execution.PolicyDecisionRecord, error) {
@@ -80,9 +72,6 @@ func (BaselineRoutingPolicy) Evaluate(_ context.Context, task domain.Task, goal 
 	}, nil
 }
 
-// BaselineRouteRequestBuilder maps the current execution node into the legacy
-// Router request without selecting a provider itself. Empty capability fields
-// remain unconstrained; future planners can populate them explicitly.
 type BaselineRouteRequestBuilder struct{}
 
 func (BaselineRouteRequestBuilder) Build(task domain.Task, goal execution.Goal, plan execution.ExecutionPlan, node execution.ExecutionNode) (router.Request, error) {
@@ -113,10 +102,6 @@ func (BaselineRouteRequestBuilder) Build(task domain.Task, goal execution.Goal, 
 	}, nil
 }
 
-// DurableRoutingActivity replaces the semantic behavior of RouteStub while
-// retaining the registered Temporal Activity name. The first operation is a
-// durable replay lookup; volatile policy/router signals are consulted only when
-// no completed selection exists.
 type DurableRoutingActivity struct {
 	Tasks          domain.TaskRepository
 	Lineage        RoutingLineageStore
@@ -140,12 +125,8 @@ func (a DurableRoutingActivity) Route(ctx context.Context, input StepInput) erro
 	if replay, found, err := a.Selection.ResolveRouteSelection(ctx, lookup); err != nil {
 		return err
 	} else if found {
-		if replay.Decision.TaskID != input.TaskID || replay.Policy.ID == "" || replay.Policy.Decision != execution.PolicyAllow || replay.Target.ID == "" || replay.Target.Snapshot.Digest == "" {
-			return temporal.NewNonRetryableApplicationError(
-				"durable route selection replay does not match workflow Task or approved policy",
-				ErrorTypeRouteSelectionInconsistent,
-				nil,
-			)
+		if replay.Decision.TaskID != input.TaskID || replay.Plan.PlanID == "" || replay.Plan.Revision < 1 || replay.Node == "" || replay.Policy.ID == "" || replay.Policy.Decision != execution.PolicyAllow || replay.Policy.PlanRevision != replay.Plan.Revision || replay.Policy.NodeRef != replay.Node || replay.Target.ID == "" || replay.Target.Snapshot.Digest == "" {
+			return temporal.NewNonRetryableApplicationError("durable route selection replay does not match workflow execution binding", ErrorTypeRouteSelectionInconsistent, nil)
 		}
 		return nil
 	}
@@ -161,11 +142,7 @@ func (a DurableRoutingActivity) Route(ctx context.Context, input StepInput) erro
 		return fmt.Errorf("%w: cannot select route from %s", domain.ErrInvalidTaskTransition, task.Status)
 	}
 	if task.RouteDecisionID != "" {
-		return temporal.NewNonRetryableApplicationError(
-			"Task already references route evidence but durable workflow replay is missing",
-			ErrorTypeRouteSelectionInconsistent,
-			nil,
-		)
+		return temporal.NewNonRetryableApplicationError("Task already references route evidence but durable workflow replay is missing", ErrorTypeRouteSelectionInconsistent, nil)
 	}
 
 	plan, err := a.currentPlan(ctx, task.ID)
@@ -191,17 +168,9 @@ func (a DurableRoutingActivity) Route(ctx context.Context, input StepInput) erro
 	switch policy.Decision {
 	case execution.PolicyAllow:
 	case execution.PolicyDeny:
-		return temporal.NewNonRetryableApplicationError(
-			"routing policy denied target selection",
-			ErrorTypeRoutePolicyDenied,
-			nil,
-		)
+		return temporal.NewNonRetryableApplicationError("routing policy denied target selection", ErrorTypeRoutePolicyDenied, nil)
 	case execution.PolicyRequireApproval:
-		return temporal.NewNonRetryableApplicationError(
-			"routing policy requires approval before target selection",
-			ErrorTypeRouteApprovalRequired,
-			nil,
-		)
+		return temporal.NewNonRetryableApplicationError("routing policy requires approval before target selection", ErrorTypeRouteApprovalRequired, nil)
 	default:
 		return fmt.Errorf("routing policy returned unknown decision %q", policy.Decision)
 	}
@@ -251,44 +220,28 @@ func (a DurableRoutingActivity) Route(ctx context.Context, input StepInput) erro
 		return fmt.Errorf("encode route selection event: %w", err)
 	}
 	task.UpdatedAt = now
+	planRef := execution.PlanRevisionRef{PlanID: plan.ID, Revision: plan.Revision}
 	result, err := a.Selection.CommitRouteSelection(ctx, repository.RouteSelectionCommit{
-		Task:     task,
-		Decision: decision,
-		Policy:   policy,
-		Target:   target,
+		Task: task, Plan: planRef, Node: node.ID, Decision: decision, Policy: policy, Target: target,
 		Event: domain.TaskEvent{
-			EventID:       tracepkg.NewID("task-event"),
-			EventType:     "TaskRouteSelected",
-			Actor:         domain.TaskEventActor{PrincipalType: "system", SubjectID: "temporal-task-lifecycle"},
-			Payload:       payload,
-			SchemaVersion: 1,
-			OccurredAt:    now,
-			CreatedAt:     now,
+			EventID: tracepkg.NewID("task-event"), EventType: "TaskRouteSelected",
+			Actor: domain.TaskEventActor{PrincipalType: "system", SubjectID: "temporal-task-lifecycle"},
+			Payload: payload, SchemaVersion: 1, OccurredAt: now, CreatedAt: now,
 		},
 		Idempotency: domain.IdempotencyRecord{
-			TenantID:      lookup.TenantID,
-			ProjectID:     lookup.ProjectID,
-			Operation:     lookup.Operation,
-			Key:           lookup.Key,
-			RequestDigest: lookup.RequestDigest,
-			Status:        domain.IdempotencyCompleted,
-			CreatedAt:     now,
-			ExpiresAt:     now.Add(24 * time.Hour),
+			TenantID: lookup.TenantID, ProjectID: lookup.ProjectID, Operation: lookup.Operation,
+			Key: lookup.Key, RequestDigest: lookup.RequestDigest, Status: domain.IdempotencyCompleted,
+			CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour),
 		},
 	})
 	if err != nil {
-		// A concurrent Activity may have won after the advisory replay lookup.
-		if replay, found, replayErr := a.Selection.ResolveRouteSelection(ctx, lookup); replayErr == nil && found && replay.Decision.TaskID == task.ID && replay.Policy.ID != "" && replay.Policy.Decision == execution.PolicyAllow {
+		if replay, found, replayErr := a.Selection.ResolveRouteSelection(ctx, lookup); replayErr == nil && found && replay.Decision.TaskID == task.ID && replay.Plan == planRef && replay.Node == node.ID && replay.Policy.ID != "" && replay.Policy.Decision == execution.PolicyAllow {
 			return nil
 		}
 		return fmt.Errorf("commit route selection: %w", err)
 	}
-	if result.Decision.TaskID != task.ID || result.Policy.ID == "" || result.Policy.Decision != execution.PolicyAllow || result.Target.Snapshot.Digest == "" {
-		return temporal.NewNonRetryableApplicationError(
-			"committed route selection is incomplete",
-			ErrorTypeRouteSelectionInconsistent,
-			nil,
-		)
+	if result.Decision.TaskID != task.ID || result.Plan != planRef || result.Node != node.ID || result.Policy.ID == "" || result.Policy.Decision != execution.PolicyAllow || result.Target.Snapshot.Digest == "" {
+		return temporal.NewNonRetryableApplicationError("committed route selection is incomplete", ErrorTypeRouteSelectionInconsistent, nil)
 	}
 	return nil
 }
@@ -303,9 +256,7 @@ func (a DurableRoutingActivity) currentPlan(ctx context.Context, taskID string) 
 	}
 	current := plans[0]
 	for _, candidate := range plans[1:] {
-		if candidate.CreatedAt.After(current.CreatedAt) ||
-			(candidate.CreatedAt.Equal(current.CreatedAt) && candidate.Revision > current.Revision) ||
-			(candidate.CreatedAt.Equal(current.CreatedAt) && candidate.Revision == current.Revision && string(candidate.ID) > string(current.ID)) {
+		if candidate.CreatedAt.After(current.CreatedAt) || (candidate.CreatedAt.Equal(current.CreatedAt) && candidate.Revision > current.Revision) || (candidate.CreatedAt.Equal(current.CreatedAt) && candidate.Revision == current.Revision && string(candidate.ID) > string(current.ID)) {
 			current = candidate
 		}
 	}
@@ -333,34 +284,23 @@ func selectTaskRoutingNode(plan execution.ExecutionPlan) (execution.ExecutionNod
 }
 
 func routeSelectionLookup(input StepInput) repository.IdempotencyLookup {
-	body := strings.Join([]string{
-		RoutingActivityVersion,
-		strings.TrimSpace(input.TenantID),
-		strings.TrimSpace(input.ProjectID),
-		strings.TrimSpace(input.TaskID),
-		strings.TrimSpace(input.TraceID),
-	}, "\x00")
+	body := strings.Join([]string{RoutingActivityVersion, strings.TrimSpace(input.TenantID), strings.TrimSpace(input.ProjectID), strings.TrimSpace(input.TaskID), strings.TrimSpace(input.TraceID)}, "\x00")
 	sum := sha256.Sum256([]byte(body))
 	return repository.IdempotencyLookup{
-		TenantID:      strings.TrimSpace(input.TenantID),
-		ProjectID:     strings.TrimSpace(input.ProjectID),
-		Operation:     "workflow:task-route-select:" + RoutingActivityVersion,
-		Key:           strings.TrimSpace(input.TaskID) + ":route:" + RoutingActivityVersion,
+		TenantID: strings.TrimSpace(input.TenantID), ProjectID: strings.TrimSpace(input.ProjectID),
+		Operation: "workflow:task-route-select:" + RoutingActivityVersion,
+		Key: strings.TrimSpace(input.TaskID) + ":route:" + RoutingActivityVersion,
 		RequestDigest: "sha256:" + hex.EncodeToString(sum[:]),
 	}
 }
 
 func validateRoutingStepInput(input StepInput) error {
-	if strings.TrimSpace(input.TenantID) == "" || strings.TrimSpace(input.ProjectID) == "" ||
-		strings.TrimSpace(input.TaskID) == "" || strings.TrimSpace(input.TraceID) == "" {
+	if strings.TrimSpace(input.TenantID) == "" || strings.TrimSpace(input.ProjectID) == "" || strings.TrimSpace(input.TaskID) == "" || strings.TrimSpace(input.TraceID) == "" {
 		return fmt.Errorf("routing step requires tenant, project, task and trace identity")
 	}
 	return nil
 }
 
-// RoutingLifecycleActivities progressively replaces only RouteStub. It can wrap
-// PlanningLifecycleActivities, preserving all registered Temporal names while
-// ECP-C2 is introduced one semantic step at a time.
 type RoutingLifecycleActivities struct {
 	Base    LifecycleActivities
 	Routing DurableRoutingActivity
@@ -369,23 +309,18 @@ type RoutingLifecycleActivities struct {
 func (a RoutingLifecycleActivities) LoadTask(ctx context.Context, input LoadTaskInput) (TaskSnapshot, error) {
 	return a.Base.LoadTask(ctx, input)
 }
-
 func (a RoutingLifecycleActivities) TransitionTask(ctx context.Context, input TransitionTaskInput) (TaskSnapshot, error) {
 	return a.Base.TransitionTask(ctx, input)
 }
-
 func (a RoutingLifecycleActivities) PlanStub(ctx context.Context, input StepInput) error {
 	return a.Base.PlanStub(ctx, input)
 }
-
 func (a RoutingLifecycleActivities) RouteStub(ctx context.Context, input StepInput) error {
 	return a.Routing.Route(ctx, input)
 }
-
 func (a RoutingLifecycleActivities) ExecuteStub(ctx context.Context, input StepInput) error {
 	return a.Base.ExecuteStub(ctx, input)
 }
-
 func (a RoutingLifecycleActivities) ValidateStub(ctx context.Context, input StepInput) error {
 	return a.Base.ValidateStub(ctx, input)
 }
