@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -96,13 +97,9 @@ func (l *BudgetLedger) Settle(id string, actual BudgetEstimate) error {
 		return errors.New("actual usage cannot contain negative values")
 	}
 
-	// Release the estimate first, then atomically account actual usage.
 	applyEstimate(&l.state.Reserved, reservation.Estimate, -1)
 	applyEstimate(&l.state.Consumed, actual, 1)
 	reservation.Closed = true
-
-	// Actual usage may exceed the estimate. We still account truthfully; the caller
-	// can observe exhaustion and prevent future attempts.
 	return nil
 }
 
@@ -128,7 +125,7 @@ func (l *BudgetLedger) Exhausted() bool {
 	combined := AccountingCounters{
 		Cost:          l.state.Reserved.Cost + l.state.Consumed.Cost,
 		NodeAttempts:  l.state.Reserved.NodeAttempts + l.state.Consumed.NodeAttempts,
-		FrontierCalls: l.state.Reserved.FrontierCalls + l.state.Consumed.FrontierCalls,
+		FrontierCalls: l.state.Reserved.FrierCalls + l.state.Consumed.FrontierCalls,
 		ToolCalls:     l.state.Reserved.ToolCalls + l.state.Consumed.ToolCalls,
 	}
 	return validateCountersAgainstLimit(combined, l.state.Limit) != nil
@@ -163,4 +160,36 @@ func cloneReservation(in *BudgetReservation) *BudgetReservation {
 	}
 	out := *in
 	return &out
+}
+
+// BudgetLedgerCoordinator adapts the process-local ledger to the context-aware
+// BudgetCoordinator contract used by PersistentWorker. It is suitable for tests
+// and single-process bootstrap only; production must use shared durable state.
+type BudgetLedgerCoordinator struct {
+	Ledger *BudgetLedger
+}
+
+func NewBudgetLedgerCoordinator(ledger *BudgetLedger) *BudgetLedgerCoordinator {
+	return &BudgetLedgerCoordinator{Ledger: ledger}
+}
+
+func (c *BudgetLedgerCoordinator) Reserve(_ context.Context, id string, executionRef ExecutionID, nodeRef NodeID, estimate BudgetEstimate) (*BudgetReservation, error) {
+	if c == nil || c.Ledger == nil {
+		return nil, errors.New("budget ledger is required")
+	}
+	return c.Ledger.Reserve(id, executionRef, nodeRef, estimate)
+}
+
+func (c *BudgetLedgerCoordinator) Settle(_ context.Context, id string, actual BudgetEstimate) error {
+	if c == nil || c.Ledger == nil {
+		return errors.New("budget ledger is required")
+	}
+	return c.Ledger.Settle(id, actual)
+}
+
+func (c *BudgetLedgerCoordinator) Release(_ context.Context, id string) error {
+	if c == nil || c.Ledger == nil {
+		return errors.New("budget ledger is required")
+	}
+	return c.Ledger.Release(id)
 }
