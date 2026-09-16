@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	ExecutionActivityVersion             = "ecp-execute-v1"
+	ExecutionActivityVersion              = "ecp-execute-v1"
 	ErrorTypeExecutionBindingInconsistent = "EXECUTION_BINDING_INCONSISTENT"
 	ErrorTypeExecutionRetryNotAllowed     = "EXECUTION_RETRY_NOT_ALLOWED"
 )
@@ -36,6 +36,12 @@ type ExecutionRuntimeStore interface {
 type ExecutionNodeExecutor interface {
 	Execute(context.Context, execution.Execution, execution.PreparedNode) (execution.WorkerExecutionResult, error)
 }
+
+var (
+	_ ExecutionActivityLineageStore = (*repository.ScopedPostgresExecutionLineage)(nil)
+	_ ExecutionRuntimeStore         = (*repository.PostgresExecutionNodeLeases)(nil)
+	_ ExecutionNodeExecutor         = (*execution.PersistentWorker)(nil)
+)
 
 // DurableExecutionActivity consumes the exact route binding frozen during
 // ROUTING. It never re-runs policy, routing or target resolution. Temporal
@@ -135,8 +141,12 @@ func (a DurableExecutionActivity) Execute(ctx context.Context, input StepInput) 
 			return fmt.Errorf("reload requeued execution node: %w", err)
 		}
 	}
-	if runtime.State != execution.NodeReady {
-		return fmt.Errorf("execution node %s is not READY: %s", node.ID, runtime.State)
+	// RUNNING is intentionally handed back to PersistentWorker. Its lease fence
+	// decides whether the previous worker still owns the node or an expired
+	// read-only attempt can be safely reclaimed. The Activity must not invent a
+	// second recovery authority.
+	if runtime.State != execution.NodeReady && runtime.State != execution.NodeRunning {
+		return fmt.Errorf("execution node %s is not executable from state %s", node.ID, runtime.State)
 	}
 
 	candidate, err := preparedNodeFromFrozenBinding(node, binding)
@@ -174,8 +184,8 @@ func (a DurableExecutionActivity) ensureExecution(ctx context.Context, task doma
 			Principal: "system:temporal-task-lifecycle",
 			Tenant:    task.TenantID,
 		},
-		Budget: execution.BudgetState{Limit: goal.Budget},
-		Status: execution.ExecutionStatus{Phase: execution.ExecutionRunning},
+		Budget:    execution.BudgetState{Limit: goal.Budget},
+		Status:    execution.ExecutionStatus{Phase: execution.ExecutionRunning},
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
