@@ -59,8 +59,9 @@ func TestPostgresPersistentWorkerReadOnlyLifecycle(t *testing.T) {
 	ledger := execution.NewBudgetLedger(execution.BudgetState{
 		Limit: execution.BudgetLimit{MaxCost: 5, MaxNodeAttempts: 2},
 	})
+	budget := execution.NewBudgetLedgerCoordinator(ledger)
 	invoker := &repositoryWorkerInvoker{}
-	worker := execution.NewPersistentWorker("worker-postgres", time.Minute, repo, ledger, invoker)
+	worker := execution.NewPersistentWorker("worker-postgres", time.Minute, repo, budget, invoker)
 
 	result, err := worker.Execute(projectCtx, exec, candidate)
 	if err != nil {
@@ -99,8 +100,8 @@ func TestPostgresPersistentWorkerReadOnlyLifecycle(t *testing.T) {
 		t.Fatalf("attempt usage not persisted: %+v", attempt.Attempt.Usage)
 	}
 
-	budget := ledger.Snapshot()
-	if budget.Reserved.Cost != 0 || budget.Consumed.Cost != 0.5 || budget.Consumed.NodeAttempts != 1 {
-		t.Fatalf("unexpected budget state: %+v", budget)
+	budgetState := ledger.Snapshot()
+	if budgetState.Reserved.Cost != 0 || budgetState.Consumed.Cost != 0.5 || budgetState.Consumed.NodeAttempts != 1 {
+		t.Fatalf("unexpected budget state: %+v", budgetState)
 	}
 }
