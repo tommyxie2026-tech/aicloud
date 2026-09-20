@@ -15,12 +15,16 @@ var (
 )
 
 type MemoryModels struct {
-	mu sync.RWMutex
-	m  map[string]domain.Model
+	mu              sync.RWMutex
+	m               map[string]domain.Model
+	licenseEvidence *MemoryLicenseEvidenceVersions
 }
 
 func NewMemoryModels(seed ...domain.Model) *MemoryModels {
-	r := &MemoryModels{m: make(map[string]domain.Model, len(seed))}
+	r := &MemoryModels{
+		m:               make(map[string]domain.Model, len(seed)),
+		licenseEvidence: NewMemoryLicenseEvidenceVersions(),
+	}
 	for _, model := range seed {
 		r.m[model.ID] = model
 	}
