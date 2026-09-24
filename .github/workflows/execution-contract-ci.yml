@@ -1,0 +1,40 @@
+name: Execution Contract CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'execution/provider.go'
+      - 'execution/computecloud_provider.go'
+      - 'execution/computecloud_job_mapper.go'
+      - 'execution/*provider_test.go'
+      - 'execution/*mapper_test.go'
+      - '.github/workflows/execution-contract-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'execution/**'
+      - '.github/workflows/execution-contract-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: aicloud-computecloud contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+      - name: Format contract sources
+        run: |
+          files=$(find execution -maxdepth 1 -type f \( -name '*provider*.go' -o -name '*mapper*.go' \))
+          test -z "$(gofmt -l $files)"
+      - name: Run provider contract tests
+        run: go test ./execution -run 'Test(ExecutionAndOutcomeAreSeparate|ComputecloudProvider|ComputecloudJobMapper)' -v
+      - name: Verify full execution package
+        run: go test ./execution -v
