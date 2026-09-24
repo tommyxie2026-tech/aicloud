@@ -1,0 +1,3 @@
+package execution
+import("encoding/json";"testing";"time")
+func TestComputecloudJobMapper(t *testing.T){m:=NewComputecloudJobMapper(ComputecloudJobOptions{ProjectID:"aicloud",RepositoryRef:"repo",BaseCommit:"0123456789012345678901234567890123456789",Engine:"codex",Model:"default",CredentialRef:"cred",PolicyRef:"policy",AcceptanceProfile:"tests"});v,e:=m(ExecutionRequest{ID:"e1",Goal:"fix bug",Timeout:time.Minute});if e!=nil{t.Fatal(e)};b,_:=json.Marshal(v);var x map[string]any;if e=json.Unmarshal(b,&x);e!=nil{t.Fatal(e)};if x["schema_version"]!="v0.2"||x["mode"]!="single"{t.Fatalf("bad job: %s",b)}}
