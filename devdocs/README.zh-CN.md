@@ -54,8 +54,14 @@ AI Cloud 的 `devdocs/` 同时维护英文和简体中文版本。
 
 ```text
 devdocs/
+├── README.md
+├── README.zh-CN.md
 ├── ai-execution-control-plane.md
 ├── ai-execution-control-plane.zh-CN.md
+├── task-execution-contract.md
+├── task-execution-contract.zh-CN.md
+├── us-china-ai-industrial-stack-and-execution-os.md
+├── us-china-ai-industrial-stack-and-execution-os.zh-CN.md
 └── models/
     └── kimi-k3/
 ```
@@ -64,5 +70,9 @@ devdocs/
 
 - [AI Execution Control Plane：从模型平台到任务执行控制面的演进](ai-execution-control-plane.zh-CN.md)
 - [AI Execution Control Plane: Evolution from Model Platform to Task Execution Control Plane](ai-execution-control-plane.md)
+- [Task Execution Contract：任务执行契约](task-execution-contract.zh-CN.md)
+- [Task Execution Contract](task-execution-contract.md)
+- [中美 AI 产业栈与 AI Execution OS：从 2026 年川习会企业阵容看产业控制点](us-china-ai-industrial-stack-and-execution-os.zh-CN.md)
+- [U.S.-China AI Industrial Stacks and AI Execution OS](us-china-ai-industrial-stack-and-execution-os.md)
 - [Kimi K3 技术架构研究](models/kimi-k3/README.zh-CN.md)
 - [Kimi K3 Technical Architecture Study](models/kimi-k3/README.md)
