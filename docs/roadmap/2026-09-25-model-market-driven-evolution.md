@@ -34,7 +34,8 @@ These are not facts and must be continuously tested:
 - H4: outcome-aware routing can materially improve cost, quality or reliability;
 - H5: normalized execution trajectories will become useful for evaluation and optimization;
 - H6: continuous learning from trajectories can create durable product advantage;
-- H7: external fine-tuning/post-training integration may become useful, but aicloud does not need to own model training.
+- H7: external fine-tuning/post-training integration may become useful, but aicloud does not need to own model training;
+- H8: authorization, guardrails, runtime containment and post-execution verification will remain distinct control layers as agent autonomy increases.
 
 ## 3. Confidence levels
 
@@ -80,6 +81,37 @@ Why:
 
 Investment gate:
 - verifier must provide a deterministic or explicitly bounded judgment for at least one production-relevant task class.
+
+#### Guard / Authorization / Runtime Control
+Why:
+- semantic safety, permission enforcement, runtime containment and outcome correctness answer different questions;
+- increasingly agentic workloads can act through tools, repositories, credentials and remote environments;
+- model alignment alone cannot enforce an external execution boundary.
+
+Target control chain:
+
+~~~text
+Input Guard
+    ↓
+Policy / Authorization
+    ↓
+Intelligence Router
+    ↓
+Execution Provider
+    ↓
+Sandbox / Runtime Monitor
+    ↓
+Execution Result
+    ↓
+Verifier
+    ↓
+Output Guard
+    ↓
+Verified Outcome
+~~~
+
+Investment gate:
+- at least one execution path must prove explicit allow/deny permissions, bounded runtime behavior, auditable actions and independent result verification.
 
 ## 4. Medium-confidence strategic bets
 
@@ -305,6 +337,27 @@ OpennessProfile
 - known regressions
 - pricing observation date
 - license observation date
+- direct training-data provenance where available
+- synthetic-data provenance where available
+- teacher/distillation source where available
+- evaluation/judge model provenance where relevant
+
+### License / data-rights profile
+
+Do not assume `open-weight` means unrestricted commercial use.
+
+~~~text
+LicenseProfile
+├── weight access
+├── commercial use
+├── hosted-service rights
+├── redistribution
+├── derivative-model rights
+├── revenue / scale thresholds
+├── geography restrictions
+├── training rights
+└── data-rights / provenance notes
+~~~
 
 ## 10. Market intelligence as evidence input
 
@@ -334,7 +387,7 @@ Routing / Rollout Decision
 
 Vendor claims are evidence candidates, not authoritative truth.
 
-## 11. Execution and verification boundary
+## 11. Controlled execution and verification boundary
 
 ~~~text
 aicloud:
@@ -356,7 +409,47 @@ Rules:
 - ExecutionCompleted != OutcomeVerified.
 - Worker/Attempt scheduling remains outside aicloud.
 - computecloud is one optional provider, not aicloud's kernel.
+- Guard != Policy != Sandbox != Verifier.
+- Guard supplies semantic risk signals; Policy decides authorization.
+- Execution Provider enforces runtime constraints and isolation.
+- Verifier judges whether the requested outcome was actually achieved.
 - verifier may be deterministic tests, schema checks, policy checks, environment observation, bounded judge models or human approval depending on risk.
+
+Recommended control model:
+
+~~~text
+Goal
+ ↓
+Input Guard
+ ↓
+Policy / Capability Grant
+ ↓
+Planner / Router
+ ↓
+Execution Contract
+ ↓
+Execution Provider
+ ↓
+Sandbox / Runtime Monitor
+ ↓
+Artifact / Result
+ ↓
+Verifier
+ ↓
+Output Guard / Policy
+ ↓
+Verified Outcome
+~~~
+
+The system must be able to represent:
+- requested capability;
+- granted capability;
+- denied capability;
+- tool/resource scope;
+- network/data boundary;
+- execution evidence;
+- policy decision provenance;
+- verification evidence.
 
 ## 12. Trajectory hypothesis
 
@@ -396,6 +489,9 @@ Future uses require evidence:
 - R2 Independent / execution-aware Evaluation
 - R4 Verified Execution
 - Policy / Governance foundations
+- Guard abstraction
+- Authorization / Capability boundary
+- Runtime containment / auditable execution
 
 ### Strategic bets / medium confidence
 - R3 Outcome-aware Router
@@ -444,6 +540,9 @@ Signal
 8. Trajectory is governed data and must preserve provenance.
 9. Training is optional; aicloud must deliver value without owning model training.
 10. Long-term assumptions must remain falsifiable.
+11. Model alignment is not treated as an authorization mechanism.
+12. Guard, Policy, Runtime containment and Verifier remain separable control points.
+13. Model provenance includes relevant synthetic/distillation lineage when available.
 
 ## 16. Product implication
 
@@ -459,7 +558,8 @@ High-confidence evolution:
 ~~~text
 Governed Intelligence Orchestration
 + Independent Evaluation
-+ Verified Execution
++ Controlled Execution
++ Verified Outcome
 ~~~
 
 Potential long-term extension, subject to evidence:
