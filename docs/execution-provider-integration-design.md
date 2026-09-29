@@ -154,7 +154,72 @@ FAILED
 CANCELLED
 ~~~
 
-## 6. Context 边界
+## 6. Controlled Execution 安全边界
+
+Execution Contract 不只描述“要执行什么”，还需要逐步表达“允许执行到什么范围”。
+
+~~~text
+Intent / Goal
+    ↓
+Policy Decision
+    ↓
+Granted Capability
+    ↓
+Execution Contract
+    ↓
+Execution Provider
+    ↓
+Sandbox / Runtime Monitor
+    ↓
+Execution Evidence
+~~~
+
+建议后续扩展 Contract：
+
+~~~yaml
+spec:
+  policy:
+    permissions:
+      - git.read
+      - git.write
+      - shell.test
+    deny:
+      - secret.read
+      - network.unrestricted
+  constraints:
+    isolation: sandbox
+    network: restricted
+    filesystem: workspace-only
+  audit:
+    traceId: trace-123
+    actionEvidence: required
+~~~
+
+边界原则：
+
+- aicloud Policy 决定“允许什么”；
+- Guard Model 可以提供语义风险信号，但不能直接替代 Policy；
+- Execution Provider 负责把约束落到实际 Runtime；
+- Sandbox / Runtime Monitor 负责限制行为范围并输出执行证据；
+- Verifier 判断结果是否正确；
+- 模型自身的 alignment 不作为授权机制。
+
+标准事件建议补充：
+
+~~~text
+POLICY_EVALUATED
+CAPABILITY_GRANTED
+CAPABILITY_DENIED
+RUNTIME_VIOLATION
+SANDBOX_TERMINATED
+VERIFICATION_STARTED
+VERIFICATION_PASSED
+VERIFICATION_FAILED
+~~~
+
+其中 Provider 只负责它能够真实观测和保证的 Runtime 事件；Policy / Verification 事件仍由 aicloud 产生。
+
+## 7. Context 边界
 
 aicloud 负责“给 Agent 什么”：
 
@@ -169,7 +234,7 @@ Context / Artifact References
 
 Execution Provider 负责 materialize 和执行，不负责重新解释知识语义。
 
-## 7. Trajectory 回流
+## 8. Trajectory 回流
 
 Execution Provider 回传执行事实：
 
@@ -186,7 +251,7 @@ Goal / Plan / Strategy / Evaluation / Outcome / Cost
 
 组合形成 Execution Trajectory，用于 Evaluation、Router、Planner、Policy 和后续 Learning。
 
-## 8. 迭代计划
+## 9. 迭代计划
 
 ### E0 — Contract Definition
 - 定义 ExecutionRequest / ExecutionRef / ExecutionEvent / ExecutionResult；
@@ -206,11 +271,15 @@ Goal / Plan / Strategy / Evaluation / Outcome / Cost
 - Event / Artifact / cancellation 映射；
 - 不引入 computecloud 内部领域对象。
 
-### E3 — Verified Execution
+### E3 — Controlled & Verified Execution
 - Verifier 接入；
 - provider completed → verification；
 - verification failed → retry/replan；
-- outcome provenance。
+- outcome provenance；
+- capability grant / deny；
+- runtime policy evidence；
+- sandbox/runtime violation mapping；
+- Guard signal 与 Policy decision 分离。
 
 ### E4 — Routing & Policy
 - Provider capability / health / cost metadata；
@@ -224,7 +293,7 @@ Goal / Plan / Strategy / Evaluation / Outcome / Cost
 - Evaluation 数据回流；
 - 优化 Router / Planner / Context / Policy。
 
-## 9. 架构不变量
+## 10. 架构不变量
 
 1. aicloud 可以在没有 computecloud 时运行。
 2. computecloud 不进入 aicloud 领域模型。
@@ -233,3 +302,6 @@ Goal / Plan / Strategy / Evaluation / Outcome / Cost
 5. Context semantics 属于 aicloud；runtime execution 属于 Provider。
 6. 两级调度不得职责重叠。
 7. 任何 Provider 都必须通过同一 conformance contract。
+8. Model alignment 不等于授权；授权必须由外部 Policy 明确决定。
+9. Guard、Policy、Sandbox/Runtime Monitor、Verifier 不能折叠成同一个概念。
+10. Provider 只宣称其能够真实执行和观测的安全保证。
