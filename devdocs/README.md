@@ -52,11 +52,25 @@ Research documents should:
 
 ```text
 devdocs/
+├── README.md
+├── README.zh-CN.md
+├── ai-execution-control-plane.md
+├── ai-execution-control-plane.zh-CN.md
+├── task-execution-contract.md
+├── task-execution-contract.zh-CN.md
+├── us-china-ai-industrial-stack-and-execution-os.md
+├── us-china-ai-industrial-stack-and-execution-os.zh-CN.md
 └── models/
     └── kimi-k3/
 ```
 
 ## Current studies
 
-- [Kimi K3 technical architecture — English](models/kimi-k3/README.md)
+- [AI Execution Control Plane: Evolution from Model Platform to Task Execution Control Plane](ai-execution-control-plane.md)
+- [AI Execution Control Plane：从模型平台到任务执行控制面的演进](ai-execution-control-plane.zh-CN.md)
+- [Task Execution Contract](task-execution-contract.md)
+- [Task Execution Contract：任务执行契约](task-execution-contract.zh-CN.md)
+- [U.S.-China AI Industrial Stacks and AI Execution OS](us-china-ai-industrial-stack-and-execution-os.md)
+- [中美 AI 产业栈与 AI Execution OS：从 2026 年川习会企业阵容看产业控制点](us-china-ai-industrial-stack-and-execution-os.zh-CN.md)
+- [Kimi K3 Technical Architecture Study](models/kimi-k3/README.md)
 - [Kimi K3 技术架构研究 — 简体中文](models/kimi-k3/README.zh-CN.md)
