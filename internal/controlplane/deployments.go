@@ -11,6 +11,7 @@ func (s *Service) WithDeployments(repo domain.DeploymentRepository) *Service {
 		s.router.WithDeployments(repo)
 		if s.models != nil {
 			s.router.WithModelVersions(serviceModelVersions{models: s.models})
+			s.router.WithLicenseEvidenceVersions(s.models.LicenseEvidenceVersionRepository())
 		}
 		if provider, ok := repo.(deploymentPricingProvider); ok {
 			s.router.WithPricingPolicies(provider.PricingPolicies())
