@@ -387,6 +387,60 @@ Routing / Rollout Decision
 
 Vendor claims are evidence candidates, not authoritative truth.
 
+### 10.1 Model identity, pricing and value evidence
+
+Detailed market-data normalization is defined in:
+
+- [Model Market Intelligence, Pricing and Value Evaluation](../model-market-intelligence-pricing-and-value.md)
+
+Key additions to the market-intelligence contract:
+
+~~~text
+ModelIdentity
+   ↓
+DeploymentProfile
+   ↓
+PricingProfile
+   ↓
+EvaluationEvidence
+   ↓
+ObservedEconomics
+~~~
+
+The platform must track concrete API model IDs or open-weight repository IDs rather than marketing names alone.
+
+Pricing is treated as versioned evidence because actual execution cost may depend on:
+
+~~~text
+model_id
+× deployment_profile
+× service_tier
+× context_length
+× cache_state
+× reasoning_effort
+× batch/realtime
+× region
+× tool usage
+~~~
+
+The economic optimization ladder is refined to:
+
+~~~text
+$/token
+   ↓
+$/execution
+   ↓
+Cost / Useful Task
+   ↓
+Cost / Successful Task
+   ↓
+Cost / Verified Outcome
+~~~
+
+A daily Top 10 value view may be produced as an analytical artifact, but it is not a global truth source and must not directly alter production routing. Its default score combines capability, cost efficiency, agent/tool capability, latency/throughput, context/cache economics, deployment flexibility, license usability and evidence quality.
+
+Open-weight hosted API prices and self-hosted TCO must remain separate. Self-hosted cost estimates require explicit hardware, throughput, utilization, precision, context and regional assumptions.
+
 ## 11. Controlled execution and verification boundary
 
 ~~~text
