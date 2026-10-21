@@ -720,3 +720,19 @@ Current done definition for this phase:
 25. yamlio can read/write ManagedCluster YAML bytes in skeleton form.
 26. Real execution remains outside model and agent layers.
 ```
+
+## 15. 2026-10-22 R1 inference integration increments (DI-00–DI-06)
+
+The M0–M7 milestones above capture the earlier hybrid model platform roadmap. Current R1 Execution kernel priorities remain authoritative; the following work is additive and must not introduce a competing execution state machine.
+
+```text
+DI-00 pinned fork/model/runtime/licensing/hardware inventory
+  -> DI-01 Recipe codec + capability/semantic-fidelity negative tests
+  -> DI-02 DeepInfer P0 offline GPU Job bridge + outcome/idempotency
+  -> DI-03 DeploymentProfile + Registry/Router canary and rollback
+  -> DI-04 SRE observability / policy / security / recovery gates
+  -> DI-05 online KV/P-D/DP/SSE/cancellation feasibility (separate gate)
+  -> DI-06 experimental IU verified-task benchmark (same-budget baseline)
+```
+
+Do not mark P0 production-ready without GPU and K8s validation; do not deploy Recipe mock server as production inference. See [detailed implementation gates](roadmap/2026-10-22-deepinfer-recipe-execution-target-integration.md) and [Chinese detail](roadmap/2026-10-22-deepinfer-recipe-execution-target-integration.zh-CN.md).
