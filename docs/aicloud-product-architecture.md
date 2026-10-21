@@ -337,3 +337,9 @@ The correct product center is:
 ```text
 Governed hybrid model access + policy-aware agent workflows
 ```
+
+## 13. 2026-10-22 R1 architecture increment: self-hosted DeepSeek inference
+
+The five-layer architecture above is a historical model-platform view. The current repository README defines the R1 Execution control-plane direction (Execution → Plan → Target → Evidence → Outcome → Experience). Introduce **DeepInfer as a version-pinned self-hosted InferenceTarget runtime**, and **deepseek-recipe as its version-pinned model codec**, mediated by aicloud capability checks, Policy, Router, budget, telemetry and independent outcome verification. Do not embed the DeepInfer scheduler into aicloud or let Recipe execute tools. The online serving gap is not solved by the offline implementation. Computecloud remains optional durable Job/Task execution, while IU remains an experimental semantic task contract.
+
+Architecture and Mermaid diagram: [DeepInfer + Recipe integration proposal](roadmap/2026-10-22-deepinfer-recipe-execution-target-integration.md) ([中文详细方案](roadmap/2026-10-22-deepinfer-recipe-execution-target-integration.zh-CN.md)).
