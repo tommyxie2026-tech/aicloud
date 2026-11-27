@@ -1,0 +1,5 @@
+# P0 inference baseline. Use Python 3.10 in an isolated virtual environment.
+basic-pitch==0.4.0
+librosa==0.10.2.post1
+pretty-midi==0.2.10
+numpy==1.26.4
