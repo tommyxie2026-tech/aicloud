@@ -1,100 +1,61 @@
-# Piano AI Execution Status
+# Piano AI / AI Education Platform Status
 
 > Updated: 2026-11-27  
-> Repository: `tommyxie2026-tech/aicloud`  
-> Tracking: [P0 baseline PR #59](https://github.com/tommyxie2026-tech/aicloud/pull/59)
+> Confirmed direction: learners at different skill levels; MIDI + audio dual input; aicloud extensible AI education platform.  
+> Canonical roadmap: [AI Education Platform Architecture and P0-P4](../../docs/roadmap/2026-11-27-ai-education-platform-architecture-and-p0-p4.zh-CN.md)  
+> Tracking PR: [#59](https://github.com/tommyxie2026-tech/aicloud/pull/59)
 
-## Current state
+## Product decision
 
-| Phase | State | Evidence / exit gate |
-| --- | --- | --- |
-| P0 — environment and baseline | In progress | Workspace, pinned Python dependencies, environment preflight, local inference wrapper, MAESTRO validator, unit tests and CI are in place. Real-audio inference and baseline metrics remain outstanding. |
-| P1 — data collection | Not started | Requires paired digital-piano MIDI/audio capture and a manually reviewed acoustic-piano evaluation set. |
-| P2 — recognition and scoring | Not started | Requires OMR output, normalized event schema, score alignment, and deterministic error classification. |
-| P3 — aicloud integration | Not started | Requires stable dataset, job, artifact, model-registry, and evaluation interfaces. |
-| P4 — model adaptation | Not started | Requires measured baselines, rights-cleared data, and an independent holdout test set. |
+Piano is the first vertical workload. The reusable platform capability is the learning-evidence loop:
 
-## P0 evidence
+Target/Objectives -> Actual Performance -> Alignment -> Error Diagnosis -> Assessment -> Practice Plan -> New Evidence.
 
-- GitHub Actions workflow `Piano AI P0 Checks` passed on the current PR head.
-- Python scripts compile.
-- Three MAESTRO validator tests pass.
-- Pinned Basic Pitch dependencies install in the CI Python 3.10 environment.
-- Environment preflight and CLI help checks pass.
+Digital piano MIDI is the high-confidence event reference; digital-piano audio validates AMT; acoustic-piano audio is the real-world generalization path. Sheet images/PDF are processed through OMR into MusicXML/Score IR.
+
+## P0-P4 status
+
+| Phase | State | Exit evidence |
+|---|---|---|
+| P0 — technical feasibility and reproducible baselines | In progress | Python workspace, Basic Pitch wrapper, MAESTRO metadata validator, tests and CI exist. Real WAV inference, MIDI comparison and OMR sample verification remain outstanding. |
+| P1 — dual-route data and benchmark | Not started | Paired digital-piano MIDI/audio, sync calibration, acoustic human-reviewed holdout, score/MusicXML and rights-aware manifests. |
+| P2 — complete piano tutor MVP | Not started | OMR + MIDI/AMT + alignment + explainable evaluation + learner-level adaptation + practice feedback + session history. |
+| P3 — aicloud integration and reusable education contracts | Not started | Dataset/job/artifact/model/evaluation/policy lifecycle plus a second subject-plugin proof of reuse. |
+| P4 — controlled training and personalization | Not started | Rights-cleared domain adaptation, independent holdout gains, model promotion/rollback and measured learning outcomes. |
+
+## P0 evidence currently available
+
+- P0 workspace and dependency pins are committed in the PR branch.
+- Environment preflight and local Basic Pitch wrapper are present.
+- MAESTRO metadata validator and three standard-library tests are present.
+- A previous P0 GitHub Actions run passed compile, dependency, unit-test and CLI checks.
+- A subsequent workflow was queued/running at the last status check; do not claim its final result until GitHub reports completion.
 
 Not yet demonstrated:
+- Real piano WAV has been transcribed end-to-end.
+- Output MIDI has been compared with paired MIDI or human-reviewed reference.
+- OMR has been tested on a target score page.
+- Digital-piano audio/MIDI synchronization has been measured.
+- Acoustic-piano note-level holdout has been annotated.
+- End-to-end practice feedback has been validated.
+- GPU inference performance or training has been measured.
 
-- A real piano recording has been transcribed end-to-end.
-- Output MIDI quality has been reviewed against a reference.
-- GPU inference performance has been measured.
-- MAESTRO has been downloaded or validated locally.
-- ByteDance legacy training/inference has been reproduced.
+## Current next actions
 
-## Existing repository CI observation
+1. Run Basic Pitch on one rights-cleared 30-60 second piano recording.
+2. Compare the output with the same performance's MIDI reference where available.
+3. Run Audiveris on one representative score image and manually inspect MusicXML.
+4. Record note-level precision/recall, onset error, failure cases, runtime and environment.
+5. Only then close P0 and begin the formal P1 collection protocol.
 
-The repository's separate Go Test workflow currently fails during compilation because `ExecutionFailed` is declared in both `execution/types.go` and `execution/provider.go` on the base `main` branch. The piano PR does not modify either file. This unrelated platform compile issue should be fixed in its own change before treating the full repository check suite as green.
+## Repository CI note
 
-## P0 next action
+The separate Go Test workflow currently has a base-branch compile failure: ExecutionFailed is declared in both execution/types.go and execution/provider.go. This is unrelated to the piano research changes and should be fixed in a separate platform change. Do not conflate this with the Piano AI P0 workflow.
 
-Run the pinned environment on a short, rights-cleared piano recording:
+## Data and rights guardrails
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-p0.txt
-python scripts/check_environment.py
-python scripts/transcribe_basic_pitch.py --input /path/to/piano.wav --output-dir ./outputs/sample-001
-```
-
-Review the generated MIDI in a MIDI editor or compare it with the paired MIDI reference. Save only hashes, metadata, evaluation metrics, and permitted derived artifacts in Git; keep raw recordings and datasets outside the repository unless their license and consent explicitly permit redistribution.
-
-## P1 required capture package
-
-For one digital-piano session, retain:
-
-- raw WAV/PCM audio;
-- original MIDI file;
-- score image/PDF and corrected MusicXML if available;
-- instrument model and audio capture route;
-- sample rate, bit depth, channels;
-- MIDI/audio synchronization calibration;
-- consent and data-use scope.
-
-For acoustic-piano evaluation, additionally require a human-reviewed note-event reference. A model's own transcription is not ground truth.
-
-## Stage gates
-
-### P0 → P1
-
-- [ ] Real audio inference succeeds.
-- [ ] MIDI output is reviewed and compared against a reference.
-- [ ] Inference runtime and hardware are recorded.
-- [ ] Dataset/code/weight rights are recorded separately.
-
-### P1 → P2
-
-- [ ] Digital MIDI/audio pair is synchronized.
-- [ ] Acoustic-piano holdout has human-reviewed annotations.
-- [ ] Train/validation/test split prevents performer and recording leakage.
-- [ ] Score source and MusicXML corrections are traceable.
-
-### P2 → P3
-
-- [ ] OMR, AMT/MIDI, and alignment interfaces are stable.
-- [ ] Note-level error taxonomy has deterministic tests.
-- [ ] Low-confidence recognition is surfaced rather than treated as student error.
-- [ ] Evaluation report is reproducible from versioned inputs.
-
-### P3 → P4
-
-- [ ] Dataset and model artifacts have immutable versions.
-- [ ] Training jobs record code, data, parameters, and environment.
-- [ ] Independent evaluation gates model promotion.
-- [ ] Rollback and regression evaluation are demonstrated.
-
-## Data and licensing guardrails
-
-- MAESTRO is CC BY-NC-SA 4.0. Its non-commercial and share-alike terms must be respected; do not assume compatibility with commercial platform use.
-- The ByteDance piano transcription repository is archived. Its legacy training stack must remain isolated and security-reviewed.
-- Basic Pitch code license, model weights, training data, and user recordings must each be tracked separately.
-- No raw user audio, MIDI, or copyrighted sheet music should be committed without explicit rights and consent.
+- MAESTRO is CC BY-NC-SA 4.0; do not assume it can be used in a commercial training or product pipeline.
+- The archived ByteDance piano transcription stack must be isolated and security-reviewed.
+- Code, pretrained weights, training data, sheet music and user recordings each require separate rights/provenance records.
+- Do not commit raw recordings, MIDI or copyrighted scores without explicit permission.
+- A model's own transcription is not ground truth; acoustic-piano evaluation needs human-reviewed reference annotations.
