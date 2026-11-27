@@ -34,6 +34,10 @@ aicloud-implementation-plan.md  executable milestone and backlog plan
 - [AI 演进判断：从智能体走向受治理的持续学习](roadmap/2026-08-28-continuous-learning-and-organizational-memory.zh-CN.md)
 - [钢琴智能陪练：开源视觉与声音识别训练平台技术选型及实验路线图](roadmap/2026-11-27-piano-ai-tutoring-platform.zh-CN.md)
 
+## Vertical AI Workloads
+
+- [Piano AI research workspace](../research/piano-ai/README.md) — P0 reproducible audio-to-MIDI baseline, environment preflight, local inference wrapper, and MAESTRO metadata validation.
+
 ## Current Engineering Status
 
 The current MVP focuses on the model layer:
