@@ -1,26 +1,25 @@
-# Piano AI Research Workspace — P0
+# Piano AI Research Workspace
 
-This workspace is isolated from the Go platform runtime. It is an experimental vertical workload, not an aicloud core package.
+Piano AI is the first vertical workload for the aicloud extensible AI education platform. The confirmed direction is to support learners at different skill levels, both MIDI and audio capture, and sheet music image/PDF input.
 
-## P0 objective
+## Canonical product roadmap
 
-Establish reproducible audio-to-MIDI inference baselines before training or platform integration:
+See [aicloud 可扩展 AI 教育平台：产品架构与 P0–P4 实施路线](../../docs/roadmap/2026-11-27-ai-education-platform-architecture-and-p0-p4.zh-CN.md).
 
-1. Verify the Python/audio/GPU environment.
-2. Run Spotify Basic Pitch as the first maintained, lightweight baseline.
-3. Keep the archived ByteDance piano transcription implementation as a separately isolated comparison target.
-4. Record dataset, code, weight, environment, and output provenance.
+The stages are:
+- P0: technical feasibility and reproducible OMR/AMT/MIDI baselines.
+- P1: dual-route data collection, synchronization calibration, human-reviewed acoustic holdout, rights and benchmark manifests.
+- P2: complete offline piano tutor MVP — score recognition, MIDI/audio analysis, alignment, explainable evaluation, learner-level adaptation, practice feedback and session history.
+- P3: aicloud integration and reusable subject-plugin contracts, including a second subject proof of reuse.
+- P4: controlled training, domain adaptation, personalization, independent promotion gates and (only after offline quality is stable) real-time practice.
 
-## Important project status
+## Workspace scope
 
-- The ByteDance `piano_transcription` repository was archived on 2025-12-08. Its README describes a legacy Python 3.7 / PyTorch 1.4.0 environment. Do not install its old dependencies into the aicloud runtime or the Basic Pitch environment.
-- ByteDance's README describes MAESTRO V2.0.0 and a training configuration requiring about 29 GB GPU memory at batch size 12. Treat this as a historical reference, not a guaranteed requirement for inference or fine-tuning.
-- MAESTRO is licensed CC BY-NC-SA 4.0. It is non-commercial and share-alike. Do not use it for commercial training, distribute it with the product, or assume derived artifacts can be commercially used. Obtain a separate rights review before any commercial use.
-- Code, pretrained weights, datasets, scores, and user recordings have separate rights. Track them independently.
+This workspace contains isolated research code and reproducible experiments. It is not an aicloud core package. The platform owns datasets, jobs, artifacts, model versions, evaluation evidence, policy and deployment governance. The piano vertical owns music-domain semantics, OMR/AMT, MIDI parsing, score alignment, performance evaluation and practice strategy.
 
-## Environment
+## P0 baseline environment
 
-Recommended initial baseline environment: Python 3.10. The Basic Pitch project documents Python 3.7–3.11 compatibility; this workspace pins a conservative Python 3.10 dependency set.
+Recommended initial baseline: Python 3.10 in an isolated virtual environment.
 
 ```bash
 cd research/piano-ai
@@ -31,7 +30,7 @@ python -m pip install -r requirements-p0.txt
 python scripts/check_environment.py
 ```
 
-For Linux, install system audio libraries (for example `libsndfile1` and `ffmpeg`) using the operating system package manager.
+For Linux, install system audio libraries such as ffmpeg and libsndfile using the operating system package manager.
 
 ## Run Basic Pitch
 
@@ -41,33 +40,30 @@ python scripts/transcribe_basic_pitch.py \
   --output-dir /path/to/output
 ```
 
-The wrapper invokes the installed `basic-pitch` CLI and verifies that a MIDI output was produced. It does not upload audio or send it to a remote service.
+This invokes the local Basic Pitch CLI and records input/output hashes and environment metadata. It does not upload audio to a remote service. A generated MIDI file must still be reviewed and compared against a paired MIDI or human-reviewed reference.
 
-## MAESTRO data
+## P0 current boundaries
 
-Do not commit MAESTRO audio, MIDI, or downloaded archives to this repository.
+The current code and CI provide environment preflight, dependency installation, script compilation, MAESTRO metadata validation tests and CLI checks. They do not yet demonstrate:
+- successful transcription of a real piano recording;
+- note-level quality against a paired MIDI/reference;
+- OMR quality on the target sheet-music types;
+- MIDI/audio synchronization calibration;
+- acoustic-piano holdout accuracy;
+- complete end-to-end practice feedback;
+- GPU performance or model training.
 
-Download only after reviewing and accepting the dataset's CC BY-NC-SA 4.0 terms. Keep the data outside the Git worktree and point the validator at the extracted root:
+A passing CI job is not equivalent to passing P0 product acceptance.
 
-```bash
-python scripts/validate_maestro.py --root /data/maestro-v2.0.0
-```
+## Dataset and rights
 
-The validator checks the expected V2 metadata and referenced files. It does not download data or grant rights to use it.
+- Do not commit MAESTRO audio, MIDI, or archives to this repository.
+- MAESTRO is CC BY-NC-SA 4.0; commercial use is not assumed.
+- The archived ByteDance piano transcription stack must remain isolated and security-reviewed.
+- Code, pretrained weights, training data, sheet music and user recordings have separate rights and provenance.
+- Do not commit raw user audio, MIDI or copyrighted scores without explicit permission.
+- Acoustic-piano evaluation requires human-reviewed reference annotations; model predictions are not ground truth.
 
-Official dataset page: https://magenta.withgoogle.com/datasets/maestro
+## Local data and artifact handling
 
-## P0 acceptance checklist
-
-- [ ] Python and dependency versions recorded.
-- [ ] Environment checker passes.
-- [ ] Basic Pitch CLI help succeeds.
-- [ ] One legally usable, locally held WAV sample transcribes to MIDI.
-- [ ] Output MIDI opens and has non-zero note events.
-- [ ] Run metadata records input hash, package versions, command, and output hash.
-- [ ] MAESTRO V2 metadata and files validate, if dataset access is authorized.
-- [ ] Baseline report includes hardware, runtime, sample rate, duration, and known limitations.
-
-## P0 boundaries
-
-No model training, fine-tuning, public dataset mirroring, real-time streaming, OMR, user-facing feedback, or production deployment is included in P0. These belong to later stages after the baseline and data rights are verified.
+Keep raw data and generated artifacts outside the Git worktree unless their rights explicitly permit redistribution. Store manifests, hashes, version metadata, consent scope and evaluation reports in the research record. Do not store secrets, personal data or identifiable learner recordings in public CI artifacts.
